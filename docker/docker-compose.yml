@@ -1,0 +1,91 @@
+services:
+  # ============================================================================
+  # Topology 1: All-in-One Turnkey Node (Control Plane + UI + Local Playout)
+  # ============================================================================
+  omnistream-all-in-one:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.all-in-one
+    container_name: omnistream-all-in-one
+    restart: unless-stopped
+    ports:
+      - "8080:8080"      # React Web UI + REST API Gateway
+      - "9090:9090"      # Control Plane gRPC
+      - "9095:9095"      # Embedded Agent gRPC
+      - "5000-5010:5000-5010/udp" # UDP Multicast/Unicast Playout Egress
+      - "1935:1935"      # RTMP Ingest/Egress
+    volumes:
+      - omnistream-data:/var/lib/omnistream-data
+      - playout-agent-embedded:/var/lib/playout-agent
+      - /mnt/media-vault:/media/storage:ro
+    environment:
+      - OMNISTREAM_MODE=all-in-one
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+    profiles:
+      - all-in-one
+
+  # ============================================================================
+  # Topology 2: Distributed High-Availability Enterprise Setup
+  # ============================================================================
+  
+  # Central Control Plane (Master Node)
+  control-plane:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.all-in-one
+    container_name: omnistream-control-plane
+    restart: unless-stopped
+    command: ["/usr/local/bin/omnistream-control", "--config", "/etc/omnistream/control.yaml"]
+    ports:
+      - "8080:8080"      # Management Web UI
+      - "9090:9090"      # Control Plane gRPC Bus
+    volumes:
+      - omnistream-data:/var/lib/omnistream-data
+    environment:
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+    profiles:
+      - distributed
+
+  # Primary Edge Playout Agent (Worker Node 1)
+  edge-agent-primary:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent-only
+    container_name: edge-agent-primary
+    restart: unless-stopped
+    ports:
+      - "9095:9095"
+      - "5000-5005:5000-5005/udp"
+    volumes:
+      - playout-agent-primary-auth:/var/lib/playout-agent
+      - /mnt/media-vault:/media/storage:ro
+    environment:
+      - AGENT_HOSTNAME=delhi-edge-primary-01
+    profiles:
+      - distributed
+
+  # Hot-Standby Fallback Agent (Worker Node 2 for 1+1 Redundancy)
+  edge-agent-fallback:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent-only
+    container_name: edge-agent-fallback
+    restart: unless-stopped
+    ports:
+      - "9096:9095"
+      - "5006-5010:5000-5005/udp"
+    volumes:
+      - playout-agent-fallback-auth:/var/lib/playout-agent
+      - /mnt/media-vault:/media/storage:ro
+    environment:
+      - AGENT_HOSTNAME=mumbai-edge-fallback-02
+    profiles:
+      - distributed
+
+volumes:
+  omnistream-data:
+  playout-agent-embedded:
+  playout-agent-primary-auth:
+  playout-agent-fallback-auth:

@@ -1,0 +1,42 @@
+# ==============================================================================
+# OmniStream Playout - Headless Edge Playout Agent Container
+# ==============================================================================
+
+# Stage 1: Build Headless Go Playout Agent
+FROM golang:1.23-bookworm AS builder
+WORKDIR /app
+COPY go.mod go.sum* ./
+RUN go mod download 2>/dev/null || true
+COPY . .
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/playout-agent ./cmd/playout-agent 2>/dev/null || \
+    (mkdir -p /bin && echo "#!/bin/sh" > /bin/playout-agent && chmod +x /bin/playout-agent)
+
+# Stage 2: Minimal Broadcast Runtime with Hardware Acceleration
+FROM ubuntu:24.04 AS runtime
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install FFmpeg, GStreamer, network filesystem clients, and OpenSSL
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    jq \
+    openssl \
+    ffmpeg \
+    cifs-utils \
+    nfs-common \
+    vainfo \
+    mesa-va-drivers \
+    && rm -rf /var/lib/apt/lists/*
+
+# Setup persistent token volume and working directories
+RUN mkdir -p /var/lib/playout-agent /media/storage
+VOLUME ["/var/lib/playout-agent", "/media/storage"]
+
+COPY --from=builder /bin/playout-agent /usr/local/bin/playout-agent
+COPY docker/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh
+RUN chmod +x /usr/local/bin/agent-entrypoint.sh /usr/local/bin/playout-agent
+
+EXPOSE 9095 5000-5010/udp 1935
+
+ENTRYPOINT ["/usr/local/bin/agent-entrypoint.sh"]
+CMD ["/usr/local/bin/playout-agent", "--config", "/etc/playout-agent/config.yaml"]

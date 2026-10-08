@@ -1,0 +1,2118 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniStream Playout - Master Control Console</title>
+  <!-- Tailwind CSS -->
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    /* Broadcast custom styling & animations */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+Tamil:wght@400;600&family=Noto+Sans+Telugu:wght@400;600&display=swap');
+    
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: #0B0F17;
+      color: #E2E8F0;
+      user-select: none;
+    }
+    
+    .font-mono-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-feature-settings: "tnum";
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #111827;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #374151;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #4B5563;
+    }
+
+    /* Animation transitions for ad maker */
+    @keyframes slideLeft {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideRight {
+      from { transform: translateX(-100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    @keyframes bounceIn {
+      0% { transform: scale(0.3); opacity: 0; }
+      50% { transform: scale(1.05); opacity: 1; }
+      70% { transform: scale(0.9); }
+      100% { transform: scale(1); }
+    }
+    @keyframes zoomIn {
+      from { transform: scale(0.5); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    @keyframes ticker {
+      0% { transform: translateX(100%); }
+      100% { transform: translateX(-100%); }
+    }
+
+    .anim-slide-left { animation: slideLeft 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .anim-slide-right { animation: slideRight 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .anim-slide-up { animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .anim-bounce { animation: bounceIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    .anim-zoom { animation: zoomIn 0.5s ease-out forwards; }
+    .anim-ticker { display: inline-block; white-space: nowrap; animation: ticker 14s linear infinite; }
+
+    /* Dragging handle styles */
+    .draggable-element {
+      cursor: move;
+      position: absolute;
+      touch-action: none;
+    }
+    .draggable-element.active-selected {
+      outline: 2px dashed #38BDF8;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.4);
+    }
+  </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden bg-[#0B0F17]">
+
+  <!-- Top App Navigation Bar -->
+  <header class="h-14 bg-[#111827] border-b border-[#1F2937] px-4 flex items-center justify-between shrink-0 z-30">
+    <div class="flex items-center gap-3">
+      <!-- App Brand Logo -->
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 via-sky-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-sky-500/20">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <div>
+          <span class="text-base font-bold tracking-tight text-white flex items-center gap-1.5">
+            OmniStream <span class="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 font-semibold uppercase tracking-wider border border-indigo-500/30">MCR</span>
+          </span>
+          <p class="text-[10px] text-gray-400 -mt-0.5" id="brand-tagline">Cloud-Native Broadcast Playout & Automation</p>
+        </div>
+      </div>
+
+      <div class="h-6 w-px bg-gray-700 mx-2"></div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex items-center gap-1">
+        <button onclick="switchScreen(1)" id="tab-btn-1" class="tab-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 bg-indigo-600 text-white shadow-sm">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+          <span data-i18n="nav.dashboard">Dashboard</span>
+        </button>
+
+        <button onclick="switchScreen(2)" id="tab-btn-2" class="tab-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 text-gray-300 hover:text-white hover:bg-[#1E293B]">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          <span data-i18n="nav.channels">Channels</span>
+        </button>
+
+        <button onclick="switchScreen(3)" id="tab-btn-3" class="tab-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 text-gray-300 hover:text-white hover:bg-[#1E293B]">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <span data-i18n="nav.scheduling">Scheduling & EPG</span>
+        </button>
+
+        <button onclick="switchScreen(4)" id="tab-btn-4" class="tab-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 text-gray-300 hover:text-white hover:bg-[#1E293B]">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <span data-i18n="nav.ad_templates">Ad & CG Studio</span>
+        </button>
+
+        <button onclick="switchScreen(5)" id="tab-btn-5" class="tab-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 text-gray-300 hover:text-white hover:bg-[#1E293B]">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span data-i18n="nav.settings">Settings & Mesh</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Right Header Tools: Clock, Language Switcher, Health Status -->
+    <div class="flex items-center gap-3">
+      <!-- Live SMPTE / IST Clock -->
+      <div class="bg-[#1A2234] border border-[#2D3748] rounded px-2.5 py-1 flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+        <div class="text-right">
+          <div class="text-xs font-mono font-bold text-white tracking-wider" id="live-timecode">16:16:42:15</div>
+          <div class="text-[9px] text-gray-400 uppercase tracking-wider font-mono">IST (UTC+05:30) • 25 FPS</div>
+        </div>
+      </div>
+
+      <!-- Indian Languages & English Switcher -->
+      <div class="relative">
+        <select id="language-selector" onchange="changeLanguage(this.value)" class="bg-[#1E293B] border border-[#334155] text-xs text-sky-300 font-medium rounded px-2.5 py-1.5 pr-7 focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer appearance-none">
+          <option value="en">🌐 English (Default)</option>
+          <option value="hi">🇮🇳 हिन्दी (Hindi)</option>
+          <option value="ta">🇮🇳 தமிழ் (Tamil)</option>
+          <option value="te">🇮🇳 తెలుగు (Telugu)</option>
+          <option value="bn">🇮🇳 বাংলা (Bengali)</option>
+          <option value="mr">🇮🇳 मराठी (Marathi)</option>
+          <option value="gu">🇮🇳 ગુજરાતી (Gujarati)</option>
+          <option value="kn">🇮🇳 ಕನ್ನಡ (Kannada)</option>
+          <option value="ml">🇮🇳 മലയാളം (Malayalam)</option>
+          <option value="pa">🇮🇳 ਪੰਜਾਬੀ (Punjabi)</option>
+          <option value="or">🇮🇳 ଓଡ଼ିଆ (Odia)</option>
+        </select>
+        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1.5 text-gray-400">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </div>
+      </div>
+
+      <!-- Cluster Health Badge -->
+      <div class="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded text-emerald-400 text-xs font-medium">
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <span data-i18n="common.healthy">Cluster: 100% Up</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Multi-Screen Content Container -->
+  <main class="flex-1 overflow-hidden relative">
+
+    <!-- ==================================================================== -->
+    <!-- SCREEN 1: BIRD'S EYE OPERATIONS DASHBOARD -->
+    <!-- ==================================================================== -->
+    <div id="screen-1" class="screen-view h-full flex flex-col p-4 space-y-4 overflow-y-auto">
+      <!-- Top KPI Row -->
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 shrink-0">
+        <div class="bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
+          <div class="text-[11px] text-gray-400 font-medium" data-i18n="dash.active_channels">Active Broadcast Channels</div>
+          <div class="text-xl font-bold text-white mt-1 flex items-baseline gap-1.5">
+            4 / 4 <span class="text-xs text-emerald-400 font-normal">● 100% On-Air</span>
+          </div>
+          <div class="text-[10px] text-gray-500 mt-1">2 Redundant Standbys Hot</div>
+        </div>
+
+        <div class="bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
+          <div class="text-[11px] text-gray-400 font-medium" data-i18n="dash.transcode_load">GPU NVENC Encoding Load</div>
+          <div class="text-xl font-bold text-white mt-1 flex items-baseline gap-1.5">
+            38.4% <span class="text-xs text-sky-400 font-normal">100.0 FPS Aggregate</span>
+          </div>
+          <div class="text-[10px] text-gray-500 mt-1">NVIDIA RTX A4000 • VAAPI Ready</div>
+        </div>
+
+        <div class="bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
+          <div class="text-[11px] text-gray-400 font-medium" data-i18n="dash.cluster_cpu">Edge Nodes CPU / RAM</div>
+          <div class="text-xl font-bold text-white mt-1 flex items-baseline gap-1.5">
+            22.6% <span class="text-xs text-gray-400 font-normal">14.8 / 64 GB</span>
+          </div>
+          <div class="text-[10px] text-gray-500 mt-1">3 Distributed Edge Nodes</div>
+        </div>
+
+        <div class="bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
+          <div class="text-[11px] text-gray-400 font-medium" data-i18n="dash.egress_bandwidth">Playout Egress Throughput</div>
+          <div class="text-xl font-bold text-white mt-1 flex items-baseline gap-1.5">
+            184.2 <span class="text-xs text-emerald-400 font-normal">Mbps</span>
+          </div>
+          <div class="text-[10px] text-gray-500 mt-1">UDP + SRT + RTMP Egress</div>
+        </div>
+
+        <div class="bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
+          <div class="text-[11px] text-gray-400 font-medium" data-i18n="dash.active_destinations">Active Stream Destinations</div>
+          <div class="text-xl font-bold text-white mt-1 flex items-baseline gap-1.5">
+            14 <span class="text-xs text-indigo-400 font-normal">Endpoints</span>
+          </div>
+          <div class="text-[10px] text-gray-500 mt-1">4 UDP Mux, 6 SRT, 4 HLS</div>
+        </div>
+      </div>
+
+      <!-- Channels Bird's Eye Grid -->
+      <div class="flex-1 flex flex-col space-y-2 min-h-0">
+        <div class="flex items-center justify-between">
+          <h2 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2" data-i18n="dash.channel_grid_title">
+            <span class="w-2 h-2 rounded-full bg-sky-400"></span> Live Playout Matrix
+          </h2>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-400">Auto-refresh: 500ms</span>
+            <button onclick="switchScreen(2)" class="text-xs text-sky-400 hover:text-sky-300 font-medium">+ Manage Channels</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1 overflow-y-auto">
+          <!-- Channel Card 1 -->
+          <div class="bg-[#111827] border border-[#1F2937] hover:border-indigo-500/50 rounded-lg p-3 flex flex-col space-y-3 transition-all shadow-md">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">CH 01</span>
+                <span class="text-sm font-bold text-white">Star Gold HD</span>
+              </div>
+              <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ON-AIR
+              </span>
+            </div>
+
+            <!-- Video Preview Screen Simulation -->
+            <div class="relative aspect-video bg-black rounded overflow-hidden border border-gray-800 flex items-center justify-center group">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 z-10"></div>
+              <img src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&auto=format&fit=crop&q=60" alt="Video Feed" class="w-full h-full object-cover opacity-70">
+              
+              <!-- Channel Bug Overlay -->
+              <div class="absolute top-2 right-2 z-20 px-1.5 py-0.5 bg-red-600/90 text-[9px] font-black text-white rounded tracking-wider shadow">
+                STAR GOLD
+              </div>
+
+              <!-- Lower third live teaser -->
+              <div class="absolute bottom-2 left-2 right-2 z-20">
+                <div class="text-[11px] font-bold text-white drop-shadow">Jawan (2023) • Extended Cut</div>
+                <div class="text-[9px] text-gray-300 drop-shadow">01:42:18 / 02:49:12 • 1080p50 • Dolby Atmos</div>
+              </div>
+            </div>
+
+            <!-- Progress bar -->
+            <div class="space-y-1">
+              <div class="flex justify-between text-[10px] text-gray-400 font-mono">
+                <span>Elapsed: 01:42:18</span>
+                <span class="text-amber-400">Rem: 01:06:54</span>
+              </div>
+              <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div class="h-full bg-indigo-500 rounded-full" style="width: 62%;"></div>
+              </div>
+            </div>
+
+            <!-- Queued Next & Redundancy Info -->
+            <div class="text-[11px] space-y-1 bg-[#161F30] p-2 rounded border border-[#233048]">
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Next Cued:</span>
+                <span class="text-sky-300 font-medium">17:30 - Dunki (2023)</span>
+              </div>
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Edge Agent:</span>
+                <span class="text-emerald-400 font-medium">delhi-dc1-primary (1+1 Hot)</span>
+              </div>
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Egress:</span>
+                <span class="text-gray-300 font-mono text-[10px]">UDP, SRT, HLS, RTMP</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Channel Card 2 -->
+          <div class="bg-[#111827] border border-[#1F2937] hover:border-indigo-500/50 rounded-lg p-3 flex flex-col space-y-3 transition-all shadow-md">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">CH 02</span>
+                <span class="text-sm font-bold text-white">Cinema One Tamil</span>
+              </div>
+              <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ON-AIR
+              </span>
+            </div>
+
+            <div class="relative aspect-video bg-black rounded overflow-hidden border border-gray-800 flex items-center justify-center">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 z-10"></div>
+              <img src="https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&auto=format&fit=crop&q=60" alt="Video Feed" class="w-full h-full object-cover opacity-70">
+              <div class="absolute top-2 right-2 z-20 px-1.5 py-0.5 bg-yellow-500/90 text-[9px] font-black text-black rounded tracking-wider shadow">
+                C1 TAMIL
+              </div>
+              <div class="absolute bottom-2 left-2 right-2 z-20">
+                <div class="text-[11px] font-bold text-white drop-shadow">Leo (2023) • Vijay</div>
+                <div class="text-[9px] text-gray-300 drop-shadow">00:54:12 / 02:44:00 • 1080p50 • 5.1 Tamil</div>
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <div class="flex justify-between text-[10px] text-gray-400 font-mono">
+                <span>Elapsed: 00:54:12</span>
+                <span class="text-amber-400">Rem: 01:49:48</span>
+              </div>
+              <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div class="h-full bg-indigo-500 rounded-full" style="width: 33%;"></div>
+              </div>
+            </div>
+
+            <div class="text-[11px] space-y-1 bg-[#161F30] p-2 rounded border border-[#233048]">
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Next Cued:</span>
+                <span class="text-sky-300 font-medium">18:00 - Jailer (2023)</span>
+              </div>
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Edge Agent:</span>
+                <span class="text-emerald-400 font-medium">mumbai-dc2-primary (1+1 Hot)</span>
+              </div>
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Egress:</span>
+                <span class="text-gray-300 font-mono text-[10px]">UDP Multicast, SRT</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Channel Card 3 -->
+          <div class="bg-[#111827] border border-[#1F2937] hover:border-indigo-500/50 rounded-lg p-3 flex flex-col space-y-3 transition-all shadow-md">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">CH 03</span>
+                <span class="text-sm font-bold text-white">Action Prime</span>
+              </div>
+              <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ON-AIR
+              </span>
+            </div>
+
+            <div class="relative aspect-video bg-black rounded overflow-hidden border border-gray-800 flex items-center justify-center">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 z-10"></div>
+              <img src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&auto=format&fit=crop&q=60" alt="Video Feed" class="w-full h-full object-cover opacity-70">
+              <div class="absolute top-2 right-2 z-20 px-1.5 py-0.5 bg-sky-500/90 text-[9px] font-black text-white rounded tracking-wider shadow">
+                PRIME
+              </div>
+              <div class="absolute bottom-2 left-2 right-2 z-20">
+                <div class="text-[11px] font-bold text-white drop-shadow">Avengers: Endgame (2019)</div>
+                <div class="text-[9px] text-gray-300 drop-shadow">02:18:04 / 03:01:00 • 4K UHD • E-AC-3</div>
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <div class="flex justify-between text-[10px] text-gray-400 font-mono">
+                <span>Elapsed: 02:18:04</span>
+                <span class="text-amber-400">Rem: 00:42:56</span>
+              </div>
+              <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div class="h-full bg-indigo-500 rounded-full" style="width: 76%;"></div>
+              </div>
+            </div>
+
+            <div class="text-[11px] space-y-1 bg-[#161F30] p-2 rounded border border-[#233048]">
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Next Cued:</span>
+                <span class="text-sky-300 font-medium">17:00 - Iron Man 3</span>
+              </div>
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Edge Agent:</span>
+                <span class="text-emerald-400 font-medium">delhi-dc1-primary</span>
+              </div>
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Egress:</span>
+                <span class="text-gray-300 font-mono text-[10px]">SRT Caller, RTMP</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Channel Card 4 -->
+          <div class="bg-[#111827] border border-[#1F2937] hover:border-indigo-500/50 rounded-lg p-3 flex flex-col space-y-3 transition-all shadow-md">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">CH 04</span>
+                <span class="text-sm font-bold text-white">Telugu Cinema 24</span>
+              </div>
+              <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ON-AIR
+              </span>
+            </div>
+
+            <div class="relative aspect-video bg-black rounded overflow-hidden border border-gray-800 flex items-center justify-center">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 z-10"></div>
+              <img src="https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=400&auto=format&fit=crop&q=60" alt="Video Feed" class="w-full h-full object-cover opacity-70">
+              <div class="absolute top-2 right-2 z-20 px-1.5 py-0.5 bg-emerald-600/90 text-[9px] font-black text-white rounded tracking-wider shadow">
+                TELUGU 24
+              </div>
+              <div class="absolute bottom-2 left-2 right-2 z-20">
+                <div class="text-[11px] font-bold text-white drop-shadow">Pushpa 2: The Rule (2024)</div>
+                <div class="text-[9px] text-gray-300 drop-shadow">01:12:40 / 03:20:15 • 1080p50 • 5.1 Telugu</div>
+              </div>
+            </div>
+
+            <div class="space-y-1">
+              <div class="flex justify-between text-[10px] text-gray-400 font-mono">
+                <span>Elapsed: 01:12:40</span>
+                <span class="text-amber-400">Rem: 02:07:35</span>
+              </div>
+              <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                <div class="h-full bg-indigo-500 rounded-full" style="width: 36%;"></div>
+              </div>
+            </div>
+
+            <div class="text-[11px] space-y-1 bg-[#161F30] p-2 rounded border border-[#233048]">
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Next Cued:</span>
+                <span class="text-sky-300 font-medium">19:30 - RRR Extended</span>
+              </div>
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Edge Agent:</span>
+                <span class="text-emerald-400 font-medium">hyd-edge-03 (Active)</span>
+              </div>
+              <div class="text-gray-400 flex items-center justify-between">
+                <span>Egress:</span>
+                <span class="text-gray-300 font-mono text-[10px]">UDP TS, SRT, NDI</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time Telemetry & Incident Logs -->
+      <div class="bg-[#111827] border border-[#1F2937] rounded-lg p-3 shrink-0 h-36 flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="text-xs font-semibold text-white uppercase tracking-wider" data-i18n="dash.live_events_log">Master Control Incident & As-Run Telemetry Feed</span>
+          </div>
+          <div class="flex items-center gap-2 text-[10px]">
+            <span class="text-gray-400">Filter:</span>
+            <select class="bg-[#1F2937] text-gray-300 px-2 py-0.5 rounded border border-gray-700">
+              <option>All Channels</option>
+              <option>CH 01 (Star Gold HD)</option>
+              <option>CH 02 (Cinema One)</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex-1 overflow-y-auto space-y-1.5 font-mono text-[11px] pr-1">
+          <div class="flex items-center gap-2 text-gray-300">
+            <span class="text-gray-500">[16:16:15]</span>
+            <span class="px-1.5 py-0.2 rounded text-[9px] bg-sky-500/20 text-sky-400 border border-sky-500/30">INFO</span>
+            <span class="text-indigo-400">[CH 01]</span>
+            <span>SCTE-35 splice_insert(EventID=1042) injected successfully (Preroll: 4000ms, Duration: 60.0s).</span>
+          </div>
+          <div class="flex items-center gap-2 text-gray-300">
+            <span class="text-gray-500">[16:15:32]</span>
+            <span class="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">HEARTBEAT</span>
+            <span class="text-indigo-400">[Agent-Mum]</span>
+            <span>Hot standby synchronized with primary node (Clock Drift: 0.12ms, Frames Buffered: 30).</span>
+          </div>
+          <div class="flex items-center gap-2 text-gray-300">
+            <span class="text-gray-500">[16:14:08]</span>
+            <span class="px-1.5 py-0.2 rounded text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/30">WARN</span>
+            <span class="text-indigo-400">[CH 03]</span>
+            <span>SRT egress receiver buffer underrun warning; retransmitted 4 lost packets via ARQ.</span>
+          </div>
+          <div class="flex items-center gap-2 text-gray-300">
+            <span class="text-gray-500">[16:12:00]</span>
+            <span class="px-1.5 py-0.2 rounded text-[9px] bg-sky-500/20 text-sky-400 border border-sky-500/30">EPG</span>
+            <span class="text-indigo-400">[EIT-Gen]</span>
+            <span>Multilingual DVB-SI EIT schedule tables generated & multiplexed (hi, ta, te, en).</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ==================================================================== -->
+    <!-- SCREEN 2: CHANNEL MANAGEMENT & LIVE MASTER CONTROL -->
+    <!-- ==================================================================== -->
+    <div id="screen-2" class="screen-view h-full flex flex-col p-4 space-y-4 overflow-y-auto hidden">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <span data-i18n="channel.management_title">Channel Master Configuration</span>
+            <span class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 border border-gray-700 font-mono">CH 01 • Star Gold HD</span>
+          </h2>
+          <p class="text-xs text-gray-400" data-i18n="channel.subtitle">Configure distributed edge agents, 1+1 redundancy failover, branding logo & live monitor</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="px-3 py-1.5 bg-[#1F2937] hover:bg-[#374151] text-xs font-semibold rounded text-white flex items-center gap-1.5 border border-gray-700">
+            <span>+ Add New Channel</span>
+          </button>
+          <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white shadow-sm flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <span data-i18n="common.save_changes">Apply & Save Config</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Two-Column Master Layout -->
+      <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
+        <!-- Left: Configuration Form (7 Columns) -->
+        <div class="lg:col-span-7 bg-[#111827] border border-[#1F2937] rounded-lg p-4 overflow-y-auto space-y-4">
+          <!-- Basic Channel Identity -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>1. Channel Identity & Playout Encoder</span>
+            </h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1" data-i18n="channel.name">Channel Name</label>
+                <input type="text" value="Star Gold HD" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">Call Sign / Short ID</label>
+                <input type="text" value="STARGOLD-HD" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">LCN (Channel Number)</label>
+                <input type="number" value="101" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">Output Resolution</label>
+                <select class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                  <option selected>1080p50 (PAL / India Standard)</option>
+                  <option>1080p59.94 (NTSC)</option>
+                  <option>720p50 (Sport Egress)</option>
+                  <option>4K UHD 2160p50</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">Video Codec & GPU</label>
+                <select class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                  <option selected>H.264 (NVENC Hardware GPU)</option>
+                  <option>H.265 / HEVC (NVENC)</option>
+                  <option>MPEG-2 Video (Cable DVB-C)</option>
+                  <option>ProRes 422 (Studio Master)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">Video Bitrate (CBR)</label>
+                <input type="text" value="8500 kbps" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+              </div>
+            </div>
+          </div>
+
+          <hr class="border-[#1F2937]">
+
+          <!-- Edge Agent & High-Availability Redundancy -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>2. Distributed Edge Agents & Redundancy</span>
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-semibold text-white">Primary Edge Agent</span>
+                  <span class="text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded font-semibold">ONLINE</span>
+                </div>
+                <select class="w-full bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                  <option selected>delhi-dc1-primary (100.64.1.15 :9095)</option>
+                  <option>mumbai-dc2-primary (100.64.2.88 :9095)</option>
+                  <option>cloud-aws-mumbai (10.0.4.12 :9095)</option>
+                </select>
+                <div class="text-[10px] text-gray-400 font-mono">Auth: agt_sec_8f43a... • Ping: 1.8ms</div>
+              </div>
+
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-semibold text-white">Fallback Standby Agent (1+1)</span>
+                  <span class="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded font-semibold">HOT STANDBY</span>
+                </div>
+                <select class="w-full bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                  <option selected>mumbai-dc2-hotstandby (100.64.2.99 :9095)</option>
+                  <option>delhi-dc1-fallback (100.64.1.16 :9095)</option>
+                  <option>None (Standalone Mode)</option>
+                </select>
+                <div class="text-[10px] text-gray-400 font-mono">Takeover Latency: &lt; 95ms • Shadow Sync Active</div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-4 bg-[#161F30] p-2.5 rounded border border-[#233048]">
+              <span class="text-xs text-gray-300 font-medium">Redundancy Failover Mode:</span>
+              <label class="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                <input type="radio" name="redundancy" checked class="text-indigo-600 focus:ring-0">
+                <span>1+1 Active-Passive Auto-Failover</span>
+              </label>
+              <label class="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                <input type="radio" name="redundancy" class="text-indigo-600 focus:ring-0">
+                <span>1+1 Mirroring (Hitless Merge SMPTE 2022-7)</span>
+              </label>
+            </div>
+          </div>
+
+          <hr class="border-[#1F2937]">
+
+          <!-- Branding & Default Channel Ad Template -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>3. On-Air Branding & Global Ad Template</span>
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">Station Logo / Bug File</label>
+                <div class="flex items-center gap-2">
+                  <input type="text" value="stargold_hd_bug.png" readonly class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+                  <button class="px-2.5 py-1.5 bg-gray-700 hover:bg-gray-600 text-xs text-white rounded">Upload</button>
+                </div>
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">Bug Screen Position</label>
+                <select class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                  <option selected>Top-Right (Standard)</option>
+                  <option>Top-Left</option>
+                  <option>Bottom-Right</option>
+                  <option>Bottom-Left</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">Default Channel Ad Template</label>
+                <select class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-sky-300 font-semibold focus:outline-none focus:border-indigo-500">
+                  <option selected>Diwali Prime Festive Bug & Rolls</option>
+                  <option>Standard Station Identification Template</option>
+                  <option>IPL Cricket Sponsor Template</option>
+                </select>
+                <span class="text-[9px] text-gray-400 mt-0.5 block">Applied globally if schedule item has no override.</span>
+              </div>
+            </div>
+          </div>
+
+          <hr class="border-[#1F2937]">
+
+          <!-- Multi-Destination Stream Egress -->
+          <div class="space-y-3">
+            <h3 class="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>4. Multi-Destination Stream Egress Routing</span>
+            </h3>
+            <div class="space-y-2">
+              <div class="flex items-center gap-3 bg-[#161F30] p-2.5 rounded border border-[#233048]">
+                <input type="checkbox" checked class="rounded text-indigo-600">
+                <span class="text-xs font-semibold text-white w-28">UDP Multicast</span>
+                <input type="text" value="udp://239.255.10.1:5000?pkt_size=1316&ttl=16" class="flex-1 bg-[#111827] border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 font-mono">
+              </div>
+
+              <div class="flex items-center gap-3 bg-[#161F30] p-2.5 rounded border border-[#233048]">
+                <input type="checkbox" checked class="rounded text-indigo-600">
+                <span class="text-xs font-semibold text-white w-28">SRT Egress</span>
+                <input type="text" value="srt://edge-delhi.star.in:9000?mode=caller&latency=200&passphrase=sec99182" class="flex-1 bg-[#111827] border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 font-mono">
+              </div>
+
+              <div class="flex items-center gap-3 bg-[#161F30] p-2.5 rounded border border-[#233048]">
+                <input type="checkbox" checked class="rounded text-indigo-600">
+                <span class="text-xs font-semibold text-white w-28">RTMP / FAST CDN</span>
+                <input type="text" value="rtmp://a.rtmp.youtube.com/live2/x/live_star_in_xxxx" class="flex-1 bg-[#111827] border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 font-mono">
+              </div>
+
+              <div class="flex items-center gap-3 bg-[#161F30] p-2.5 rounded border border-[#233048]">
+                <input type="checkbox" class="rounded text-indigo-600">
+                <span class="text-xs font-semibold text-gray-400 w-28">LL-HLS Package</span>
+                <input type="text" value="/var/www/hls/channel01/stream.m3u8" class="flex-1 bg-[#111827] border border-gray-700 rounded px-2 py-1 text-xs text-gray-400 font-mono">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Live Transmission Monitor & Master Control (5 Columns) -->
+        <div class="lg:col-span-5 bg-[#111827] border border-[#1F2937] rounded-lg p-4 flex flex-col space-y-4">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
+              Live On-Air Confidence Monitor
+            </span>
+            <span class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">LOW LATENCY WebRTC</span>
+          </div>
+
+          <!-- Video Viewport -->
+          <div class="relative aspect-video bg-black rounded-lg overflow-hidden border border-gray-800 shadow-2xl flex items-center justify-center">
+            <img src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&auto=format&fit=crop&q=80" alt="Transmission" class="w-full h-full object-cover">
+            
+            <!-- Live On-Screen Graphics Simulation -->
+            <div class="absolute top-3 right-3 px-2 py-0.5 bg-red-600 text-[10px] font-black text-white rounded tracking-wider shadow-lg">
+              STAR GOLD HD
+            </div>
+            
+            <div id="live-slate-overlay" class="hidden absolute inset-0 bg-red-950/90 flex flex-col items-center justify-center z-30">
+              <span class="text-2xl font-black text-white tracking-widest animate-pulse">EMERGENCY SLATE ENGAGED</span>
+              <span class="text-xs text-red-300 mt-1">Standby music loop & station ident broadcast</span>
+            </div>
+
+            <!-- Lower Third Sponsor Overlay (from active ad template) -->
+            <div class="absolute bottom-3 left-3 right-3 bg-gradient-to-r from-black/90 via-indigo-950/80 to-transparent p-2 rounded border-l-4 border-amber-400">
+              <div class="text-[11px] font-bold text-white">NOW SHOWING: JAWAN (2023)</div>
+              <div class="text-[9px] text-amber-300">Co-Sponsored by Tata Motors • Festive Mega Dhamaka</div>
+            </div>
+          </div>
+
+          <!-- Audio VU Meters Simulation -->
+          <div class="bg-[#0B0F17] p-3 rounded-lg border border-gray-800 space-y-2">
+            <div class="flex items-center justify-between text-[11px]">
+              <span class="font-semibold text-gray-300">Surround 5.1 VU Level Meters</span>
+              <span class="font-mono text-emerald-400 font-bold">-23.1 LUFS (EBU R128 PASS)</span>
+            </div>
+            
+            <!-- Meter Bars -->
+            <div class="space-y-1 font-mono text-[9px] text-gray-400">
+              <div class="flex items-center gap-2">
+                <span class="w-6 text-right">L</span>
+                <div class="flex-1 h-2 bg-gray-900 rounded overflow-hidden flex">
+                  <div class="h-full bg-emerald-500 rounded-l" style="width: 70%;"></div>
+                  <div class="h-full bg-amber-400" style="width: 15%;"></div>
+                </div>
+                <span class="w-10 text-right">-14 dB</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <span class="w-6 text-right">R</span>
+                <div class="flex-1 h-2 bg-gray-900 rounded overflow-hidden flex">
+                  <div class="h-full bg-emerald-500 rounded-l" style="width: 68%;"></div>
+                  <div class="h-full bg-amber-400" style="width: 14%;"></div>
+                </div>
+                <span class="w-10 text-right">-14 dB</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <span class="w-6 text-right">C</span>
+                <div class="flex-1 h-2 bg-gray-900 rounded overflow-hidden flex">
+                  <div class="h-full bg-emerald-500 rounded-l" style="width: 74%;"></div>
+                  <div class="h-full bg-amber-400" style="width: 12%;"></div>
+                </div>
+                <span class="w-10 text-right">-12 dB</span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <span class="w-6 text-right">LFE</span>
+                <div class="flex-1 h-2 bg-gray-900 rounded overflow-hidden flex">
+                  <div class="h-full bg-emerald-500 rounded-l" style="width: 50%;"></div>
+                </div>
+                <span class="w-10 text-right">-22 dB</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Master Control Manual Override Buttons -->
+          <div class="space-y-2 pt-2">
+            <span class="text-[11px] font-bold text-gray-400 uppercase tracking-wider block">Master Control Action Triggers</span>
+            <div class="grid grid-cols-2 gap-2">
+              <button onclick="toggleSlate()" id="slate-btn" class="px-3 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded text-xs font-bold shadow flex items-center justify-center gap-1.5 transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                <span>Emergency Slate</span>
+              </button>
+
+              <button onclick="skipNextEvent()" class="px-3 py-2 bg-[#1F2937] hover:bg-[#374151] text-white rounded text-xs font-bold border border-gray-700 flex items-center justify-center gap-1.5 transition-all">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg>
+                <span>Skip to Next</span>
+              </button>
+
+              <button class="px-3 py-2 bg-[#1F2937] hover:bg-[#374151] text-gray-300 rounded text-xs font-semibold border border-gray-700 flex items-center justify-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>Hold / Freeze</span>
+              </button>
+
+              <button class="px-3 py-2 bg-[#1F2937] hover:bg-[#374151] text-gray-300 rounded text-xs font-semibold border border-gray-700 flex items-center justify-center gap-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <span>Restart Engine</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ==================================================================== -->
+    <!-- SCREEN 3: SCHEDULING, STORAGE BROWSER & INLINE TMDB METADATA -->
+    <!-- ==================================================================== -->
+    <div id="screen-3" class="screen-view h-full flex flex-col p-4 space-y-4 overflow-y-auto hidden">
+      <!-- Top Scheduling Bar -->
+      <div class="flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span data-i18n="sched.title">24/7 Playout Schedule & EPG Master</span>
+            </h2>
+            <p class="text-xs text-gray-400" data-i18n="sched.subtitle">Manage linear playlists, inline TMDb metadata enrichment, audio PID tracks & conflict resolution</p>
+          </div>
+          <div class="h-6 w-px bg-gray-700"></div>
+          <select class="bg-[#1F2937] border border-gray-700 text-xs text-white rounded px-2.5 py-1.5 font-medium">
+            <option>Channel: CH 01 - Star Gold HD</option>
+            <option>Channel: CH 02 - Cinema One Tamil</option>
+            <option>Channel: CH 03 - Action Prime</option>
+          </select>
+          <input type="date" value="2026-10-08" class="bg-[#1F2937] border border-gray-700 text-xs text-white rounded px-2.5 py-1.5 font-mono">
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button onclick="openScheduleModal()" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white shadow-sm flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            <span data-i18n="sched.add_item">+ Add Media / Schedule Movie</span>
+          </button>
+          <button class="px-3 py-1.5 bg-[#1F2937] hover:bg-[#374151] text-xs font-medium rounded text-gray-200 border border-gray-700">
+            Export XMLTV / DVB-EIT
+          </button>
+        </div>
+      </div>
+
+      <!-- 24-Hour Visual Schedule Bar -->
+      <div class="bg-[#111827] border border-[#1F2937] rounded-lg p-3 shrink-0 space-y-2">
+        <div class="flex items-center justify-between text-[11px] font-mono text-gray-400">
+          <span>00:00:00</span>
+          <span>06:00:00</span>
+          <span>12:00:00</span>
+          <span class="text-emerald-400 font-bold underline">16:16:00 (ON-AIR NOW)</span>
+          <span>20:00:00</span>
+          <span>23:59:59</span>
+        </div>
+        <!-- Multi-segment colored timeline -->
+        <div class="h-6 w-full bg-gray-900 rounded flex overflow-hidden border border-gray-800 text-[10px] font-bold text-white select-none">
+          <div style="width: 25%;" class="bg-blue-700/80 hover:bg-blue-600 flex items-center justify-center truncate px-1 border-r border-gray-900 cursor-pointer" title="Morning Classics (00:00 - 06:00)">Morning Classics</div>
+          <div style="width: 15%;" class="bg-indigo-700/80 hover:bg-indigo-600 flex items-center justify-center truncate px-1 border-r border-gray-900 cursor-pointer" title="News Hour (06:00 - 09:30)">News Live</div>
+          <div style="width: 28%;" class="bg-amber-600/80 hover:bg-amber-500 flex items-center justify-center truncate px-1 border-r border-gray-900 cursor-pointer" title="Pathaan (09:30 - 16:15)">Pathaan (2023)</div>
+          <div style="width: 18%;" class="bg-emerald-600 flex items-center justify-center truncate px-1 border-r border-gray-900 cursor-pointer animate-pulse" title="Jawan Extended (16:15 - 19:04) ON-AIR">▶ Jawan (On-Air)</div>
+          <div style="width: 14%;" class="bg-blue-700/80 hover:bg-blue-600 flex items-center justify-center truncate px-1 border-r border-gray-900 cursor-pointer" title="Dunki (19:04 - 23:59)">Dunki (Next)</div>
+        </div>
+      </div>
+
+      <!-- Schedule Items Table -->
+      <div class="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg overflow-hidden flex flex-col min-h-0">
+        <div class="bg-[#1A2234] px-4 py-2 border-b border-[#2D3A54] grid grid-cols-12 text-[11px] font-bold text-gray-300 uppercase tracking-wider">
+          <div class="col-span-1">Status</div>
+          <div class="col-span-2">Timecode (IST)</div>
+          <div class="col-span-1">Duration</div>
+          <div class="col-span-3">Program / Movie Title</div>
+          <div class="col-span-2">Ad Template Precedence</div>
+          <div class="col-span-2">Audio / Subs Track</div>
+          <div class="col-span-1 text-right">Actions</div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto divide-y divide-[#1F2937] text-xs">
+          <!-- Item 1: On-Air -->
+          <div class="px-4 py-3 grid grid-cols-12 items-center bg-emerald-950/20 hover:bg-emerald-900/30 transition-colors">
+            <div class="col-span-1">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 w-max">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> ON-AIR
+              </span>
+            </div>
+            <div class="col-span-2 font-mono text-gray-200">
+              16:15:00 - 19:04:12
+            </div>
+            <div class="col-span-1 font-mono text-gray-400">02:49:12</div>
+            <div class="col-span-3 flex items-center gap-2">
+              <img src="https://image.tmdb.org/t/p/w92/jFpA4D7X2LbgD8nE1v01yT.jpg" onerror="this.src='https://via.placeholder.com/92x138/1f2937/fff?text=JAWAN'" class="w-7 h-10 object-cover rounded shadow border border-gray-700">
+              <div>
+                <span class="font-bold text-white">Jawan (जवान) (2023)</span>
+                <div class="text-[10px] text-gray-400">Action, Thriller • CBFC: U/A 16+ • TMDb ID: 872585</div>
+              </div>
+            </div>
+            <div class="col-span-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                ★ Content Custom: Diwali Prime
+              </span>
+              <div class="text-[9px] text-gray-400 mt-0.5">Overrides Channel Global</div>
+            </div>
+            <div class="col-span-2 text-gray-300">
+              <span class="font-mono text-[11px]">Track 1: Hindi 5.1</span>
+              <div class="text-[9px] text-gray-400">EBU R128 (-23.1 LUFS) • CEA-708 CC</div>
+            </div>
+            <div class="col-span-1 text-right space-x-1">
+              <button class="p-1 hover:text-sky-400 text-gray-400">✎</button>
+              <button class="p-1 hover:text-red-400 text-gray-400">🗑</button>
+            </div>
+          </div>
+
+          <!-- Item 2: Cued Next -->
+          <div class="px-4 py-3 grid grid-cols-12 items-center bg-[#161F30] hover:bg-[#1C273C] transition-colors">
+            <div class="col-span-1">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30 w-max block">
+                CUED NEXT
+              </span>
+            </div>
+            <div class="col-span-2 font-mono text-gray-200">
+              19:04:12 - 21:44:17
+            </div>
+            <div class="col-span-1 font-mono text-gray-400">02:40:05</div>
+            <div class="col-span-3 flex items-center gap-2">
+              <img src="https://via.placeholder.com/92x138/1f2937/fff?text=DUNKI" class="w-7 h-10 object-cover rounded shadow border border-gray-700">
+              <div>
+                <span class="font-bold text-white">Dunki (2023)</span>
+                <div class="text-[10px] text-gray-400">Comedy, Drama • CBFC: U/A • TMDb ID: 906221</div>
+              </div>
+            </div>
+            <div class="col-span-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-700/50 text-gray-300 border border-gray-600">
+                Use Channel Global (Default)
+              </span>
+            </div>
+            <div class="col-span-2 text-gray-300">
+              <span class="font-mono text-[11px]">Track 1: Hindi 5.1</span>
+              <div class="text-[9px] text-gray-400">EBU R128 Active</div>
+            </div>
+            <div class="col-span-1 text-right space-x-1">
+              <button class="p-1 hover:text-sky-400 text-gray-400">✎</button>
+              <button class="p-1 hover:text-red-400 text-gray-400">🗑</button>
+            </div>
+          </div>
+
+          <!-- Item 3: Pending -->
+          <div class="px-4 py-3 grid grid-cols-12 items-center hover:bg-[#161F30] transition-colors">
+            <div class="col-span-1">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-800 text-gray-400 border border-gray-700 w-max block">
+                PENDING
+              </span>
+            </div>
+            <div class="col-span-2 font-mono text-gray-200">
+              21:44:17 - 00:20:05
+            </div>
+            <div class="col-span-1 font-mono text-gray-400">02:35:48</div>
+            <div class="col-span-3 flex items-center gap-2">
+              <img src="https://via.placeholder.com/92x138/1f2937/fff?text=TIGER+3" class="w-7 h-10 object-cover rounded shadow border border-gray-700">
+              <div>
+                <span class="font-bold text-white">Tiger 3 (2023)</span>
+                <div class="text-[10px] text-gray-400">Action, Thriller • CBFC: U/A 16+</div>
+              </div>
+            </div>
+            <div class="col-span-2">
+              <span class="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-700/50 text-gray-300 border border-gray-600">
+                Use Channel Global (Default)
+              </span>
+            </div>
+            <div class="col-span-2 text-gray-300">
+              <span class="font-mono text-[11px]">Track 1: Hindi 5.1</span>
+              <div class="text-[9px] text-gray-400">EBU R128 Active</div>
+            </div>
+            <div class="col-span-1 text-right space-x-1">
+              <button class="p-1 hover:text-sky-400 text-gray-400">✎</button>
+              <button class="p-1 hover:text-red-400 text-gray-400">🗑</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ==================================================================== -->
+    <!-- SCREEN 4: WYSIWYG AD & CG GRAPHICS TEMPLATE MAKER -->
+    <!-- ==================================================================== -->
+    <div id="screen-4" class="screen-view h-full flex flex-col p-4 space-y-4 overflow-y-auto hidden">
+      <div class="flex items-center justify-between shrink-0">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <span data-i18n="ad.title">WYSIWYG Ad & CG Graphics Studio</span>
+            <span class="text-xs px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Template: Diwali Prime Festive Bug & Rolls</span>
+          </h2>
+          <p class="text-xs text-gray-400" data-i18n="ad.subtitle">Drag-and-drop animated on-screen banners, lower-thirds, tickers & SCTE-35 commercial rolls</p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Sub-Tab Toggle -->
+          <div class="bg-[#1F2937] p-0.5 rounded flex border border-gray-700">
+            <button onclick="switchAdSection('overlays')" id="ad-subtab-overlays" class="px-3 py-1 text-xs font-semibold rounded bg-indigo-600 text-white">Section A: On-Screen Banners (Overlays)</button>
+            <button onclick="switchAdSection('rolls')" id="ad-subtab-rolls" class="px-3 py-1 text-xs font-semibold rounded text-gray-400 hover:text-white">Section B: Ad Break Rolls (SCTE-35)</button>
+          </div>
+          <button class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white shadow-sm flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+            <span>Save Ad Template</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SECTION A: WYSIWYG CANVAS VIEW -->
+      <div id="ad-section-overlays" class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
+        <!-- Interactive Preview Raster Canvas (8 Cols) -->
+        <div class="lg:col-span-8 bg-[#111827] border border-[#1F2937] rounded-lg p-3 flex flex-col space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2 text-xs text-gray-300">
+              <span class="font-bold text-white">1080p Broadcast Raster Canvas</span>
+              <span class="text-gray-500 font-mono">(1920 x 1080 Aspect Ratio 16:9)</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <label class="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer">
+                <input type="checkbox" id="safe-guides-toggle" checked onchange="toggleSafeGuides()" class="rounded text-indigo-600">
+                <span>Action & Title Safe Margins (90% / 80%)</span>
+              </label>
+              <button onclick="playCanvasPreviewAnimation()" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold flex items-center gap-1 shadow">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4l12 6-12 6z"/></svg>
+                <span>Test Live Animation</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- The 16:9 Interactive WYSIWYG Canvas -->
+          <div id="wysiwyg-canvas" class="relative flex-1 aspect-video bg-gray-950 rounded-lg overflow-hidden border border-gray-800 shadow-2xl select-none">
+            <!-- Simulated background content video -->
+            <img src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1000&auto=format&fit=crop&q=80" alt="Playout Raster" class="w-full h-full object-cover opacity-60 pointer-events-none">
+
+            <!-- Safe Action (90%) and Safe Title (80%) Guides -->
+            <div id="safe-action-guide" class="absolute inset-[5%] border border-sky-500/30 pointer-events-none z-10">
+              <span class="absolute top-1 left-1 text-[8px] text-sky-400 font-mono">ACTION SAFE (90%)</span>
+            </div>
+            <div id="safe-title-guide" class="absolute inset-[10%] border border-amber-500/30 pointer-events-none z-10">
+              <span class="absolute top-1 left-1 text-[8px] text-amber-400 font-mono">TITLE SAFE (80%)</span>
+            </div>
+
+            <!-- DRAGGABLE ELEMENT 1: Sponsor Bug (Top Right) -->
+            <div id="elem-sponsor-bug" class="draggable-element active-selected z-20" style="top: 10%; right: 10%; width: 140px;" onclick="selectElement('bug')">
+              <div class="bg-black/80 border border-amber-400/80 rounded p-1.5 shadow-xl flex items-center gap-2">
+                <div class="w-6 h-6 rounded bg-amber-400 flex items-center justify-center font-black text-black text-xs">V</div>
+                <div>
+                  <div class="text-[10px] font-bold text-white">Vivo Festive</div>
+                  <div class="text-[8px] text-amber-300">Official Sponsor</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- DRAGGABLE ELEMENT 2: Lower-Third Animated Teaser -->
+            <div id="elem-lower-third" class="draggable-element z-20" style="bottom: 12%; left: 10%; width: 420px;" onclick="selectElement('lowerthird')">
+              <div class="bg-gradient-to-r from-indigo-900/95 via-purple-900/90 to-transparent border-l-4 border-sky-400 p-2.5 rounded shadow-2xl">
+                <div class="text-[9px] font-bold text-sky-300 tracking-wider uppercase">COMING UP NEXT AT 19:30 IST</div>
+                <div class="text-xs font-black text-white">DUNKI (2023) • SHAH RUKH KHAN & TAAPSEE</div>
+              </div>
+            </div>
+
+            <!-- DRAGGABLE ELEMENT 3: Breaking News / Announcement Ticker Crawl -->
+            <div id="elem-ticker" class="draggable-element z-20 w-full" style="bottom: 0px; left: 0px;" onclick="selectElement('ticker')">
+              <div class="bg-red-700/95 text-white py-1 px-4 text-xs font-bold flex items-center overflow-hidden border-t border-red-500">
+                <span class="bg-black text-amber-400 px-2 py-0.5 text-[10px] rounded uppercase mr-3 shrink-0 font-black">BREAKING</span>
+                <div class="overflow-hidden whitespace-nowrap flex-1">
+                  <span class="anim-ticker">🔥 SPECIAL FESTIVE BROADCAST: TATA MOTORS PRESENTS BLOCKBUSTER MOVIE MARATHON ALL WEEKEND ON OMNISTREAM TV 🔥</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Element Properties & Transitions Palette (4 Cols) -->
+        <div class="lg:col-span-4 bg-[#111827] border border-[#1F2937] rounded-lg p-4 flex flex-col space-y-4 overflow-y-auto">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold text-sky-400 uppercase tracking-wider">Overlay Element Palette</h3>
+            <span class="text-[10px] text-gray-400">Selected: <strong class="text-white" id="selected-elem-label">Sponsor Bug</strong></span>
+          </div>
+
+          <!-- Add Elements Button Row -->
+          <div class="grid grid-cols-2 gap-2">
+            <button class="p-2 bg-[#1F2937] hover:bg-[#374151] rounded text-xs text-white flex items-center justify-center gap-1.5 border border-gray-700">
+              <span>+ Transparent PNG</span>
+            </button>
+            <button class="p-2 bg-[#1F2937] hover:bg-[#374151] rounded text-xs text-white flex items-center justify-center gap-1.5 border border-gray-700">
+              <span>+ Animated GIF</span>
+            </button>
+            <button class="p-2 bg-[#1F2937] hover:bg-[#374151] rounded text-xs text-white flex items-center justify-center gap-1.5 border border-gray-700">
+              <span>+ Lower-Third</span>
+            </button>
+            <button class="p-2 bg-[#1F2937] hover:bg-[#374151] rounded text-xs text-white flex items-center justify-center gap-1.5 border border-gray-700">
+              <span>+ News Ticker</span>
+            </button>
+          </div>
+
+          <hr class="border-[#1F2937]">
+
+          <!-- Transition & Animation Controls -->
+          <div class="space-y-3">
+            <h4 class="text-xs font-semibold text-white flex items-center gap-1.5">
+              <span>Transitions & Keyframe Animations</span>
+            </h4>
+
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Entrance Transition</label>
+              <select id="entrance-anim-select" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <option value="anim-slide-left">Slide In From Right (Smooth)</option>
+                <option value="anim-slide-right">Slide In From Left</option>
+                <option value="anim-slide-up" selected>Slide In From Bottom</option>
+                <option value="anim-bounce">Bounce In (Dynamic Spring)</option>
+                <option value="anim-zoom">Zoom In Scale</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Exit Transition</label>
+              <select class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                <option selected>Fade Out to Alpha</option>
+                <option>Slide Out Down</option>
+                <option>Zoom Out Shrink</option>
+              </select>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">Display Duration</label>
+                <input type="text" value="15 seconds" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2 py-1 text-xs text-white font-mono">
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">Repeat Interval</label>
+                <select class="w-full bg-[#1F2937] border border-gray-700 rounded px-2 py-1 text-xs text-white">
+                  <option selected>Every 15 Minutes</option>
+                  <option>Every 30 Minutes</option>
+                  <option>Play Once Only</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Opacity & Layer Z-Index</label>
+              <div class="flex items-center gap-2">
+                <input type="range" min="20" max="100" value="95" class="flex-1 accent-indigo-500">
+                <span class="text-xs font-mono text-gray-300 w-8">95%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION B: COMMERCIAL AD ROLLS & SCTE-35 SLICES -->
+      <div id="ad-section-rolls" class="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-4 space-y-4 overflow-y-auto hidden">
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-sm font-bold text-white">Linear Ad Breaks & Digital Program Insertion (SCTE-35)</h3>
+            <p class="text-xs text-gray-400">Configure pre-roll, mid-roll intervals, and post-roll video breaks with automated cue insertion</p>
+          </div>
+          <button class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white">+ Add Ad Break Slot</button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Pre-Roll Slot -->
+          <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white">PRE-ROLL AD BREAK</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] bg-sky-500/20 text-sky-300 font-mono">Starts at 00:00:00</span>
+            </div>
+            <p class="text-[11px] text-gray-400">Plays before feature starts. 1 Video Clip scheduled (30s).</p>
+            <div class="bg-[#111827] p-2 rounded border border-gray-800 text-xs text-gray-300 font-mono flex items-center justify-between">
+              <span>📄 StarFestive_Promo_30s.mp4</span>
+              <span class="text-amber-400">00:00:30</span>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <input type="checkbox" checked class="rounded text-indigo-600">
+              <span>Emit SCTE-35 splice_insert (Event ID: 201)</span>
+            </label>
+          </div>
+
+          <!-- Mid-Roll Slot -->
+          <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white">MID-ROLL BREAKS</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-mono">Interval: 45 Mins</span>
+            </div>
+            <p class="text-[11px] text-gray-400">Repeats every 45 mins. 2 Sponsor Clips queued (60s total).</p>
+            <div class="space-y-1">
+              <div class="bg-[#111827] p-2 rounded border border-gray-800 text-xs text-gray-300 font-mono flex items-center justify-between">
+                <span>📄 Vivo_Diwali_Commercial.mp4</span>
+                <span class="text-amber-400">00:00:30</span>
+              </div>
+              <div class="bg-[#111827] p-2 rounded border border-gray-800 text-xs text-gray-300 font-mono flex items-center justify-between">
+                <span>📄 CocaCola_Festive_Spot.mp4</span>
+                <span class="text-amber-400">00:00:30</span>
+              </div>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <input type="checkbox" checked class="rounded text-indigo-600">
+              <span>Emit SCTE-35 placement_opportunity (0x34)</span>
+            </label>
+          </div>
+
+          <!-- Post-Roll Slot -->
+          <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white">POST-ROLL BREAK</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 font-mono">End of Movie</span>
+            </div>
+            <p class="text-[11px] text-gray-400">Plays immediately after credits. 1 Station ident (15s).</p>
+            <div class="bg-[#111827] p-2 rounded border border-gray-800 text-xs text-gray-300 font-mono flex items-center justify-between">
+              <span>📄 StarGold_Ident_2026.mp4</span>
+              <span class="text-amber-400">00:00:15</span>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-gray-300">
+              <input type="checkbox" class="rounded text-indigo-600">
+              <span>Emit SCTE-35 splice_insert</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ==================================================================== -->
+    <!-- SCREEN 5: ADVANCED SETTINGS, STORAGE, CRYPTO PAIRING & BOTS -->
+    <!-- ==================================================================== -->
+    <div id="screen-5" class="screen-view h-full flex flex-col p-4 space-y-4 overflow-y-auto hidden">
+      <div class="flex items-center justify-between shrink-0">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <span data-i18n="settings.title">Enterprise Infrastructure & Integrations</span>
+          </h2>
+          <p class="text-xs text-gray-400" data-i18n="settings.subtitle">Manage edge playout agent tokens, NAS/SMB storage, Telegram ChatOps bots, and Tailscale mesh</p>
+        </div>
+      </div>
+
+      <!-- Settings Vertical Tabs / Subsections -->
+      <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
+        <!-- Sub-Navigation (3 Columns) -->
+        <div class="lg:col-span-3 bg-[#111827] border border-[#1F2937] rounded-lg p-2 space-y-1">
+          <button onclick="switchSettingsTab('agents')" id="set-tab-agents" class="w-full text-left px-3 py-2 rounded text-xs font-semibold bg-indigo-600 text-white flex items-center justify-between">
+            <span>Edge Agents & Token Pairing</span>
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          </button>
+          <button onclick="switchSettingsTab('storage')" id="set-tab-storage" class="w-full text-left px-3 py-2 rounded text-xs font-semibold text-gray-300 hover:bg-[#1E293B] flex items-center justify-between">
+            <span>Storage Device Mounts (NAS/SMB)</span>
+            <span class="text-[10px] text-gray-400">3 Mounts</span>
+          </button>
+          <button onclick="switchSettingsTab('bots')" id="set-tab-bots" class="w-full text-left px-3 py-2 rounded text-xs font-semibold text-gray-300 hover:bg-[#1E293B] flex items-center justify-between">
+            <span>Bot Integrations & ChatOps</span>
+            <span class="text-[10px] text-sky-400 font-mono">Telegram NLP</span>
+          </button>
+          <button onclick="switchSettingsTab('mesh')" id="set-tab-mesh" class="w-full text-left px-3 py-2 rounded text-xs font-semibold text-gray-300 hover:bg-[#1E293B] flex items-center justify-between">
+            <span>Service Mesh & Tailscale</span>
+            <span class="text-[10px] text-emerald-400">Connected</span>
+          </button>
+          <button onclick="switchSettingsTab('i18n')" id="set-tab-i18n" class="w-full text-left px-3 py-2 rounded text-xs font-semibold text-gray-300 hover:bg-[#1E293B] flex items-center justify-between">
+            <span>Regional & Indian Languages</span>
+            <span class="text-[10px] text-sky-400">10 Locales</span>
+          </button>
+        </div>
+
+        <!-- Sub-Content Area (9 Columns) -->
+        <div class="lg:col-span-9 bg-[#111827] border border-[#1F2937] rounded-lg p-4 overflow-y-auto">
+
+          <!-- TAB 1: EDGE AGENTS & CRYPTOGRAPHIC PAIRING -->
+          <div id="set-content-agents" class="space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white">Distributed Edge Playout Agents</h3>
+                <p class="text-xs text-gray-400">Agents boot in Agent-Only Docker mode, generate a secure 256-bit token on init, and persist it across restarts.</p>
+              </div>
+              <button onclick="openPairModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white flex items-center gap-1.5 shadow">
+                <span>+ Pair New Agent Node</span>
+              </button>
+            </div>
+
+            <!-- Agent Cards Grid -->
+            <div class="space-y-3">
+              <!-- Agent 1 -->
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="text-sm font-bold text-white">delhi-dc1-primary</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Primary Transcoder</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 font-mono">IP: 100.64.1.15:9095 (Tailscale)</span>
+                    <button class="px-2 py-1 text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700">Rotate Token</button>
+                  </div>
+                </div>
+                <div class="text-[11px] font-mono text-gray-400 bg-[#111827] p-2 rounded border border-gray-800 flex items-center justify-between">
+                  <span class="truncate">Auth Token: <strong class="text-emerald-400">agt_sec_8f43a9b2c011e749a1d2e8b409c2513f87a6b4c3d2e1...</strong></span>
+                  <span class="text-gray-500 shrink-0">Persisted in /var/lib/playout-agent</span>
+                </div>
+                <div class="flex items-center gap-4 text-xs text-gray-400">
+                  <span>Assigned: <strong>CH 01, CH 03</strong></span>
+                  <span>CPU: <strong class="text-white">28%</strong></span>
+                  <span>GPU NVENC: <strong class="text-sky-400">42%</strong></span>
+                  <span>Ping: <strong class="text-emerald-400">1.8ms</strong></span>
+                </div>
+              </div>
+
+              <!-- Agent 2 -->
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span class="text-sm font-bold text-white">mumbai-dc2-hotstandby</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">1+1 Standby Mirror</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 font-mono">IP: 100.64.2.99:9095 (Tailscale)</span>
+                    <button class="px-2 py-1 text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700">Rotate Token</button>
+                  </div>
+                </div>
+                <div class="text-[11px] font-mono text-gray-400 bg-[#111827] p-2 rounded border border-gray-800 flex items-center justify-between">
+                  <span class="truncate">Auth Token: <strong class="text-emerald-400">agt_sec_3b11ef9901ad847291bb4c0091aa38df...</strong></span>
+                  <span class="text-gray-500 shrink-0">Persisted in /var/lib/playout-agent</span>
+                </div>
+                <div class="flex items-center gap-4 text-xs text-gray-400">
+                  <span>Assigned: <strong>CH 01 Standby, CH 02 Primary</strong></span>
+                  <span>CPU: <strong class="text-white">16%</strong></span>
+                  <span>GPU NVENC: <strong class="text-sky-400">31%</strong></span>
+                  <span>Ping: <strong class="text-emerald-400">4.2ms</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: STORAGE MOUNTS (NAS / SMB / LOCAL) -->
+          <div id="set-content-storage" class="space-y-4 hidden">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white">Storage Device Management</h3>
+                <p class="text-xs text-gray-400">Mount NAS appliances, SMB/CIFS network folders, or local filesystem paths for media ingestion</p>
+              </div>
+              <button class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white">+ Add Storage Mount</button>
+            </div>
+
+            <div class="space-y-3">
+              <!-- Mount 1 -->
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-white">NAS Movie Vault (SMB/CIFS)</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">MOUNTED</span>
+                  </div>
+                  <span class="text-xs text-gray-400 font-mono">//192.168.1.50/broadcast_media</span>
+                </div>
+                <div class="space-y-1">
+                  <div class="flex justify-between text-[11px] text-gray-400">
+                    <span>Storage Usage: 18.4 TB / 24.0 TB</span>
+                    <span class="text-sky-400">76.6% Used (5.6 TB Free)</span>
+                  </div>
+                  <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div class="h-full bg-sky-500 rounded-full" style="width: 76.6%;"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Mount 2 -->
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-white">Local High-Speed NVMe Master</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">LOCAL ALIAS</span>
+                  </div>
+                  <span class="text-xs text-gray-400 font-mono">/mnt/nvme_storage/movies</span>
+                </div>
+                <div class="space-y-1">
+                  <div class="flex justify-between text-[11px] text-gray-400">
+                    <span>Storage Usage: 2.1 TB / 3.8 TB</span>
+                    <span class="text-sky-400">55.2% Used</span>
+                  </div>
+                  <div class="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div class="h-full bg-emerald-500 rounded-full" style="width: 55.2%;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 3: BOT & CHATOPS CONFIGURATION (MULTIPLE BOTS) -->
+          <div id="set-content-bots" class="space-y-4 hidden">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white">ChatOps & Bot Automation Integrations</h3>
+                <p class="text-xs text-gray-400">Configure multiple bots with API keys, natural language playout scheduling and conflict resolution</p>
+              </div>
+              <button class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white">+ Add Bot Configuration</button>
+            </div>
+
+            <!-- Bot Config Card -->
+            <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-3">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-7 h-7 rounded-full bg-sky-500 flex items-center justify-center text-white font-bold text-xs">TG</div>
+                  <div>
+                    <span class="text-xs font-bold text-white">Telegram Playout Bot</span>
+                    <div class="text-[10px] text-sky-400">@OmniPlayoutOpsBot</div>
+                  </div>
+                </div>
+                <span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">ONLINE & POLLING</span>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label class="block text-[11px] text-gray-400 mb-1">Bot API Token</label>
+                  <input type="password" value="7123456789:AAHq0_k9x8Z1w7e6r5t4y3u2i1o0p_xxxx" class="w-full bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+                </div>
+                <div>
+                  <label class="block text-[11px] text-gray-400 mb-1">Allowed Chat IDs / Whitelist</label>
+                  <input type="text" value="98471238, -100192847192 (MCR Admins)" class="w-full bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between pt-1">
+                <span class="text-xs text-gray-400">Assigned Channels: <strong class="text-white">CH 01, CH 02, CH 03, CH 04</strong></span>
+                <button class="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 rounded border border-gray-700">Test Bot Ping</button>
+              </div>
+
+              <!-- Interactive Telegram NLP Chat Simulator -->
+              <div class="mt-3 bg-[#0B0F17] rounded-lg p-3 border border-gray-800 space-y-2">
+                <span class="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">Interactive Natural Language Playout Simulator</span>
+                <div class="space-y-2 text-xs">
+                  <div class="flex items-start gap-2">
+                    <span class="px-1.5 py-0.5 rounded bg-gray-800 text-[10px] text-gray-400 font-mono">User</span>
+                    <span class="bg-[#1E293B] text-white px-3 py-1.5 rounded-lg rounded-tl-none text-xs">"Schedule Avengers at 9 AM on Channel 1"</span>
+                  </div>
+
+                  <div class="flex items-start gap-2">
+                    <span class="px-1.5 py-0.5 rounded bg-sky-800 text-[10px] text-white font-mono">Bot</span>
+                    <div class="bg-[#161F30] border border-sky-500/30 p-2.5 rounded-lg rounded-tl-none space-y-2 text-xs">
+                      <div class="text-gray-200">🔍 Fuzzy matched media file: <strong>Avengers: Endgame (2019) 1080p.mkv</strong> (Duration: 03:01:00)</div>
+                      <div class="text-amber-400 font-semibold flex items-center gap-1.5">
+                        <span>⚠️ Playback Conflict Detected at 09:00:00 IST!</span>
+                      </div>
+                      <div class="text-[11px] text-gray-400">Slot occupied by <em>"Morning News Live" (08:30 - 09:30 IST)</em>. Select resolution:</div>
+                      <div class="flex flex-wrap gap-1.5 pt-1">
+                        <button class="px-2 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded text-[10px] font-bold">[1. Force Overwrite Slot]</button>
+                        <button class="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[10px] font-bold">[2. Queue After News (09:30 AM)]</button>
+                        <button class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded text-[10px] font-bold">[3. Replace Conflicting]</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 4: SERVICE MESH & TAILSCALE -->
+          <div id="set-content-mesh" class="space-y-4 hidden">
+            <h3 class="text-sm font-bold text-white">Intranet Service Mesh & Tailscale</h3>
+            <p class="text-xs text-gray-400">Zero-config encrypted peer-to-peer mesh networking between Control Plane and remote edge transmitters.</p>
+            <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-white">Tailscale WireGuard Mesh Status</span>
+                <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">CONNECTED</span>
+              </div>
+              <div>
+                <label class="block text-[11px] text-gray-400 mb-1">Control Plane MagicDNS FQDN</label>
+                <input type="text" value="omnistream-control.tail99a8.ts.net" readonly class="w-full bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-sky-400 font-mono">
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 5: INDIAN LANGUAGES & REGIONAL I18N -->
+          <div id="set-content-i18n" class="space-y-4 hidden">
+            <h3 class="text-sm font-bold text-white">Internationalization (i18n) & Indian Regional Localization</h3>
+            <p class="text-xs text-gray-400">The platform defaults to English with native dictionary support for all 10 constitutional Indian languages.</p>
+            <div class="grid grid-cols-2 gap-3 text-xs">
+              <div class="p-3 bg-[#1A2234] border border-[#2D3A54] rounded-lg">
+                <span class="font-bold text-white">Supported Indian Locales:</span>
+                <ul class="mt-2 space-y-1 text-gray-300">
+                  <li>• हिन्दी (Hindi - hi-IN)</li>
+                  <li>• தமிழ் (Tamil - ta-IN)</li>
+                  <li>• తెలుగు (Telugu - te-IN)</li>
+                  <li>• বাংলা (Bengali - bn-IN)</li>
+                  <li>• मराठी (Marathi - mr-IN)</li>
+                </ul>
+              </div>
+              <div class="p-3 bg-[#1A2234] border border-[#2D3A54] rounded-lg">
+                <span class="font-bold text-white">Additional Indic Languages:</span>
+                <ul class="mt-2 space-y-1 text-gray-300">
+                  <li>• ગુજરાતી (Gujarati - gu-IN)</li>
+                  <li>• ಕನ್ನಡ (Kannada - kn-IN)</li>
+                  <li>• മലയാളം (Malayalam - ml-IN)</li>
+                  <li>• ਪੰਜਾਬੀ (Punjabi - pa-IN)</li>
+                  <li>• ଓଡ଼ିଆ (Odia - or-IN)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+
+  <!-- ==================================================================== -->
+  <!-- MODAL: ADD / EDIT SCHEDULE ITEM WITH SEAMLESS TMDB LOOKUP -->
+  <!-- ==================================================================== -->
+  <div id="schedule-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Modal Header -->
+      <div class="px-5 py-3.5 bg-[#1A2234] border-b border-[#2D3A54] flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <span>Add Broadcast Media to Schedule</span>
+            <span class="text-xs px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono">CH 01 • Star Gold HD</span>
+          </h3>
+          <p class="text-[11px] text-gray-400">Select file from storage mount, auto-probe duration, inline TMDb match & ad template override</p>
+        </div>
+        <button onclick="closeScheduleModal()" class="text-gray-400 hover:text-white p-1">✕</button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="flex-1 overflow-y-auto p-5 space-y-5">
+        
+        <!-- STEP 1: STORAGE BROWSER -->
+        <div class="space-y-2">
+          <label class="block text-xs font-bold text-sky-400 uppercase tracking-wider">
+            1. Storage Device & Video File Browser
+          </label>
+          <div class="flex items-center gap-3">
+            <select class="bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white">
+              <option>Mount: NAS Movie Vault (SMB Share)</option>
+              <option>Mount: Local NVMe Storage</option>
+            </select>
+            <span class="text-xs text-gray-400 font-mono">Path: /media/movies/bollywood/2023/</span>
+          </div>
+
+          <!-- File Explorer Table -->
+          <div class="bg-[#0B0F17] border border-gray-800 rounded-lg overflow-hidden max-h-36 overflow-y-auto divide-y divide-gray-800 text-xs">
+            <div onclick="selectMovieFile('Jawan', '02:49:12', '14.2 GB')" class="p-2 flex items-center justify-between hover:bg-[#1E293B] cursor-pointer bg-indigo-950/30">
+              <span class="font-mono text-sky-300 flex items-center gap-2">
+                <span>📄</span> Jawan.2023.1080p.Hindi.Atmos.mkv
+              </span>
+              <div class="text-[11px] text-gray-400 font-mono flex items-center gap-3">
+                <span class="text-emerald-400">Probed: 02:49:12</span>
+                <span>14.2 GB</span>
+                <span class="text-xs text-sky-400">● Selected</span>
+              </div>
+            </div>
+
+            <div onclick="selectMovieFile('Dunki', '02:40:05', '11.5 GB')" class="p-2 flex items-center justify-between hover:bg-[#1E293B] cursor-pointer">
+              <span class="font-mono text-gray-300 flex items-center gap-2">
+                <span>📄</span> Dunki.2023.1080p.mkv
+              </span>
+              <div class="text-[11px] text-gray-400 font-mono flex items-center gap-3">
+                <span>Probed: 02:40:05</span>
+                <span>11.5 GB</span>
+              </div>
+            </div>
+
+            <div onclick="selectMovieFile('Tiger 3', '02:35:48', '12.8 GB')" class="p-2 flex items-center justify-between hover:bg-[#1E293B] cursor-pointer">
+              <span class="font-mono text-gray-300 flex items-center gap-2">
+                <span>📄</span> Tiger_3.2023.1080p.mkv
+              </span>
+              <div class="text-[11px] text-gray-400 font-mono flex items-center gap-3">
+                <span>Probed: 02:35:48</span>
+                <span>12.8 GB</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 2: SEAMLESS INLINE TMDB METADATA LOOKUP (ON THE SAME PAGE) -->
+        <div class="space-y-2 bg-[#1A2234] border border-[#2D3A54] p-3.5 rounded-lg">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-bold text-sky-400 uppercase tracking-wider">
+              2. Seamless TMDb / Movie Database Match (Inline on Same Page)
+            </label>
+            <span class="text-[10px] text-gray-400">Auto-Queried from Filename</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input type="text" id="tmdb-search-input" value="Jawan 2023" class="flex-1 bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <button onclick="searchTmdb()" class="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-xs font-semibold text-white rounded">Search TMDb</button>
+          </div>
+
+          <!-- Matched Movie Candidate Card -->
+          <div class="bg-[#111827] border border-indigo-500/40 p-3 rounded-lg flex items-start gap-3">
+            <img src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=150&auto=format&fit=crop&q=80" alt="Poster" class="w-16 h-24 object-cover rounded shadow border border-gray-700 shrink-0">
+            <div class="space-y-1 flex-1">
+              <div class="flex items-center justify-between">
+                <span class="text-sm font-bold text-white">Jawan (जवान) (2023)</span>
+                <span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-bold">Matched for EPG</span>
+              </div>
+              <div class="text-[11px] text-gray-300">
+                Action, Thriller • 169 mins • CBFC: U/A 16+ • Directed by Atlee
+              </div>
+              <p class="text-[10px] text-gray-400 line-clamp-2">
+                A high-octane action thriller which outlines the emotional journey of a man who is set to rectify the wrongs in the society, alongside an army of courageous women.
+              </p>
+              <div class="text-[9px] text-sky-400 font-mono pt-0.5">Stars: Shah Rukh Khan, Nayanthara, Vijay Sethupathi • Language: Hindi / Tamil</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 3: TIMING & AUTO END TIME CALCULATION -->
+        <div class="space-y-2">
+          <label class="block text-xs font-bold text-sky-400 uppercase tracking-wider">
+            3. Broadcast Timing & Auto-Calculated Duration
+          </label>
+          <div class="grid grid-cols-3 gap-3">
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Start Time (IST)</label>
+              <input type="text" id="sched-start-time" value="16:30:00" onchange="recalculateEndTime()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+            </div>
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Video Duration (Probed)</label>
+              <input type="text" id="sched-duration" value="02:49:12" readonly class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-sky-300 font-mono">
+            </div>
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Calculated End Time</label>
+              <input type="text" id="sched-end-time" value="19:19:12" readonly class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-emerald-400 font-mono font-bold">
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 4: AD TEMPLATE PRECEDENCE OVERRIDE -->
+        <div class="space-y-2">
+          <label class="block text-xs font-bold text-sky-400 uppercase tracking-wider">
+            4. Ad & CG Template Precedence
+          </label>
+          <div>
+            <select class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white">
+              <option selected>★ Blockbuster Festive Ad Template (Overrides Channel Default)</option>
+              <option>Use Channel Global Template (Default Fallback)</option>
+              <option>None (Raw Playout without Graphics)</option>
+            </select>
+            <span class="text-[10px] text-gray-400 mt-1 block">Rule: If selected, this template takes precedence over the channel-level global template for the duration of this content.</span>
+          </div>
+        </div>
+
+        <!-- STEP 5: AUDIO TRACKS & SUBTITLES -->
+        <div class="space-y-2">
+          <label class="block text-xs font-bold text-sky-400 uppercase tracking-wider">
+            5. Audio Tracks & Closed Captions Management
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Active Playout Audio Track</label>
+              <select class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+                <option selected>Track 1: Hindi 5.1 Dolby TrueHD (Stream #0:1)</option>
+                <option>Track 2: Tamil 2.0 Stereo (Stream #0:2)</option>
+                <option>Track 3: English Commentary (Stream #0:3)</option>
+              </select>
+              <label class="flex items-center gap-1.5 text-[11px] text-gray-300 mt-1.5">
+                <input type="checkbox" checked class="rounded text-indigo-600">
+                <span>Enable EBU R128 / CALM Act Loudness Normalization (-23 LUFS)</span>
+              </label>
+            </div>
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Subtitle / Closed Caption Track</label>
+              <select class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+                <option selected>Track 1: English Sidecar SRT -> CEA-708 CC</option>
+                <option>Track 2: Hindi DVB-Sub Bitmap</option>
+                <option>None (Disable Subtitles)</option>
+              </select>
+              <label class="flex items-center gap-1.5 text-[11px] text-gray-300 mt-1.5">
+                <input type="checkbox" class="rounded text-indigo-600">
+                <span>Burn-in Subtitles onto Video Raster (Open Subtitles)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- STEP 6: ADVANCED FFMPEG OPTIONS (COLLAPSIBLE) -->
+        <details class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 text-xs">
+          <summary class="font-bold text-gray-300 cursor-pointer select-none">
+            + Advanced FFmpeg & Transport Stream Parameters
+          </summary>
+          <div class="mt-3 space-y-2 pt-2 border-t border-gray-700">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] text-gray-400 mb-0.5">Custom Video Filters (-vf)</label>
+                <input type="text" value="yadif=0:-1:1,scale=1920:1080" class="w-full bg-[#111827] border border-gray-700 rounded p-1 text-[11px] text-gray-300 font-mono">
+              </div>
+              <div>
+                <label class="block text-[10px] text-gray-400 mb-0.5">PMT PID / Service PID</label>
+                <input type="text" value="4096 / 1" class="w-full bg-[#111827] border border-gray-700 rounded p-1 text-[11px] text-gray-300 font-mono">
+              </div>
+            </div>
+          </div>
+        </details>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-5 py-3 bg-[#1A2234] border-t border-[#2D3A54] flex items-center justify-between">
+        <button onclick="closeScheduleModal()" class="px-3.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-xs font-semibold text-gray-300 rounded">Cancel</button>
+        <button onclick="commitScheduleItem()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white rounded shadow">
+          Commit to Playout Schedule
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==================================================================== -->
+  <!-- MODAL: PAIR NEW EDGE AGENT WITH CRYPTOGRAPHIC TOKEN -->
+  <!-- ==================================================================== -->
+  <div id="pair-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-lg shadow-2xl overflow-hidden">
+      <div class="px-5 py-3.5 bg-[#1A2234] border-b border-[#2D3A54] flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white">Pair Edge Playout Agent Node</h3>
+        <button onclick="closePairModal()" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-4 text-xs">
+        <div class="bg-indigo-950/40 border border-indigo-500/30 p-3 rounded-lg text-indigo-300 space-y-1">
+          <div class="font-bold">Cryptographic Token Pairing Instructions:</div>
+          <p class="text-[11px] text-gray-300">
+            When deployed in Agent-Only mode, the container creates a persistent token in <code>/var/lib/playout-agent/agent_auth.json</code> and outputs it to container logs:
+          </p>
+          <pre class="bg-black/60 p-2 rounded text-[10px] font-mono text-emerald-400 overflow-x-auto">docker logs edge-agent | grep agt_sec_</pre>
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">Agent Hostname / IP Address</label>
+          <input type="text" placeholder="100.64.2.105 (Tailscale) or 192.168.1.80" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">gRPC Port</label>
+          <input type="number" value="9095" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">Persistent Pairing Token</label>
+          <textarea rows="2" placeholder="agt_sec_8f43a9b2c011e749a1d2e8b409c2513f..." class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"></textarea>
+        </div>
+      </div>
+      <div class="px-5 py-3 bg-[#1A2234] border-t border-[#2D3A54] flex justify-end gap-2">
+        <button onclick="closePairModal()" class="px-3 py-1.5 bg-gray-800 text-gray-300 rounded text-xs">Cancel</button>
+        <button onclick="confirmPairing()" class="px-4 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold shadow">Authenticate & Pair Node</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Client-side Interactive JavaScript Engine -->
+  <script>
+    // Live SMPTE Timecode Clock (25 FPS PAL standard)
+    let frame = 12;
+    setInterval(() => {
+      const now = new Date();
+      frame = (frame + 1) % 25;
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      const ff = String(frame).padStart(2, '0');
+      const tcElement = document.getElementById('live-timecode');
+      if (tcElement) {
+        tcElement.textContent = `${hh}:${mm}:${ss}:${ff}`;
+      }
+    }, 40);
+
+    // Screen Switching
+    function switchScreen(screenNumber) {
+      document.querySelectorAll('.screen-view').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-indigo-600', 'text-white', 'shadow-sm');
+        btn.classList.add('text-gray-300');
+      });
+
+      const target = document.getElementById(`screen-1` && `screen-${screenNumber}`);
+      if (target) target.classList.remove('hidden');
+
+      const activeBtn = document.getElementById(`tab-btn-${screenNumber}`);
+      if (activeBtn) {
+        activeBtn.classList.add('bg-indigo-600', 'text-white', 'shadow-sm');
+        activeBtn.classList.remove('text-gray-300');
+      }
+    }
+
+    // Settings Subtabs
+    function switchSettingsTab(tabName) {
+      const tabs = ['agents', 'storage', 'bots', 'mesh', 'i18n'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`set-tab-${t}`);
+        const content = document.getElementById(`set-content-${t}`);
+        if (btn) {
+          if (t === tabName) {
+            btn.classList.add('bg-indigo-600', 'text-white');
+            btn.classList.remove('text-gray-300');
+          } else {
+            btn.classList.remove('bg-indigo-600', 'text-white');
+            btn.classList.add('text-gray-300');
+          }
+        }
+        if (content) {
+          if (t === tabName) content.classList.remove('hidden');
+          else content.classList.add('hidden');
+        }
+      });
+    }
+
+    // Ad Studio Subtabs
+    function switchAdSection(secName) {
+      const overlaysSec = document.getElementById('ad-section-overlays');
+      const rollsSec = document.getElementById('ad-section-rolls');
+      const btnOverlays = document.getElementById('ad-subtab-overlays');
+      const btnRolls = document.getElementById('ad-subtab-rolls');
+
+      if (secName === 'overlays') {
+        overlaysSec.classList.remove('hidden');
+        rollsSec.classList.add('hidden');
+        btnOverlays.classList.add('bg-indigo-600', 'text-white');
+        btnOverlays.classList.remove('text-gray-400');
+        btnRolls.classList.remove('bg-indigo-600', 'text-white');
+        btnRolls.classList.add('text-gray-400');
+      } else {
+        overlaysSec.classList.add('hidden');
+        rollsSec.classList.remove('hidden');
+        btnRolls.classList.add('bg-indigo-600', 'text-white');
+        btnRolls.classList.remove('text-gray-400');
+        btnOverlays.classList.remove('bg-indigo-600', 'text-white');
+        btnOverlays.classList.add('text-gray-400');
+      }
+    }
+
+    // WYSIWYG Animation Preview
+    function playCanvasPreviewAnimation() {
+      const bug = document.getElementById('elem-sponsor-bug');
+      const lower = document.getElementById('elem-lower-third');
+      const animSelect = document.getElementById('entrance-anim-select');
+      const chosenAnim = animSelect ? animSelect.value : 'anim-slide-up';
+
+      // Reset animations
+      bug.className = 'draggable-element active-selected z-20';
+      lower.className = 'draggable-element z-20';
+
+      void bug.offsetWidth; // Trigger DOM reflow
+      void lower.offsetWidth;
+
+      bug.classList.add(chosenAnim);
+      lower.classList.add('anim-slide-up');
+    }
+
+    // Safe Guides Toggle
+    function toggleSafeGuides() {
+      const checked = document.getElementById('safe-guides-toggle').checked;
+      const g1 = document.getElementById('safe-action-guide');
+      const g2 = document.getElementById('safe-title-guide');
+      if (checked) {
+        g1.classList.remove('hidden');
+        g2.classList.remove('hidden');
+      } else {
+        g1.classList.add('hidden');
+        g2.classList.add('hidden');
+      }
+    }
+
+    function selectElement(type) {
+      document.querySelectorAll('.draggable-element').forEach(el => el.classList.remove('active-selected'));
+      const label = document.getElementById('selected-elem-label');
+      if (type === 'bug') {
+        document.getElementById('elem-sponsor-bug').classList.add('active-selected');
+        if (label) label.textContent = 'Sponsor Bug';
+      } else if (type === 'lowerthird') {
+        document.getElementById('elem-lower-third').classList.add('active-selected');
+        if (label) label.textContent = 'Lower-Third Teaser';
+      } else if (type === 'ticker') {
+        document.getElementById('elem-ticker').classList.add('active-selected');
+        if (label) label.textContent = 'News Ticker Crawl';
+      }
+    }
+
+    // Emergency Slate
+    let slateEngaged = false;
+    function toggleSlate() {
+      slateEngaged = !slateEngaged;
+      const overlay = document.getElementById('live-slate-overlay');
+      const btn = document.getElementById('slate-btn');
+      if (slateEngaged) {
+        overlay.classList.remove('hidden');
+        btn.classList.add('bg-gray-700', 'text-red-400');
+        btn.classList.remove('bg-rose-600', 'text-white');
+        btn.querySelector('span').textContent = 'Disengage Slate';
+      } else {
+        overlay.classList.add('hidden');
+        btn.classList.remove('bg-gray-700', 'text-red-400');
+        btn.classList.add('bg-rose-600', 'text-white');
+        btn.querySelector('span').textContent = 'Emergency Slate';
+      }
+    }
+
+    function skipNextEvent() {
+      alert("Command sent to Edge Agent: SKIP_NEXT_EVENT. Seamless 0-frame cross-fade engaged.");
+    }
+
+    // Schedule Modal Operations
+    function openScheduleModal() {
+      document.getElementById('schedule-modal').classList.remove('hidden');
+    }
+    function closeScheduleModal() {
+      document.getElementById('schedule-modal').classList.add('hidden');
+    }
+    function selectMovieFile(title, dur, size) {
+      document.getElementById('tmdb-search-input').value = title + " 2023";
+      document.getElementById('sched-duration').value = dur;
+      recalculateEndTime();
+    }
+    function recalculateEndTime() {
+      const start = document.getElementById('sched-start-time').value;
+      const dur = document.getElementById('sched-duration').value;
+      // Simple time addition demonstration
+      document.getElementById('sched-end-time').value = "19:19:12";
+    }
+    function searchTmdb() {
+      alert("TMDb API lookup queried: Official metadata & artwork cached locally for EPG generation.");
+    }
+    function commitScheduleItem() {
+      alert("Schedule Item successfully committed! EPG tables updated and synchronized to Edge Agent.");
+      closeScheduleModal();
+    }
+
+    // Pair Modal Operations
+    function openPairModal() {
+      document.getElementById('pair-modal').classList.remove('hidden');
+    }
+    function closePairModal() {
+      document.getElementById('pair-modal').classList.add('hidden');
+    }
+    function confirmPairing() {
+      alert("Handshake verified via cryptographically secure token. Edge Agent paired and active!");
+      closePairModal();
+    }
+
+    // Multilingual Localization Dictionaries (English + 10 Indian Languages)
+    const translations = {
+      en: {
+        "nav.dashboard": "Dashboard",
+        "nav.channels": "Channels",
+        "nav.scheduling": "Scheduling & EPG",
+        "nav.ad_templates": "Ad & CG Studio",
+        "nav.settings": "Settings & Mesh",
+        "common.healthy": "Cluster: 100% Up",
+        "dash.active_channels": "Active Broadcast Channels",
+        "dash.transcode_load": "GPU NVENC Encoding Load",
+        "dash.cluster_cpu": "Edge Nodes CPU / RAM",
+        "dash.egress_bandwidth": "Playout Egress Throughput",
+        "dash.active_destinations": "Active Stream Destinations",
+        "dash.channel_grid_title": "Live Playout Matrix",
+        "dash.live_events_log": "Master Control Incident & As-Run Telemetry Feed",
+        "channel.management_title": "Channel Master Configuration",
+        "channel.subtitle": "Configure distributed edge agents, 1+1 redundancy failover, branding logo & live monitor",
+        "channel.name": "Channel Name",
+        "common.save_changes": "Apply & Save Config",
+        "sched.title": "24/7 Playout Schedule & EPG Master",
+        "sched.subtitle": "Manage linear playlists, inline TMDb metadata enrichment, audio PID tracks & conflict resolution",
+        "sched.add_item": "+ Add Media / Schedule Movie",
+        "ad.title": "WYSIWYG Ad & CG Graphics Studio",
+        "ad.subtitle": "Drag-and-drop animated on-screen banners, lower-thirds, tickers & SCTE-35 commercial rolls",
+        "settings.title": "Enterprise Infrastructure & Integrations",
+        "settings.subtitle": "Manage edge playout agent tokens, NAS/SMB storage, Telegram ChatOps bots, and Tailscale mesh"
+      },
+      hi: {
+        "nav.dashboard": "डैशबोर्ड",
+        "nav.channels": "चैनल्स",
+        "nav.scheduling": "शेड्यूलिंग और ईपीजी",
+        "nav.ad_templates": "विज्ञापन व सीजी स्टूडियो",
+        "nav.settings": "सेटिंग्स व मेश",
+        "common.healthy": "क्लस्टर: 100% सक्रिय",
+        "dash.active_channels": "सक्रिय प्रसारण चैनल्स",
+        "dash.transcode_load": "जीपीयू एन्कोडिंग लोड",
+        "dash.cluster_cpu": "एज नोड्स सीपीयू / रैम",
+        "dash.egress_bandwidth": "प्लेआउट इग्रेस बैंडविड्थ",
+        "dash.active_destinations": "सक्रिय स्ट्रीम गंतव्य",
+        "dash.channel_grid_title": "लाइव प्लेआउट मैट्रिक्स",
+        "dash.live_events_log": "मास्टर कंट्रोल घटना व टेलीमेट्री फीड",
+        "channel.management_title": "चैनल मास्टर कॉन्फ़िगरेशन",
+        "channel.subtitle": "वितरित एज एजेंट्स, 1+1 रिडंडेंसी, लोगो व लाइव मॉनिटर कॉन्फ़िगर करें",
+        "channel.name": "चैनल का नाम",
+        "common.save_changes": "सेव व लागू करें",
+        "sched.title": "24/7 प्लेआउट शेड्यूल और ईपीजी",
+        "sched.subtitle": "लीनियर प्लेलिस्ट, टीएमडीबी मेटाडेटा, ऑडियो ट्रैक्स व शेड्यूलिंग प्रबंधित करें",
+        "sched.add_item": "+ मूवी शेड्यूल करें",
+        "ad.title": "विज्ञापन व सीजी ग्राफिक्स स्टूडियो",
+        "ad.subtitle": "एनिमेटेड स्क्रीन बैनर, लोअर-थर्ड्स व एसईटीई-35 विज्ञापन रोल्स",
+        "settings.title": "इन्फ्रास्ट्रक्चर और सेटिंग्स",
+        "settings.subtitle": "एज एजेंट टोकन, एनएएस स्टोरेज, टेलीग्राम बॉट्स व टेलस्केल प्रबंधित करें"
+      },
+      ta: {
+        "nav.dashboard": "முகப்பு பலகை",
+        "nav.channels": "சேனல்கள்",
+        "nav.scheduling": "அட்டவணை & EPG",
+        "nav.ad_templates": "விளம்பர ஸ்டுடியோ",
+        "nav.settings": "அமைப்புகள்",
+        "common.healthy": "கிளஸ்டர்: 100% இயங்குகிறது",
+        "dash.active_channels": "செயலில் உள்ள சேனல்கள்",
+        "dash.transcode_load": "GPU குறியாக்கம்",
+        "dash.cluster_cpu": "CPU / நினைவகம்",
+        "dash.egress_bandwidth": "வெளியீட்டு அலைவரிசை",
+        "dash.active_destinations": "இலக்கு ஸ்ட்ரீம்கள்",
+        "dash.channel_grid_title": "நேரலை மேட்ரிக்ஸ்",
+        "dash.live_events_log": "நிகழ்வுப் பதிவு",
+        "channel.management_title": "சேனல் மேலாண்மை",
+        "channel.subtitle": "எட்ஜ் ஏஜெண்டுகள், பணிநீக்கம் மற்றும் நேரலை காட்சி",
+        "channel.name": "சேனல் பெயர்",
+        "common.save_changes": "சேமிக்க",
+        "sched.title": "24/7 ஒளிபரப்பு அட்டவணை & EPG",
+        "sched.subtitle": "பிளேலிஸ்ட்கள், திரைப்பட மெட்டாடேட்டா & ஆடியோ மேலாண்மை",
+        "sched.add_item": "+ திரைப்படம் சேர்க்க",
+        "ad.title": "விளம்பர கிராபிக்ஸ் ஸ்டுடியோ",
+        "ad.subtitle": "திரை பேனர்கள் மற்றும் விளம்பர ரோல்கள்",
+        "settings.title": "கட்டமைப்பு அமைப்புகள்",
+        "settings.subtitle": "ஏஜென்ட் டோக்கன்கள், NAS சேமிப்பு மற்றும் டெலிகிராம் போட்"
+      },
+      te: {
+        "nav.dashboard": "డ్యాష్‌బోర్డ్",
+        "nav.channels": "ఛానల్స్",
+        "nav.scheduling": "షెడ్యూలింగ్ & EPG",
+        "nav.ad_templates": "ప్రకటన స్టూడియో",
+        "nav.settings": "సెట్టింగులు",
+        "common.healthy": "క్లస్టర్: 100% యాక్టివ్",
+        "dash.active_channels": "యాక్టివ్ ప్రసార ఛానల్స్",
+        "dash.transcode_load": "GPU ఎన్‌కోడింగ్ లోడ్",
+        "dash.cluster_cpu": "CPU / మెమరీ",
+        "dash.egress_bandwidth": "ప్లేఅవుట్ బ్యాండ్‌విడ్త్",
+        "dash.active_destinations": "స్ట్రీమ్ గమ్యస్థానాలు",
+        "dash.channel_grid_title": "లైవ్ ప్లేఅవుట్ మ్యాట్రిక్స్",
+        "dash.live_events_log": "టెలిమెట్రీ ఈవెంట్ లాగ్",
+        "channel.management_title": "ఛానల్ మాస్టర్ కాన్ఫిగరేషన్",
+        "channel.subtitle": "ఎడ్జ్ ఏజెంట్లు, రిడండెన్సీ మరియు లైవ్ మానిటర్ కాన్ఫిగర్ చేయండి",
+        "channel.name": "ఛానల్ పేరు",
+        "common.save_changes": "సేవ్ చేయండి",
+        "sched.title": "24/7 ప్లేఅవుట్ షెడ్యూల్ & EPG",
+        "sched.subtitle": "లీనియర్ ప్లేలిస్ట్‌లు, TMDb మెటాడేటా & ఆడియో నిర్వహణ",
+        "sched.add_item": "+ మూవీని షెడ్యూల్ చేయండి",
+        "ad.title": "ప్రకటన & CG గ్రాఫిక్స్ స్టూడియో",
+        "ad.subtitle": "యానిమేటెడ్ స్క్రీన్ బ్యానర్‌లు మరియు ప్రకటన రోల్స్",
+        "settings.title": "మౌలిక సదుపాయాల సెట్టింగ్‌లు",
+        "settings.subtitle": "ఏజెంట్ టోకెన్లు, NAS నిల్వ మరియు టెలిగ్రామ్ బోట్"
+      },
+      bn: {
+        "nav.dashboard": "ড্যাশবোর্ড",
+        "nav.channels": "চ্যানেলসমূহ",
+        "nav.scheduling": "সময়সূচী ও EPG",
+        "nav.ad_templates": "বিজ্ঞাপন স্টুডিও",
+        "nav.settings": "সেটিংস",
+        "common.healthy": "ক্লাস্টার: ১০০% সক্রিয়",
+        "dash.active_channels": "সক্রিয় সম্প্রচার চ্যানেল",
+        "channel.management_title": "চ্যানেল মাস্টার কনফিগারেশন",
+        "channel.name": "চ্যানেলের নাম",
+        "common.save_changes": "সংরক্ষণ করুন",
+        "sched.title": "২৪/৭ সম্প্রচার সময়সূচী ও EPG",
+        "sched.add_item": "+ মুভি যোগ করুন"
+      },
+      mr: {
+        "nav.dashboard": "डॅशबोर्ड",
+        "nav.channels": "वाहिन्या",
+        "nav.scheduling": "वेळापत्रक आणि EPG",
+        "nav.ad_templates": "जाहिरात स्टुडिओ",
+        "nav.settings": "सेटिंग्ज",
+        "common.healthy": "क्लस्टर: १००% कार्यरत",
+        "dash.active_channels": "सक्रिय प्रसारण वाहिन्या",
+        "channel.management_title": "वाहिनी मुख्य रचना",
+        "channel.name": "वाहिनीचे नाव",
+        "common.save_changes": "जतन करा",
+        "sched.title": "२४/७ प्लेआउट वेळापत्रक",
+        "sched.add_item": "+ चित्रपट जोडा"
+      },
+      gu: {
+        "nav.dashboard": "ડેશબોર્ડ",
+        "nav.channels": "ચેનલો",
+        "nav.scheduling": "સમયપત્રક અને EPG",
+        "nav.ad_templates": "જાહેરાત સ્ટુડિયો",
+        "nav.settings": "સેટિંગ્સ",
+        "common.healthy": "ક્લસ્ટર: ૧૦૦% સક્રિય",
+        "channel.management_title": "ચેનલ રૂપરેખાંકન",
+        "common.save_changes": "સાચવો",
+        "sched.add_item": "+ મૂવી ઉમેરો"
+      },
+      kn: {
+        "nav.dashboard": "ಡ್ಯಾಶ್‌ಬೋರ್ಡ್",
+        "nav.channels": "ವಾಹಿನಿಗಳು",
+        "nav.scheduling": "ವೇಳಾಪಟ್ಟಿ ಮತ್ತು EPG",
+        "nav.ad_templates": "ಜಾಹೀರಾತು ಸ್ಟುಡಿಯೋ",
+        "nav.settings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+        "common.healthy": "ಕ್ಲಸ್ಟರ್: 100% ಸಕ್ರಿಯ",
+        "channel.management_title": "ವಾಹಿನಿ ನಿರ್ವಹಣೆ",
+        "common.save_changes": "ಉಳಿಸಿ",
+        "sched.add_item": "+ ಚಲನಚಿತ್ರ ಸೇರಿಸಿ"
+      },
+      ml: {
+        "nav.dashboard": "ഡാഷ്‌ബോർഡ്",
+        "nav.channels": "ചാനലുകൾ",
+        "nav.scheduling": "ഷെഡ്യൂളിംഗ് & EPG",
+        "nav.ad_templates": "പരസ്യ സ്റ്റുഡിയോ",
+        "nav.settings": "ക്രമീകരണങ്ങൾ",
+        "common.healthy": "ക്ലസ്റ്റർ: 100% സജീവം",
+        "channel.management_title": "ചാനൽ ക്രമീകരണം",
+        "common.save_changes": "സേവ് ചെയ്യുക",
+        "sched.add_item": "+ സിനിമ ചേർക്കുക"
+      },
+      pa: {
+        "nav.dashboard": "ਡੈਸ਼ਬੋਰਡ",
+        "nav.channels": "ਚੈਨਲ",
+        "nav.scheduling": "ਸ਼ਡਿਊਲਿੰਗ ਅਤੇ EPG",
+        "nav.ad_templates": "ਇਸ਼ਤਿਹਾਰ ਸਟੂਡੀਓ",
+        "nav.settings": "ਸੈਟਿੰਗਾਂ",
+        "common.healthy": "ਕਲੱਸਟਰ: 100% ਚਾਲੂ",
+        "channel.management_title": "ਚੈਨਲ ਸੰਰਚਨਾ",
+        "common.save_changes": "ਸੰਭਾਲੋ",
+        "sched.add_item": "+ ਫਿਲਮ ਸ਼ਡਿਊਲ ਕਰੋ"
+      },
+      or: {
+        "nav.dashboard": "ଡ୍ୟାସବୋର୍ଡ",
+        "nav.channels": "ଚ୍ୟାନେଲଗୁଡିକ",
+        "nav.scheduling": "କାର୍ଯ୍ୟସୂଚୀ ଓ EPG",
+        "nav.ad_templates": "ବିଜ୍ଞାପନ ଷ୍ଟୁଡିଓ",
+        "nav.settings": "ସେଟିଂସମୂହ",
+        "common.healthy": "କ୍ଲଷ୍ଟର: ୧୦୦% ସକ୍ରିୟ",
+        "channel.management_title": "ଚ୍ୟାନେଲ ପରିଚାଳନା",
+        "common.save_changes": "ସେଭ କରନ୍ତୁ",
+        "sched.add_item": "+ ସିନେମା ଯୋଡ଼ନ୍ତୁ"
+      }
+    };
+
+    function changeLanguage(lang) {
+      const dict = translations[lang] || translations.en;
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (dict[key]) {
+          el.textContent = dict[key];
+        } else if (translations.en[key]) {
+          el.textContent = translations.en[key];
+        }
+      });
+    }
+  </script>
+</body>
+</html>
