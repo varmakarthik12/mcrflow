@@ -68,13 +68,13 @@ dev-agent:
 dev-ui:
 	@echo "--> Starting Web UI Dev Server on http://localhost:3000..."
 	@if command -v npx >/dev/null 2>&1; then \
-		npx serve ui-mockup -l 3000; \
+		npx serve web -l 3000; \
 	elif command -v python3 >/dev/null 2>&1; then \
-		python3 -m http.server 3000 --directory ui-mockup; \
+		python3 -m http.server 3000 --directory web; \
 	elif command -v python >/dev/null 2>&1; then \
-		python -m http.server 3000 --directory ui-mockup; \
+		python -m http.server 3000 --directory web; \
 	else \
-		echo "Neither npx nor python found. Open ui-mockup/index.html in browser directly."; \
+		echo "Neither npx nor python found. Open web/index.html in browser directly."; \
 	fi
 
 # Build all binaries

@@ -3,7 +3,7 @@ package adtemplate
 import (
 	"testing"
 
-	"mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/models"
 )
 
 func TestAdTemplateStoreAndPrecedence(t *testing.T) {

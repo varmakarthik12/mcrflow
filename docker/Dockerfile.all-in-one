@@ -2,26 +2,16 @@
 # MCRFlow Playout - All-in-One Container (UI + Control Plane + Local Agent)
 # ==============================================================================
 
-# Stage 1: Build React Frontend
-FROM node:22-alpine AS ui-builder
-WORKDIR /app/ui
-COPY ui/package*.json ./
-RUN npm ci --prefer-offline 2>/dev/null || true
-COPY ui/ ./
-RUN npm run build 2>/dev/null || (mkdir -p dist && echo "<h1>MCRFlow Playout UI</h1>" > dist/index.html)
-
-# Stage 2: Build Go Control Plane & Edge Agent
-FROM golang:1.23-bookworm AS go-builder
+# Stage 1: Build Go Control Plane (with embedded UI) & Edge Agent
+FROM golang:1.23-bookworm AS builder
 WORKDIR /app
 COPY go.mod go.sum* ./
 RUN go mod download 2>/dev/null || true
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/mcrflow-control ./cmd/mcrflow-control 2>/dev/null || \
-    (mkdir -p /bin && echo "#!/bin/sh" > /bin/mcrflow-control && chmod +x /bin/mcrflow-control)
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/mcrflow-agent ./cmd/mcrflow-agent 2>/dev/null || \
-    (mkdir -p /bin && echo "#!/bin/sh" > /bin/mcrflow-agent && chmod +x /bin/mcrflow-agent)
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/mcrflow-control ./cmd/mcrflow-control
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/mcrflow-agent ./cmd/mcrflow-agent
 
-# Stage 3: Broadcast Runtime
+# Stage 2: Broadcast Runtime
 FROM ubuntu:24.04 AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -38,13 +28,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create persistent storage directories
-RUN mkdir -p /var/lib/mcrflow-agent /var/lib/mcrflow-data /var/www/mcrflow /media/storage
+RUN mkdir -p /var/lib/mcrflow-agent /var/lib/mcrflow-data /media/storage
 VOLUME ["/var/lib/mcrflow-agent", "/var/lib/mcrflow-data", "/media/storage"]
 
 # Copy artifacts
-COPY --from=ui-builder /app/ui/dist /var/www/mcrflow
-COPY --from=go-builder /bin/mcrflow-control /usr/local/bin/mcrflow-control
-COPY --from=go-builder /bin/mcrflow-agent /usr/local/bin/mcrflow-agent
+COPY --from=builder /bin/mcrflow-control /usr/local/bin/mcrflow-control
+COPY --from=builder /bin/mcrflow-agent /usr/local/bin/mcrflow-agent
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/all-in-one-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/mcrflow-control /usr/local/bin/mcrflow-agent

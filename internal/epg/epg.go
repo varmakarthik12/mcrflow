@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/models"
 )
 
 // XMLTV models for standards-compliant EPG export.

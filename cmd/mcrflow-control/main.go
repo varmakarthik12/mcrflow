@@ -12,17 +12,18 @@ import (
 	"syscall"
 	"time"
 
-	"mcrflow/internal/adtemplate"
-	"mcrflow/internal/auth"
-	"mcrflow/internal/bot"
-	"mcrflow/internal/channel"
-	"mcrflow/internal/hls"
-	"mcrflow/internal/resolution"
-	"mcrflow/internal/schedule"
-	"mcrflow/internal/server"
-	"mcrflow/internal/storage"
-	"mcrflow/internal/tmdb"
-	"mcrflow/internal/user"
+	"github.com/varmakarthik12/mcrflow/internal/adtemplate"
+	"github.com/varmakarthik12/mcrflow/internal/auth"
+	"github.com/varmakarthik12/mcrflow/internal/bot"
+	"github.com/varmakarthik12/mcrflow/internal/channel"
+	"github.com/varmakarthik12/mcrflow/internal/hls"
+	"github.com/varmakarthik12/mcrflow/internal/resolution"
+	"github.com/varmakarthik12/mcrflow/internal/schedule"
+	"github.com/varmakarthik12/mcrflow/internal/server"
+	"github.com/varmakarthik12/mcrflow/internal/storage"
+	"github.com/varmakarthik12/mcrflow/internal/tmdb"
+	"github.com/varmakarthik12/mcrflow/internal/user"
+	"github.com/varmakarthik12/mcrflow/web"
 )
 
 var (
@@ -52,12 +53,10 @@ func main() {
 	defaultPort := getEnvInt("MCRFLOW_PORT", getEnvInt("PORT", 8080))
 	defaultDataDir := getEnv("MCRFLOW_DATA_DIR", getEnv("MCRFLOW_STORAGE_PATH", "./data"))
 	defaultTmdbKey := getEnv("MCRFLOW_TMDB_KEY", "")
-	defaultUiDir := getEnv("MCRFLOW_UI_DIR", "./ui-mockup")
 
 	port := flag.Int("port", defaultPort, "HTTP server listening port (env: MCRFLOW_PORT)")
 	dataDir := flag.String("data-dir", defaultDataDir, "Directory for persistent databases and state (env: MCRFLOW_DATA_DIR)")
 	tmdbKey := flag.String("tmdb-key", defaultTmdbKey, "TMDb API key for movie metadata (env: MCRFLOW_TMDB_KEY)")
-	uiDir := flag.String("ui-dir", defaultUiDir, "Path to web UI static assets (env: MCRFLOW_UI_DIR)")
 	flag.Parse()
 
 	log.Printf("================================================================================")
@@ -94,11 +93,8 @@ func main() {
 		}
 	}
 
-	var staticFs http.FileSystem
-	if _, err := os.Stat(*uiDir); err == nil {
-		staticFs = http.Dir(*uiDir)
-		log.Printf("[UI] Serving UI assets from %s", *uiDir)
-	}
+	staticFs := web.AssetFS()
+	log.Printf("[UI] Embedded Web Management Console loaded and ready.")
 
 	srv := server.NewServer(server.Config{
 		ChannelStore:    chStore,

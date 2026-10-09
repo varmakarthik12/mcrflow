@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"mcrflow/internal/auth"
+	"github.com/varmakarthik12/mcrflow/internal/auth"
 )
 
 var (

@@ -3,9 +3,9 @@ package bot
 import (
 	"testing"
 
-	"mcrflow/internal/models"
-	"mcrflow/internal/schedule"
-	"mcrflow/internal/storage"
+	"github.com/varmakarthik12/mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/schedule"
+	"github.com/varmakarthik12/mcrflow/internal/storage"
 )
 
 func TestParseTimeToken(t *testing.T) {

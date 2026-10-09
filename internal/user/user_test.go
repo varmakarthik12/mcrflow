@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/models"
 )
 
 func TestUserStoreLifecycle(t *testing.T) {

@@ -1,4 +1,4 @@
-name: MCRFlow Multi-OS Release
+name: MCRFlow Multi-OS Release & Container Publish
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   goreleaser:
@@ -32,3 +33,61 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker-publish:
+    name: Build & Publish Container Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata for All-in-One
+        id: meta-allinone
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/varmakarthik12/mcrflow
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push All-in-One Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.all-in-one
+          push: true
+          tags: ${{ steps.meta-allinone.outputs.tags }}
+          labels: ${{ steps.meta-allinone.outputs.labels }}
+
+      - name: Extract Docker metadata for Edge Agent
+        id: meta-agent
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/varmakarthik12/mcrflow-agent
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push Edge Agent Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.agent-only
+          push: true
+          tags: ${{ steps.meta-agent.outputs.tags }}
+          labels: ${{ steps.meta-agent.outputs.labels }}

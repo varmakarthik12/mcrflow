@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"mcrflow/internal/models"
-	"mcrflow/internal/resolution"
+	"github.com/varmakarthik12/mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/resolution"
 )
 
 func TestBuildFfmpegCommand(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/models"
 )
 
 const (

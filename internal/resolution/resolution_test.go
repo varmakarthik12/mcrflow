@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/models"
 )
 
 func TestDefaultIndianCablePresets(t *testing.T) {

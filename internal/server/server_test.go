@@ -8,16 +8,16 @@ import (
 	"strings"
 	"testing"
 
-	"mcrflow/internal/adtemplate"
-	"mcrflow/internal/auth"
-	"mcrflow/internal/bot"
-	"mcrflow/internal/channel"
-	"mcrflow/internal/models"
-	"mcrflow/internal/resolution"
-	"mcrflow/internal/schedule"
-	"mcrflow/internal/storage"
-	"mcrflow/internal/tmdb"
-	"mcrflow/internal/user"
+	"github.com/varmakarthik12/mcrflow/internal/adtemplate"
+	"github.com/varmakarthik12/mcrflow/internal/auth"
+	"github.com/varmakarthik12/mcrflow/internal/bot"
+	"github.com/varmakarthik12/mcrflow/internal/channel"
+	"github.com/varmakarthik12/mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/resolution"
+	"github.com/varmakarthik12/mcrflow/internal/schedule"
+	"github.com/varmakarthik12/mcrflow/internal/storage"
+	"github.com/varmakarthik12/mcrflow/internal/tmdb"
+	"github.com/varmakarthik12/mcrflow/internal/user"
 )
 
 func createTestServer() (*Server, string) {

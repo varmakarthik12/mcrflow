@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/models"
 )
 
 // PipelineBuilder creates FFmpeg command lines for broadcast playout.

@@ -57,7 +57,7 @@ archives:
     files:
       - README.md
       - docs/*
-      - ui-mockup/*
+      - web/*
 
   - id: mcrflow-agent-only-archive
     builds:

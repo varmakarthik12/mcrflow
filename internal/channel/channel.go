@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"mcrflow/internal/models"
-	"mcrflow/internal/resolution"
+	"github.com/varmakarthik12/mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/resolution"
 )
 
 var (

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/models"
 )
 
 func TestScheduleLifecycleAndConflictResolution(t *testing.T) {

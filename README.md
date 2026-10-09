@@ -105,7 +105,6 @@ Every setting can be configured either through command-line flags or environment
 | `--data-dir` | `MCRFLOW_DATA_DIR` or `MCRFLOW_STORAGE_PATH` | `./data` (`/data/mcrflow` in Docker) | Directory for databases, auth state, and HLS rolling cache |
 | `--media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Default media directory auto-registered in the storage browser |
 | `--tmdb-key` | `MCRFLOW_TMDB_KEY` | `""` | Optional TMDb API key for automatic movie/series metadata lookup |
-| `--ui-dir` | `MCRFLOW_UI_DIR` | `./ui-mockup` | Path to static web console files |
 
 ### Edge Playout Agent (`mcrflow-agent`)
 
@@ -134,7 +133,7 @@ docker run -d \
   -e MCRFLOW_DATA_DIR=/data/mcrflow \
   -v /var/lib/mcrflow:/data/mcrflow \
   -v /mnt/storage/movies:/media/storage:ro \
-  ghcr.io/mcrflow/mcrflow:latest
+  ghcr.io/varmakarthik12/mcrflow:latest
 ```
 
 **Edge-Only Agent Node:**
@@ -146,7 +145,7 @@ docker run -d \
   -e MCRFLOW_AGENT_ID="delhi-edge-primary" \
   -v /var/lib/mcrflow-agent:/data/mcrflow \
   -v /mnt/storage/movies:/media/storage:ro \
-  ghcr.io/mcrflow/mcrflow-agent:latest
+  ghcr.io/varmakarthik12/mcrflow-agent:latest
 ```
 
 ---
@@ -162,7 +161,7 @@ docker run -d \
   -p 9095:9095 \
   -v "$HOME/mcrflow-data:/data/mcrflow" \
   -v "/Volumes/MediaDrive/Movies:/media/storage:ro" \
-  ghcr.io/mcrflow/mcrflow:latest
+  ghcr.io/varmakarthik12/mcrflow:latest
 ```
 
 **Edge-Only Agent Node:**
@@ -174,7 +173,7 @@ docker run -d \
   -e MCRFLOW_AGENT_ID="mac-edge-studio" \
   -v "$HOME/mcrflow-agent-data:/data/mcrflow" \
   -v "/Volumes/MediaDrive/Movies:/media/storage:ro" \
-  ghcr.io/mcrflow/mcrflow-agent:latest
+  ghcr.io/varmakarthik12/mcrflow-agent:latest
 ```
 
 ---
@@ -190,7 +189,7 @@ docker run -d `
   -p 9095:9095 `
   -v C:\mcrflow\data:/data/mcrflow `
   -v D:\BroadcastMedia\Movies:/media/storage:ro `
-  ghcr.io/mcrflow/mcrflow:latest
+  ghcr.io/varmakarthik12/mcrflow:latest
 ```
 
 **Edge-Only Agent Node:**
@@ -202,7 +201,7 @@ docker run -d `
   -e MCRFLOW_AGENT_ID="win-edge-01" `
   -v C:\mcrflow\agent-data:/data/mcrflow `
   -v D:\BroadcastMedia\Movies:/media/storage:ro `
-  ghcr.io/mcrflow/mcrflow-agent:latest
+  ghcr.io/varmakarthik12/mcrflow-agent:latest
 ```
 
 ---
@@ -218,7 +217,7 @@ docker run -d ^
   -p 9095:9095 ^
   -v C:\mcrflow\data:/data/mcrflow ^
   -v D:\BroadcastMedia\Movies:/media/storage:ro ^
-  ghcr.io/mcrflow/mcrflow:latest
+  ghcr.io/varmakarthik12/mcrflow:latest
 ```
 
 **Edge-Only Agent Node:**
@@ -230,7 +229,7 @@ docker run -d ^
   -e MCRFLOW_AGENT_ID="win-edge-01" ^
   -v C:\mcrflow\agent-data:/data/mcrflow ^
   -v D:\BroadcastMedia\Movies:/media/storage:ro ^
-  ghcr.io/mcrflow/mcrflow-agent:latest
+  ghcr.io/varmakarthik12/mcrflow-agent:latest
 ```
 
 ---
@@ -254,7 +253,7 @@ version: "3.9"
 
 services:
   control-plane:
-    image: ghcr.io/mcrflow/mcrflow:latest
+    image: ghcr.io/varmakarthik12/mcrflow:latest
     container_name: mcrflow-control
     ports:
       - "8080:8080"
@@ -268,7 +267,7 @@ services:
     restart: always
 
   edge-primary:
-    image: ghcr.io/mcrflow/mcrflow-agent:latest
+    image: ghcr.io/varmakarthik12/mcrflow-agent:latest
     container_name: mcrflow-edge-primary
     ports:
       - "9095:9095"
@@ -282,7 +281,7 @@ services:
     restart: always
 
   edge-standby:
-    image: ghcr.io/mcrflow/mcrflow-agent:latest
+    image: ghcr.io/varmakarthik12/mcrflow-agent:latest
     container_name: mcrflow-edge-standby
     ports:
       - "9096:9095"
@@ -325,7 +324,7 @@ MCRFlow includes a complete `Makefile` along with **[Air](https://github.com/air
 ### 1. Install Tooling
 ```bash
 # Clone the repository
-git clone https://github.com/mcrflow/mcrflow.git
+git clone https://github.com/varmakarthik12/mcrflow.git
 cd mcrflow
 
 # Install Air hot-reload tool
@@ -340,7 +339,7 @@ make install-tools
 | `make dev-control` | `air -c .air.control.toml` | Run Control Plane with live auto-reload on Go file edits |
 | `make dev-backend` | Alias for `dev-control` | Run Control Plane backend |
 | `make dev-agent` | `air -c .air.agent.toml` | Run Edge Playout Agent with live auto-reload on Go file edits |
-| `make dev-ui` | `npx serve ui-mockup -l 3000` | Start Web UI development server on `http://localhost:3000` |
+| `make dev-ui` | `npx serve web -l 3000` | Start Web UI development server on `http://localhost:3000` |
 | `make build` | `go build ...` | Compile all binaries (`mcrflow-control` & `mcrflow-agent`) into `./bin/` |
 | `make test` | `go test -v ./...` | Run all test suites across the repository |
 | `make test-unit` | `go test -v ./internal/...` | Run unit tests only |
@@ -369,8 +368,8 @@ make dev-agent
 #### Terminal 3 — Web UI Development Server
 ```bash
 make dev-ui
-# or directly with npx: npx serve ui-mockup -l 3000
-# or directly with Python: python -m http.server 3000 --directory ui-mockup
+# or directly with npx: npx serve web -l 3000
+# or directly with Python: python -m http.server 3000 --directory web
 ```
 
 Open `http://localhost:3000` to interact with the UI, or navigate to `http://localhost:8080` where the control plane serves both the API and embedded UI assets.

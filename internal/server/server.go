@@ -11,18 +11,18 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
-	"mcrflow/internal/adtemplate"
-	"mcrflow/internal/auth"
-	"mcrflow/internal/bot"
-	"mcrflow/internal/channel"
-	"mcrflow/internal/epg"
-	"mcrflow/internal/hls"
-	"mcrflow/internal/models"
-	"mcrflow/internal/resolution"
-	"mcrflow/internal/schedule"
-	"mcrflow/internal/storage"
-	"mcrflow/internal/tmdb"
-	"mcrflow/internal/user"
+	"github.com/varmakarthik12/mcrflow/internal/adtemplate"
+	"github.com/varmakarthik12/mcrflow/internal/auth"
+	"github.com/varmakarthik12/mcrflow/internal/bot"
+	"github.com/varmakarthik12/mcrflow/internal/channel"
+	"github.com/varmakarthik12/mcrflow/internal/epg"
+	"github.com/varmakarthik12/mcrflow/internal/hls"
+	"github.com/varmakarthik12/mcrflow/internal/models"
+	"github.com/varmakarthik12/mcrflow/internal/resolution"
+	"github.com/varmakarthik12/mcrflow/internal/schedule"
+	"github.com/varmakarthik12/mcrflow/internal/storage"
+	"github.com/varmakarthik12/mcrflow/internal/tmdb"
+	"github.com/varmakarthik12/mcrflow/internal/user"
 )
 
 type contextKey string
@@ -285,10 +285,23 @@ func (s *Server) setupRoutes() {
 		r.Post("/bots/nlp-command", s.handleNlpCommand)
 	})
 
-	// 3. Static UI Server
+	// 3. Static UI Server (with SPA fallback)
 	if s.staticFs != nil {
 		fs := http.FileServer(s.staticFs)
-		s.router.Handle("/*", fs)
+		s.router.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := strings.TrimPrefix(r.URL.Path, "/")
+			if path == "" {
+				path = "index.html"
+			}
+			f, err := s.staticFs.Open(path)
+			if err != nil {
+				// Fallback to index.html for SPA client navigation
+				r.URL.Path = "/"
+			} else {
+				_ = f.Close()
+			}
+			fs.ServeHTTP(w, r)
+		}))
 	}
 }
 

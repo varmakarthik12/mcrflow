@@ -8,8 +8,7 @@ WORKDIR /app
 COPY go.mod go.sum* ./
 RUN go mod download 2>/dev/null || true
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/mcrflow-agent ./cmd/mcrflow-agent 2>/dev/null || \
-    (mkdir -p /bin && echo "#!/bin/sh" > /bin/mcrflow-agent && chmod +x /bin/mcrflow-agent)
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/mcrflow-agent ./cmd/mcrflow-agent
 
 # Stage 2: Minimal Broadcast Runtime with Hardware Acceleration
 FROM ubuntu:24.04 AS runtime
