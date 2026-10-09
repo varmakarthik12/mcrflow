@@ -11,7 +11,14 @@ import {
   Terminal,
   Send,
   ShieldAlert,
-  X
+  X,
+  Pencil,
+  Activity,
+  Wifi,
+  WifiOff,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { api } from '../api';
 
@@ -56,10 +63,25 @@ export function SettingsScreen({
   const [isPairModalOpen, setIsPairModalOpen] = useState(false);
   const [pairForm, setPairForm] = useState({
     hostname: "edge-transmitter-01",
-    ip_address: "192.168.1.100",
+    ip_address: "127.0.0.1",
     port: 3082,
     token: ""
   });
+
+  // Agent Editing & Testing Modal
+  const [isEditAgentModalOpen, setIsEditAgentModalOpen] = useState(false);
+  const [editingAgent, setEditingAgent] = useState(null);
+  const [editAgentForm, setEditAgentForm] = useState({
+    hostname: "",
+    ip_address: "127.0.0.1",
+    port: 3082,
+    token: ""
+  });
+
+  // Agent Connection Test State
+  const [isTestingConn, setIsTestingConn] = useState(false);
+  const [testConnResult, setTestConnResult] = useState(null);
+  const [pingingAgentId, setPingingAgentId] = useState(null);
 
   // NLP Bot Tester
   const [nlpQuery, setNlpQuery] = useState("Cue blockbuster movie at 20:00");
@@ -122,6 +144,94 @@ export function SettingsScreen({
       onRefreshUsers();
     } catch (err) {
       onShowToast("Failed to delete user: " + err.message, "error");
+    }
+  };
+
+  // Agent Testing & Management Handlers
+  const handleTestConnection = async (ip, port, token) => {
+    setIsTestingConn(true);
+    setTestConnResult(null);
+    try {
+      const res = await api.testAgentConnection({
+        ip_address: ip || "127.0.0.1",
+        port: parseInt(port || 3082, 10),
+        token: token || ""
+      });
+      setTestConnResult(res);
+      if (res.reachable && res.authenticated) {
+        onShowToast(`Agent reachable (${res.latency_ms}ms) and authenticated!`, "success");
+      } else if (res.reachable && !res.authenticated) {
+        onShowToast(`Agent reachable (${res.latency_ms}ms) but authentication failed!`, "warning");
+      } else {
+        onShowToast(`Agent connection failed: ${res.error || 'Connection refused'}`, "error");
+      }
+    } catch (err) {
+      setTestConnResult({ reachable: false, authenticated: false, error: err.message });
+      onShowToast(`Test connection error: ${err.message}`, "error");
+    } finally {
+      setIsTestingConn(false);
+    }
+  };
+
+  const handlePingAgent = async (agentId) => {
+    setPingingAgentId(agentId);
+    try {
+      const res = await api.pingAgent(agentId);
+      if (res.reachable) {
+        onShowToast(`Ping response: ${res.latency_ms}ms latency (Authenticated)`, "success");
+      } else {
+        onShowToast(`Agent unreachable: ${res.error || 'Connection refused'}`, "error");
+      }
+      onRefreshAgents();
+    } catch (err) {
+      onShowToast(`Ping failed: ${err.message}`, "error");
+    } finally {
+      setPingingAgentId(null);
+    }
+  };
+
+  const openEditAgentModal = (ag) => {
+    setEditingAgent(ag);
+    setEditAgentForm({
+      hostname: ag.hostname || "",
+      ip_address: ag.ip_address || "127.0.0.1",
+      port: ag.port || 3082,
+      token: ag.pairing_token || ag.token || ""
+    });
+    setTestConnResult(null);
+    setIsEditAgentModalOpen(true);
+  };
+
+  const handleUpdateAgent = async () => {
+    if (!editingAgent) return;
+    if (!editAgentForm.hostname) {
+      onShowToast("Hostname is required", "error");
+      return;
+    }
+    try {
+      await api.updateAgent(editingAgent.id, {
+        hostname: editAgentForm.hostname,
+        ip_address: editAgentForm.ip_address,
+        port: parseInt(editAgentForm.port, 10),
+        token: editAgentForm.token,
+        pairing_token: editAgentForm.token
+      });
+      onShowToast(`Edge agent "${editAgentForm.hostname}" updated!`, "success");
+      setIsEditAgentModalOpen(false);
+      setEditingAgent(null);
+      onRefreshAgents();
+    } catch (err) {
+      onShowToast(`Failed to update agent: ${err.message}`, "error");
+    }
+  };
+
+  const handleDeleteAgent = async (id, hostname) => {
+    try {
+      await api.deleteAgent(id);
+      onShowToast(`Edge agent "${hostname || id}" deleted`, "info");
+      onRefreshAgents();
+    } catch (err) {
+      onShowToast(`Failed to delete agent: ${err.message}`, "error");
     }
   };
 
@@ -327,26 +437,87 @@ export function SettingsScreen({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {agents.map((ag) => (
-              <div key={ag.id} className="bg-[#1F2937] border border-gray-700/80 rounded-lg p-3 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    <span className="font-bold text-white">{ag.hostname || ag.id}</span>
-                  </div>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-                    {ag.status || "ONLINE"}
-                  </span>
-                </div>
-                <div className="text-[11px] text-gray-300 font-mono">
-                  IP: {ag.ip_address || "127.0.0.1"}:{ag.port || 3082}
-                </div>
-                <div className="pt-2 border-t border-gray-700 flex justify-between text-[10px] text-gray-400 font-mono">
-                  <span>CPU: {ag.cpu_usage_percent || ag.cpu_percent || 12.0}%</span>
-                  <span>RAM: {ag.memory_usage_percent || ag.memory_percent || 18.0}%</span>
-                </div>
+            {agents.length === 0 ? (
+              <div className="col-span-2 text-center py-8 text-gray-500 text-xs bg-[#161F30] rounded-lg border border-dashed border-gray-700">
+                No edge playout agents registered yet. Click "+ Pair Edge Node" to pair a daemon.
               </div>
-            ))}
+            ) : (
+              agents.map((ag) => {
+                const isOnline = (ag.status === 'online' || ag.status === 'ONLINE') && 
+                  (!ag.last_heartbeat || (Date.now() - new Date(ag.last_heartbeat).getTime() < 90000));
+                const cpuVal = ag.cpu_usage_percent !== undefined ? ag.cpu_usage_percent : (ag.cpu_percent !== undefined ? ag.cpu_percent : null);
+                const memVal = ag.memory_usage_percent !== undefined ? ag.memory_usage_percent : (ag.memory_percent !== undefined ? ag.memory_percent : null);
+                const isPinging = pingingAgentId === ag.id;
+
+                return (
+                  <div key={ag.id} className="bg-[#1F2937] border border-gray-700/80 rounded-lg p-3.5 space-y-2.5 text-xs shadow">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'}`}></span>
+                        <span className="font-bold text-white text-sm">{ag.hostname || ag.id}</span>
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold uppercase ${
+                        isOnline 
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      }`}>
+                        {isOnline ? "ONLINE" : "OFFLINE"}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-300 font-mono bg-[#161F30] p-2 rounded border border-gray-800">
+                      <div>
+                        <span className="text-gray-500 text-[10px] block">ENDPOINT</span>
+                        <span>{ag.ip_address || "127.0.0.1"}:{ag.port || 3082}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 text-[10px] block">LAST HEARTBEAT</span>
+                        <span className="text-[10px]">
+                          {ag.last_heartbeat ? new Date(ag.last_heartbeat).toLocaleTimeString() : 'Never'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between text-[11px] font-mono text-gray-400">
+                      <span>CPU: <strong className="text-gray-200">{cpuVal !== null ? `${cpuVal}%` : (isOnline ? 'Active' : 'Offline')}</strong></span>
+                      <span>RAM: <strong className="text-gray-200">{memVal !== null ? `${memVal}%` : (isOnline ? 'Active' : 'Offline')}</strong></span>
+                    </div>
+
+                    {/* Actions: Ping, Edit, Delete */}
+                    <div className="pt-2 border-t border-gray-700/80 flex items-center justify-between">
+                      <button
+                        onClick={() => handlePingAgent(ag.id)}
+                        disabled={isPinging}
+                        className="px-2.5 py-1 bg-sky-950/40 hover:bg-sky-900/60 border border-sky-800/60 text-sky-300 rounded text-[11px] font-medium flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                        title="Test agent reachability and token"
+                      >
+                        {isPinging ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3 text-sky-400" />}
+                        <span>{isPinging ? "Pinging..." : "Test Connection"}</span>
+                      </button>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => openEditAgentModal(ag)}
+                          className="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-indigo-300 rounded text-[11px] font-medium flex items-center gap-1 transition-colors"
+                          title="Edit agent details"
+                        >
+                          <Pencil className="w-3 h-3" />
+                          <span>Edit</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAgent(ag.id, ag.hostname)}
+                          className="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/40 text-rose-300 rounded text-[11px] font-medium flex items-center gap-1 transition-colors"
+                          title="Delete agent"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       )}
@@ -534,40 +705,219 @@ export function SettingsScreen({
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md shadow-2xl p-5 space-y-3.5 text-xs">
             <div className="flex items-center justify-between border-b border-gray-800 pb-2">
-              <h3 className="text-sm font-bold text-white">Pair Edge Playout Agent Node</h3>
-              <button onClick={() => setIsPairModalOpen(false)} className="text-gray-400 hover:text-white">✕</button>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Radio className="w-4 h-4 text-indigo-400" />
+                <span>Pair Edge Playout Agent Node</span>
+              </h3>
+              <button onClick={() => { setIsPairModalOpen(false); setTestConnResult(null); }} className="text-gray-400 hover:text-white">✕</button>
             </div>
             <div>
-              <label className="block text-gray-400 mb-1">Hostname</label>
+              <label className="block text-gray-400 mb-1">Hostname / Node ID</label>
               <input
                 type="text"
                 value={pairForm.hostname}
                 onChange={(e) => setPairForm({ ...pairForm, hostname: e.target.value })}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2 py-1 text-white font-mono"
+                placeholder="e.g. edge-transmitter-mumbai"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-white font-mono"
               />
             </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <label className="block text-gray-400 mb-1">IP Address / Host</label>
+                <input
+                  type="text"
+                  value={pairForm.ip_address}
+                  onChange={(e) => setPairForm({ ...pairForm, ip_address: e.target.value })}
+                  placeholder="127.0.0.1"
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-400 mb-1">Daemon Port</label>
+                <input
+                  type="number"
+                  value={pairForm.port}
+                  onChange={(e) => setPairForm({ ...pairForm, port: e.target.value })}
+                  placeholder="3082"
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-white font-mono"
+                />
+              </div>
+            </div>
             <div>
-              <label className="block text-gray-400 mb-1">IP Address</label>
+              <label className="block text-gray-400 mb-1">Cryptographic Token (MCRFLOW_TOKEN)</label>
               <input
                 type="text"
-                value={pairForm.ip_address}
-                onChange={(e) => setPairForm({ ...pairForm, ip_address: e.target.value })}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2 py-1 text-white font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-gray-400 mb-1">Persistent Pairing Token</label>
-              <textarea
-                rows="2"
                 value={pairForm.token}
                 onChange={(e) => setPairForm({ ...pairForm, token: e.target.value })}
                 placeholder="agt_sec_..."
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2 py-1 text-white font-mono"
-              ></textarea>
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-white font-mono"
+              />
             </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-gray-800">
-              <button onClick={() => setIsPairModalOpen(false)} className="px-3 py-1 bg-gray-800 text-gray-300 rounded">Cancel</button>
-              <button onClick={handlePairAgent} className="px-3 py-1 bg-indigo-600 text-white rounded font-semibold">Authenticate & Pair</button>
+
+            {/* Test Connection Inline Banner */}
+            {testConnResult && (
+              <div className={`p-2.5 rounded border text-[11px] font-mono flex items-start gap-2 ${
+                testConnResult.reachable && testConnResult.authenticated
+                  ? 'bg-emerald-950/40 border-emerald-700/60 text-emerald-300'
+                  : testConnResult.reachable
+                  ? 'bg-amber-950/40 border-amber-700/60 text-amber-300'
+                  : 'bg-rose-950/40 border-rose-700/60 text-rose-300'
+              }`}>
+                {testConnResult.reachable && testConnResult.authenticated ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-0.5">
+                  <div className="font-semibold">
+                    {testConnResult.reachable && testConnResult.authenticated
+                      ? `Reachable (${testConnResult.latency_ms}ms) & Authenticated`
+                      : testConnResult.reachable
+                      ? `Reachable (${testConnResult.latency_ms}ms) - Auth Failed`
+                      : `Daemon Unreachable`}
+                  </div>
+                  {testConnResult.error && (
+                    <div className="text-[10px] opacity-80">{testConnResult.error}</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-2 border-t border-gray-800">
+              <button
+                type="button"
+                onClick={() => handleTestConnection(pairForm.ip_address, pairForm.port, pairForm.token)}
+                disabled={isTestingConn}
+                className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-sky-300 rounded font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                {isTestingConn ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5 text-sky-400" />}
+                <span>{isTestingConn ? "Testing..." : "Test Connection"}</span>
+              </button>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setIsPairModalOpen(false); setTestConnResult(null); }}
+                  className="px-3 py-1.5 bg-gray-800 text-gray-300 hover:text-white rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePairAgent}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-semibold shadow"
+                >
+                  Authenticate & Pair
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Edit Edge Agent */}
+      {isEditAgentModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md shadow-2xl p-5 space-y-3.5 text-xs">
+            <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                <Pencil className="w-4 h-4 text-indigo-400" />
+                <span>Edit Edge Playout Agent Node</span>
+              </h3>
+              <button onClick={() => { setIsEditAgentModalOpen(false); setEditingAgent(null); setTestConnResult(null); }} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div>
+              <label className="block text-gray-400 mb-1">Hostname / Node ID</label>
+              <input
+                type="text"
+                value={editAgentForm.hostname}
+                onChange={(e) => setEditAgentForm({ ...editAgentForm, hostname: e.target.value })}
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-white font-mono"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <label className="block text-gray-400 mb-1">IP Address / Host</label>
+                <input
+                  type="text"
+                  value={editAgentForm.ip_address}
+                  onChange={(e) => setEditAgentForm({ ...editAgentForm, ip_address: e.target.value })}
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-white font-mono"
+                />
+              </div>
+              <div>
+                <label className="block text-gray-400 mb-1">Daemon Port</label>
+                <input
+                  type="number"
+                  value={editAgentForm.port}
+                  onChange={(e) => setEditAgentForm({ ...editAgentForm, port: e.target.value })}
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-white font-mono"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-gray-400 mb-1">Cryptographic Token (Update or Keep)</label>
+              <input
+                type="text"
+                value={editAgentForm.token}
+                onChange={(e) => setEditAgentForm({ ...editAgentForm, token: e.target.value })}
+                placeholder="agt_sec_..."
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-white font-mono"
+              />
+            </div>
+
+            {/* Test Connection Inline Banner */}
+            {testConnResult && (
+              <div className={`p-2.5 rounded border text-[11px] font-mono flex items-start gap-2 ${
+                testConnResult.reachable && testConnResult.authenticated
+                  ? 'bg-emerald-950/40 border-emerald-700/60 text-emerald-300'
+                  : testConnResult.reachable
+                  ? 'bg-amber-950/40 border-amber-700/60 text-amber-300'
+                  : 'bg-rose-950/40 border-rose-700/60 text-rose-300'
+              }`}>
+                {testConnResult.reachable && testConnResult.authenticated ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                )}
+                <div className="space-y-0.5">
+                  <div className="font-semibold">
+                    {testConnResult.reachable && testConnResult.authenticated
+                      ? `Reachable (${testConnResult.latency_ms}ms) & Authenticated`
+                      : testConnResult.reachable
+                      ? `Reachable (${testConnResult.latency_ms}ms) - Auth Failed`
+                      : `Daemon Unreachable`}
+                  </div>
+                  {testConnResult.error && (
+                    <div className="text-[10px] opacity-80">{testConnResult.error}</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-2 border-t border-gray-800">
+              <button
+                type="button"
+                onClick={() => handleTestConnection(editAgentForm.ip_address, editAgentForm.port, editAgentForm.token)}
+                disabled={isTestingConn}
+                className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-sky-300 rounded font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              >
+                {isTestingConn ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5 text-sky-400" />}
+                <span>{isTestingConn ? "Testing..." : "Test Connection"}</span>
+              </button>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setIsEditAgentModalOpen(false); setEditingAgent(null); setTestConnResult(null); }}
+                  className="px-3 py-1.5 bg-gray-800 text-gray-300 hover:text-white rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateAgent}
+                  className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-semibold shadow"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           </div>
         </div>

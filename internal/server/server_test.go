@@ -258,12 +258,44 @@ func TestServerAgentPairingAndNLPBot(t *testing.T) {
 	db, srv, token := setupTestServer(t)
 	defer db.Close()
 
-	// 1. Agent Pairing
-	pairBody, _ := json.Marshal(map[string]interface{}{
-		"hostname":   "edge-node-mumbai",
-		"ip_address": "192.168.1.100",
+	// 1a. Verify strict rejection of unreachable agent without skip_verify
+	failPairBody, _ := json.Marshal(map[string]interface{}{
+		"hostname":   "edge-node-unreachable",
+		"ip_address": "192.0.2.1", // Test-net IP, unreachable
 		"port":       9090,
 		"token":      "agt_sec_8f43a9b2c011e749a1d2e8b409c2513f",
+	})
+	reqFail := httptest.NewRequest(http.MethodPost, "/api/v1/agents/pair", bytes.NewReader(failPairBody))
+	reqFail.Header.Set("Authorization", "Bearer "+token)
+	reqFail.Header.Set("Content-Type", "application/json")
+	wFail := httptest.NewRecorder()
+	srv.Router().ServeHTTP(wFail, reqFail)
+	if wFail.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unreachable agent pairing, got %d: %s", wFail.Code, wFail.Body.String())
+	}
+
+	// 1b. Verify rejection of invalid token format
+	badTokenBody, _ := json.Marshal(map[string]interface{}{
+		"hostname":          "edge-node-badtoken",
+		"token":             "invalid_token_123",
+		"skip_verification": true,
+	})
+	reqBad := httptest.NewRequest(http.MethodPost, "/api/v1/agents/pair", bytes.NewReader(badTokenBody))
+	reqBad.Header.Set("Authorization", "Bearer "+token)
+	reqBad.Header.Set("Content-Type", "application/json")
+	wBad := httptest.NewRecorder()
+	srv.Router().ServeHTTP(wBad, reqBad)
+	if wBad.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid token format, got %d: %s", wBad.Code, wBad.Body.String())
+	}
+
+	// 1c. Agent Pairing with skip_verification
+	pairBody, _ := json.Marshal(map[string]interface{}{
+		"hostname":          "edge-node-mumbai",
+		"ip_address":        "192.168.1.100",
+		"port":              9090,
+		"token":             "agt_sec_8f43a9b2c011e749a1d2e8b409c2513f",
+		"skip_verification": true,
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents/pair", bytes.NewReader(pairBody))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -273,6 +305,21 @@ func TestServerAgentPairingAndNLPBot(t *testing.T) {
 
 	if w.Code != http.StatusOK && w.Code != http.StatusCreated {
 		t.Fatalf("expected 200/201 for agent pair, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// 1d. Test Connection endpoint
+	testConnBody, _ := json.Marshal(map[string]interface{}{
+		"ip_address": "192.0.2.1",
+		"port":       9090,
+		"token":      "agt_sec_8f43a9b2c011e749a1d2e8b409c2513f",
+	})
+	reqConn := httptest.NewRequest(http.MethodPost, "/api/v1/agents/test-connection", bytes.NewReader(testConnBody))
+	reqConn.Header.Set("Authorization", "Bearer "+token)
+	reqConn.Header.Set("Content-Type", "application/json")
+	wConn := httptest.NewRecorder()
+	srv.Router().ServeHTTP(wConn, reqConn)
+	if wConn.Code != http.StatusOK {
+		t.Fatalf("expected 200 for test-connection endpoint, got %d: %s", wConn.Code, wConn.Body.String())
 	}
 
 	// 1b. Agent Heartbeat (Unauthenticated by JWT, authenticated by pairing token)

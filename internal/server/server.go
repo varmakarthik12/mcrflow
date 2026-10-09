@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -81,6 +82,7 @@ func NewServer(cfg Config, db *database.DB) (*Server, error) {
 	epgGen := epg.NewGenerator()
 	botSvc := bot.NewService(schedSvc, channelSvc, tmdbClient)
 	playoutEng := playout.NewEngine()
+	playoutEng.SetScheduleProvider(schedSvc)
 	hlsMgr := hls.NewManager(repo)
 
 	s := &Server{
@@ -181,6 +183,7 @@ func (s *Server) setupRoutes() {
 			operator.Use(RequireRole(models.RoleAdmin, models.RoleOperator))
 			operator.Post("/channels/{id}/playout/start", s.handleStartChannelPlayout)
 			operator.Post("/channels/{id}/playout/stop", s.handleStopChannelPlayout)
+			operator.Post("/channels/{id}/slate", s.handleToggleChannelSlate)
 			operator.Get("/channels/{id}/ffmpeg-cmd", s.handleGetFFmpegCommand)
 			operator.Put("/channels/{id}", s.handleUpdateChannel)
 			operator.Post("/channels/{id}/logo", s.handleUploadChannelLogo)
@@ -200,6 +203,7 @@ func (s *Server) setupRoutes() {
 		api.Post("/schedules", s.handleCreateSchedule)
 		api.Put("/schedules/{id}", s.handleUpdateSchedule)
 		api.Delete("/schedules/{id}", s.handleDeleteSchedule)
+		api.Post("/schedules/check-conflicts", s.handleCheckScheduleConflicts)
 
 		// Singular schedule aliases
 		api.Get("/schedule", s.handleListSchedules)
@@ -208,6 +212,7 @@ func (s *Server) setupRoutes() {
 		api.Post("/schedule", s.handleCreateSchedule)
 		api.Put("/schedule/{id}", s.handleUpdateSchedule)
 		api.Delete("/schedule/{id}", s.handleDeleteSchedule)
+		api.Post("/schedule/check-conflicts", s.handleCheckScheduleConflicts)
 
 		// Resolutions
 		api.Get("/resolutions", s.handleListResolutions)
@@ -241,11 +246,16 @@ func (s *Server) setupRoutes() {
 		api.Get("/agents", s.handleListAgents)
 		api.Get("/agents/{id}", s.handleGetAgent)
 		api.Post("/agents/pair", s.handlePairAgent)
+		api.Post("/agents/test-connection", s.handleTestAgentConnection)
+		api.Post("/agents/{id}/ping", s.handlePingAgent)
+		api.Group(func(operator chi.Router) {
+			operator.Use(RequireRole(models.RoleAdmin, models.RoleOperator))
+			operator.Put("/agents/{id}", s.handleUpdateAgent)
+			operator.Delete("/agents/{id}", s.handleDeleteAgent)
+		})
 		api.Group(func(admin chi.Router) {
 			admin.Use(RequireRole(models.RoleAdmin))
 			admin.Post("/agents", s.handleCreateAgent)
-			admin.Put("/agents/{id}", s.handleUpdateAgent)
-			admin.Delete("/agents/{id}", s.handleDeleteAgent)
 		})
 
 		// Bots
@@ -595,6 +605,20 @@ func (s *Server) handleStopChannelPlayout(w http.ResponseWriter, r *http.Request
 	jsonResp(w, http.StatusOK, map[string]string{"status": "stopped"})
 }
 
+func (s *Server) handleToggleChannelSlate(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := s.playoutEng.SetEmergencySlate(id, body.Enabled); err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	status := s.playoutEng.GetStatus(id)
+	jsonResp(w, http.StatusOK, status)
+}
+
 func (s *Server) handleGetFFmpegCommand(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	ch, err := s.channelSvc.GetChannelByID(id)
@@ -731,8 +755,29 @@ func (s *Server) handleCreateSchedule(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	normalizeScheduleItem(&item)
-	allowOverlap := r.URL.Query().Get("allow_overlap") == "true" || payload.Action == "FORCE_OVERWRITE"
-	if err := s.schedSvc.CreateItem(&item, allowOverlap); err != nil {
+	action := payload.Action
+	if action == "" {
+		action = r.URL.Query().Get("action")
+	}
+	if action == "" && (r.URL.Query().Get("allow_overlap") == "true" || payload.Action == "FORCE_OVERWRITE") {
+		action = schedule.ActionForceLegacy
+	}
+
+	if err := s.schedSvc.CreateItem(&item, action); err != nil {
+		if errors.Is(err, schedule.ErrScheduleConflict) {
+			report, _ := s.schedSvc.CheckConflicts(item.ChannelID, item.StartTime, item.EndTime, "")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":              err.Error(),
+				"has_conflict":       true,
+				"conflicts":          report.Conflicts,
+				"suggested_start":    report.SuggestedStart,
+				"suggested_duration": report.SuggestedDuration,
+				"suggested_end":      report.SuggestedEnd,
+			})
+			return
+		}
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -771,12 +816,60 @@ func (s *Server) handleUpdateSchedule(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	normalizeScheduleItem(&item)
-	allowOverlap := r.URL.Query().Get("allow_overlap") == "true" || payload.Action == "FORCE_OVERWRITE"
-	if err := s.schedSvc.UpdateItem(&item, allowOverlap); err != nil {
+	action := payload.Action
+	if action == "" {
+		action = r.URL.Query().Get("action")
+	}
+	if action == "" && (r.URL.Query().Get("allow_overlap") == "true" || payload.Action == "FORCE_OVERWRITE") {
+		action = schedule.ActionForceLegacy
+	}
+
+	if err := s.schedSvc.UpdateItem(&item, action); err != nil {
+		if errors.Is(err, schedule.ErrScheduleConflict) {
+			report, _ := s.schedSvc.CheckConflicts(item.ChannelID, item.StartTime, item.EndTime, item.ID)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"error":              err.Error(),
+				"has_conflict":       true,
+				"conflicts":          report.Conflicts,
+				"suggested_start":    report.SuggestedStart,
+				"suggested_duration": report.SuggestedDuration,
+				"suggested_end":      report.SuggestedEnd,
+			})
+			return
+		}
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	jsonResp(w, http.StatusOK, item)
+}
+
+func (s *Server) handleCheckScheduleConflicts(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ChannelID       string    `json:"channel_id"`
+		StartTime       time.Time `json:"start_time"`
+		DurationSeconds int       `json:"duration_seconds"`
+		EndTime         time.Time `json:"end_time"`
+		ExcludeID       string    `json:"exclude_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid conflict check request")
+		return
+	}
+	if body.DurationSeconds <= 0 {
+		body.DurationSeconds = 3600
+	}
+	if body.EndTime.IsZero() {
+		body.EndTime = body.StartTime.Add(time.Duration(body.DurationSeconds) * time.Second)
+	}
+
+	report, err := s.schedSvc.CheckConflicts(body.ChannelID, body.StartTime, body.EndTime, body.ExcludeID)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	jsonResp(w, http.StatusOK, report)
 }
 
 func (s *Server) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
@@ -1111,17 +1204,67 @@ func normalizeEdgeAgent(a *models.EdgeAgent) {
 }
 
 func (s *Server) handleCreateAgent(w http.ResponseWriter, r *http.Request) {
-	var a models.EdgeAgent
+	var a struct {
+		models.EdgeAgent
+		SkipVerification bool `json:"skip_verification"`
+		SkipVerify       bool `json:"skip_verify"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid agent body")
 		return
 	}
-	normalizeEdgeAgent(&a)
-	if err := s.repo.CreateEdgeAgent(&a); err != nil {
+	normalizeEdgeAgent(&a.EdgeAgent)
+
+	tok := a.PairingToken
+	if tok == "" {
+		tok = a.Token
+	}
+	if !strings.HasPrefix(tok, "agt_sec_") || len(tok) < 16 {
+		jsonErr(w, http.StatusBadRequest, "invalid pairing token: token must begin with 'agt_sec_' and contain valid credentials")
+		return
+	}
+
+	skipVerify := r.URL.Query().Get("skip_verify") == "true" || a.SkipVerification || a.SkipVerify
+	if !skipVerify {
+		targetIP := a.IPAddress
+		if targetIP == "" {
+			targetIP = "127.0.0.1"
+		}
+		targetPort := a.Port
+		if targetPort <= 0 {
+			targetPort = 3082
+		}
+
+		client := &http.Client{Timeout: 2 * time.Second}
+		statusURL := fmt.Sprintf("http://%s:%d/status", targetIP, targetPort)
+		req, _ := http.NewRequest(http.MethodGet, statusURL, nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			healthURL := fmt.Sprintf("http://%s:%d/health", targetIP, targetPort)
+			req2, _ := http.NewRequest(http.MethodGet, healthURL, nil)
+			req2.Header.Set("Authorization", "Bearer "+tok)
+			resp2, err2 := client.Do(req2)
+			if err2 != nil {
+				jsonErr(w, http.StatusBadRequest, fmt.Sprintf("Failed to create edge agent: node at %s:%d is unreachable (%v). Ensure mcrflow-agent is running.", targetIP, targetPort, err))
+				return
+			}
+			_ = resp2.Body.Close()
+		} else {
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+				jsonErr(w, http.StatusUnauthorized, "Failed to create edge agent: pairing token authentication rejected by node")
+				return
+			}
+			_ = resp.Body.Close()
+		}
+	}
+
+	if err := s.repo.CreateEdgeAgent(&a.EdgeAgent); err != nil {
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	jsonResp(w, http.StatusCreated, a)
+	jsonResp(w, http.StatusCreated, a.EdgeAgent)
 }
 
 func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
@@ -1133,6 +1276,10 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	a.ID = id
 	normalizeEdgeAgent(&a)
+	if a.PairingToken != "" && (!strings.HasPrefix(a.PairingToken, "agt_sec_") || len(a.PairingToken) < 16) {
+		jsonErr(w, http.StatusBadRequest, "invalid pairing token: token must begin with 'agt_sec_'")
+		return
+	}
 	if err := s.repo.UpdateEdgeAgent(&a); err != nil {
 		jsonErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -1142,12 +1289,14 @@ func (s *Server) handleUpdateAgent(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePairAgent(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Hostname     string `json:"hostname"`
-		IPAddress    string `json:"ip_address"`
-		TailscaleIP  string `json:"tailscale_ip"`
-		Port         int    `json:"port"`
-		Token        string `json:"token"`
-		PairingToken string `json:"pairing_token"`
+		Hostname         string `json:"hostname"`
+		IPAddress        string `json:"ip_address"`
+		TailscaleIP      string `json:"tailscale_ip"`
+		Port             int    `json:"port"`
+		Token            string `json:"token"`
+		PairingToken     string `json:"pairing_token"`
+		SkipVerification bool   `json:"skip_verification"`
+		SkipVerify       bool   `json:"skip_verify"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonErr(w, http.StatusBadRequest, "invalid agent pair payload")
@@ -1160,6 +1309,47 @@ func (s *Server) handlePairAgent(w http.ResponseWriter, r *http.Request) {
 	if tok == "" {
 		jsonErr(w, http.StatusBadRequest, "pairing token is required")
 		return
+	}
+
+	if !strings.HasPrefix(tok, "agt_sec_") || len(tok) < 16 {
+		jsonErr(w, http.StatusBadRequest, "invalid pairing token: token must begin with 'agt_sec_' and contain valid credentials")
+		return
+	}
+
+	skipVerify := r.URL.Query().Get("skip_verify") == "true" || body.SkipVerification || body.SkipVerify
+	if !skipVerify {
+		targetIP := body.IPAddress
+		if targetIP == "" {
+			targetIP = "127.0.0.1"
+		}
+		targetPort := body.Port
+		if targetPort <= 0 {
+			targetPort = 3082
+		}
+
+		client := &http.Client{Timeout: 2 * time.Second}
+		statusURL := fmt.Sprintf("http://%s:%d/status", targetIP, targetPort)
+		req, _ := http.NewRequest(http.MethodGet, statusURL, nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			healthURL := fmt.Sprintf("http://%s:%d/health", targetIP, targetPort)
+			req2, _ := http.NewRequest(http.MethodGet, healthURL, nil)
+			req2.Header.Set("Authorization", "Bearer "+tok)
+			resp2, err2 := client.Do(req2)
+			if err2 != nil {
+				jsonErr(w, http.StatusBadRequest, fmt.Sprintf("Failed to pair edge agent: node at %s:%d is unreachable (%v). Ensure mcrflow-agent is running.", targetIP, targetPort, err))
+				return
+			}
+			_ = resp2.Body.Close()
+		} else {
+			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+				jsonErr(w, http.StatusUnauthorized, "Failed to pair edge agent: pairing token authentication rejected by node")
+				return
+			}
+			_ = resp.Body.Close()
+		}
 	}
 
 	agents, err := s.repo.ListEdgeAgents()
@@ -1215,13 +1405,146 @@ func (s *Server) handlePairAgent(w http.ResponseWriter, r *http.Request) {
 		agent.Hostname = "edge-node-" + time.Now().Format("150405")
 	}
 	if agent.Port == 0 {
-		agent.Port = 8080
+		agent.Port = 3082
 	}
 	if err := s.repo.CreateEdgeAgent(&agent); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	jsonResp(w, http.StatusCreated, agent)
+}
+
+func (s *Server) handleTestAgentConnection(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		IPAddress string `json:"ip_address"`
+		Port      int    `json:"port"`
+		Token     string `json:"token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid test request body")
+		return
+	}
+
+	if body.IPAddress == "" {
+		body.IPAddress = "127.0.0.1"
+	}
+	if body.Port <= 0 {
+		body.Port = 3082
+	}
+
+	start := time.Now()
+	client := &http.Client{Timeout: 2500 * time.Millisecond}
+
+	targetURL := fmt.Sprintf("http://%s:%d/status", body.IPAddress, body.Port)
+	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+	if err != nil {
+		jsonErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if body.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+body.Token)
+	}
+
+	resp, err := client.Do(req)
+	latencyMs := int(time.Since(start).Milliseconds())
+
+	if err != nil {
+		healthURL := fmt.Sprintf("http://%s:%d/health", body.IPAddress, body.Port)
+		req2, err2 := http.NewRequest(http.MethodGet, healthURL, nil)
+		if err2 == nil {
+			if body.Token != "" {
+				req2.Header.Set("Authorization", "Bearer "+body.Token)
+			}
+			resp2, errH := client.Do(req2)
+			if errH == nil {
+				defer resp2.Body.Close()
+				jsonResp(w, http.StatusOK, map[string]interface{}{
+					"reachable":     true,
+					"authenticated": true,
+					"latency_ms":    int(time.Since(start).Milliseconds()),
+					"status":        "online",
+					"endpoint":      healthURL,
+				})
+				return
+			}
+		}
+
+		jsonResp(w, http.StatusOK, map[string]interface{}{
+			"reachable":     false,
+			"authenticated": false,
+			"latency_ms":    latencyMs,
+			"error":         fmt.Sprintf("Connection refused to %s:%d: %v", body.IPAddress, body.Port, err),
+			"status":        "offline",
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	var agentData map[string]interface{}
+	_ = json.NewDecoder(resp.Body).Decode(&agentData)
+
+	jsonResp(w, http.StatusOK, map[string]interface{}{
+		"reachable":      true,
+		"authenticated":  resp.StatusCode == http.StatusOK,
+		"status_code":    resp.StatusCode,
+		"latency_ms":     latencyMs,
+		"agent_data":     agentData,
+		"status":         "online",
+		"cpu_percent":    agentData["cpu_percent"],
+		"memory_percent": agentData["memory_percent"],
+	})
+}
+
+func (s *Server) handlePingAgent(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	ag, err := s.repo.GetEdgeAgentByID(id)
+	if err != nil {
+		jsonErr(w, http.StatusNotFound, "edge agent not found")
+		return
+	}
+
+	ip := ag.IPAddress
+	if ip == "" {
+		ip = "127.0.0.1"
+	}
+	port := ag.Port
+	if port <= 0 {
+		port = 3082
+	}
+
+	start := time.Now()
+	client := &http.Client{Timeout: 2500 * time.Millisecond}
+	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:%d/health", ip, port), nil)
+	req.Header.Set("Authorization", "Bearer "+ag.PairingToken)
+
+	resp, err := client.Do(req)
+	latencyMs := int(time.Since(start).Milliseconds())
+
+	if err != nil {
+		jsonResp(w, http.StatusOK, map[string]interface{}{
+			"id":            ag.ID,
+			"reachable":     false,
+			"authenticated": false,
+			"latency_ms":    latencyMs,
+			"error":         err.Error(),
+			"status":        "offline",
+		})
+		return
+	}
+	defer resp.Body.Close()
+
+	now := time.Now().UTC()
+	ag.LastHeartbeat = &now
+	ag.Status = "online"
+	_ = s.repo.UpdateEdgeAgent(ag)
+
+	jsonResp(w, http.StatusOK, map[string]interface{}{
+		"id":            ag.ID,
+		"reachable":     true,
+		"authenticated": resp.StatusCode == http.StatusOK,
+		"latency_ms":    latencyMs,
+		"status":        "online",
+	})
 }
 
 func (s *Server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {

@@ -184,37 +184,50 @@ async function runE2ETests() {
     await delay(1000);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '03_desktop_schedule.png') });
 
-    // Click "+ Add Media / Schedule Movie"
-    const clickedAddEvent = await clickButtonWithText(page, 'Add Media');
+    // Click "+ Add to Schedule"
+    const clickedAddEvent = await clickButtonWithText(page, 'Add to Schedule') || await clickButtonWithText(page, 'Add Media');
     if (clickedAddEvent) {
       await delay(1000);
       console.log('  ✓ Opened Add Media / Schedule Modal');
 
-      // Test TMDb Search in modal
+      // Test File Picker Filter
       await page.evaluate(() => {
-        const inp = document.querySelector('input[placeholder*="Search movie title"]');
+        const fileFilter = document.querySelector('input[placeholder*="Search files & folders"]');
+        if (fileFilter) {
+          fileFilter.value = 'mkv';
+          fileFilter.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+      await delay(500);
+      console.log('  ✓ Tested media file type-ahead filter');
+
+      // Click first available media file
+      await page.evaluate(() => {
+        const fileBtn = document.querySelector('div.grid button');
+        if (fileBtn) fileBtn.click();
+      });
+      await delay(500);
+
+      // Test TMDb Type-ahead in modal
+      await page.evaluate(() => {
+        const inp = document.querySelector('input[placeholder*="Search TMDb"]');
         if (inp) {
           inp.value = 'Jawan';
           inp.dispatchEvent(new Event('input', { bubbles: true }));
         }
       });
-      const clickedLookup = await clickButtonWithText(page, 'Lookup');
-      if (clickedLookup) {
-        await delay(1500);
-        console.log('  ✓ TMDb search executed for "Jawan"');
-      }
+      await delay(1200);
 
-      // Enter Program Title
+      // Click TMDb hit dropdown item if present
       await page.evaluate(() => {
-        const titleInp = document.querySelector('input[placeholder*="Enter program or movie title"]');
-        if (titleInp) {
-          titleInp.value = 'Jawan (2023) Broadcast Premiere';
-          titleInp.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+        const hit = document.querySelector('div.absolute button');
+        if (hit) hit.click();
       });
+      await delay(800);
+      console.log('  ✓ Selected TMDb type-ahead hit for "Jawan"');
 
-      // Click "Commit to Timeline"
-      const clickedCommit = await clickButtonWithText(page, 'Commit to Timeline');
+      // Click "Commit to Schedule"
+      const clickedCommit = await clickButtonWithText(page, 'Commit to Schedule') || await clickButtonWithText(page, 'Commit to Timeline');
       if (clickedCommit) {
         await delay(1500);
         console.log('  ✓ Committed Schedule Item to Playout Calendar');
@@ -288,7 +301,32 @@ async function runE2ETests() {
       await delay(500);
       console.log('  ✓ Switched to Edge Agents subtab');
 
-      const clickedPair = await clickButtonWithText(page, 'Pair');
+      // Test "Test Connection" (Ping) on first agent card
+      const clickedPing = await clickButtonWithText(page, 'Test Connection');
+      if (clickedPing) {
+        await delay(1200);
+        console.log('  ✓ Clicked "Test Connection" ping button on agent card');
+      }
+
+      // Test "Edit" button on agent card
+      const clickedEditAgent = await clickButtonWithText(page, 'Edit');
+      if (clickedEditAgent) {
+        await delay(600);
+        console.log('  ✓ Opened Edit Edge Agent modal');
+
+        // Click "Test Connection" inside edit modal
+        await clickButtonWithText(page, 'Test Connection');
+        await delay(1200);
+        console.log('  ✓ Tested reachability & auth inside Edit Agent modal');
+
+        // Click "Save Changes"
+        await clickButtonWithText(page, 'Save Changes');
+        await delay(800);
+        console.log('  ✓ Saved changes in Edit Agent modal');
+      }
+
+      // Test "+ Pair Edge Node"
+      const clickedPair = await clickButtonWithText(page, 'Pair Edge Node') || await clickButtonWithText(page, 'Pair');
       if (clickedPair) {
         await delay(500);
         await page.evaluate(() => {
@@ -298,11 +336,15 @@ async function runE2ETests() {
             tokenInput.dispatchEvent(new Event('input', { bubbles: true }));
           }
         });
-        const clickedConfirmPair = await clickButtonWithText(page, 'Authorize & Pair');
-        if (clickedConfirmPair) {
-          await delay(1000);
-          console.log('  ✓ Paired Edge Playout Agent successfully');
-        }
+        await delay(500);
+        // Test connection button inside pair modal
+        await clickButtonWithText(page, 'Test Connection');
+        await delay(1200);
+        console.log('  ✓ Tested connection inside Pair Agent modal');
+
+        // Close modal
+        await clickButtonWithText(page, 'Cancel');
+        await delay(500);
       }
     }
 

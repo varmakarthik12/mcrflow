@@ -12,7 +12,7 @@ import (
 
 // ScheduleHandler handles schedule actions from ChatOps
 type ScheduleHandler interface {
-	CreateItem(item *models.ScheduleItem, allowOverlap bool) error
+	CreateItem(item *models.ScheduleItem, action string) error
 	ListByChannel(channelID string) ([]models.ScheduleItem, error)
 }
 
@@ -185,7 +185,7 @@ func (s *Service) ProcessCommand(req models.BotMessageRequest) models.BotMessage
 			TmdbOverview:    tmdbOverview,
 		}
 
-		if err := s.schedHandler.CreateItem(item, false); err != nil {
+		if err := s.schedHandler.CreateItem(item, "RIPPLE"); err != nil {
 			return models.BotMessageResponse{
 				Reply:   fmt.Sprintf("Scheduling failed: %v", err),
 				Action:  "schedule_media",

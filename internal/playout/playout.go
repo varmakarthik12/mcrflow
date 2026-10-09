@@ -214,19 +214,28 @@ func BuildFFmpegCommand(cfg PlayoutConfig) string {
 	return "ffmpeg " + strings.Join(args, " ")
 }
 
+// ScheduleProvider defines timeline program retrieval for master control playout
+type ScheduleProvider interface {
+	GetActiveProgram(channelID string, at time.Time) (*models.ScheduleItem, error)
+	GetNextProgram(channelID string, at time.Time) (*models.ScheduleItem, error)
+}
+
 // PlayoutChannelState manages execution of playout for a channel
 type PlayoutChannelState struct {
-	ChannelID string
-	Config    PlayoutConfig
-	Status    models.PlayoutStatus
-	Cancel    context.CancelFunc
-	Cmd       *exec.Cmd
+	ChannelID             string
+	Config                PlayoutConfig
+	Status                models.PlayoutStatus
+	Cancel                context.CancelFunc
+	Cmd                   *exec.Cmd
+	CurrentScheduleItemID string
+	IsSlateActive         bool
 }
 
 // Engine supervises active channel playout processes
 type Engine struct {
-	mu       sync.RWMutex
-	channels map[string]*PlayoutChannelState
+	mu               sync.RWMutex
+	channels         map[string]*PlayoutChannelState
+	scheduleProvider ScheduleProvider
 }
 
 // NewEngine creates a new playout engine
@@ -234,6 +243,13 @@ func NewEngine() *Engine {
 	return &Engine{
 		channels: make(map[string]*PlayoutChannelState),
 	}
+}
+
+// SetScheduleProvider injects schedule provider for wall-clock event transitions
+func (e *Engine) SetScheduleProvider(sp ScheduleProvider) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.scheduleProvider = sp
 }
 
 // StartChannel begins playout for a channel
@@ -266,13 +282,36 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 	ctx, cancel := context.WithCancel(context.Background())
 	now := time.Now().UTC()
 
+	initialProg := programTitle
+	initialMedia := mediaPath
+	initialItemID := ""
+	initialRemaining := 3600
+	initialElapsed := 0
+
+	if e.scheduleProvider != nil {
+		if sched, _ := e.scheduleProvider.GetActiveProgram(ch.ID, now); sched != nil {
+			initialProg = sched.ProgramTitle
+			initialMedia = sched.MediaPath
+			initialItemID = sched.ID
+			cfg.InputMedia = sched.MediaPath
+			initialElapsed = int(now.Sub(sched.StartTime).Seconds())
+			if initialElapsed < 0 {
+				initialElapsed = 0
+			}
+			initialRemaining = int(sched.EndTime.Sub(now).Seconds())
+			if initialRemaining < 0 {
+				initialRemaining = 0
+			}
+		}
+	}
+
 	status := models.PlayoutStatus{
 		ChannelID:        ch.ID,
 		State:            "ON-AIR",
-		CurrentProgram:   programTitle,
-		MediaPath:        mediaPath,
-		ElapsedSeconds:   0,
-		RemainingSeconds: 3600,
+		CurrentProgram:   initialProg,
+		MediaPath:        initialMedia,
+		ElapsedSeconds:   initialElapsed,
+		RemainingSeconds: initialRemaining,
 		SMPTETimecode:    "00:00:00:00",
 		FPS:              res.FrameRate,
 		CPUUsage:         12.4,
@@ -281,13 +320,14 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 	}
 
 	state := &PlayoutChannelState{
-		ChannelID: ch.ID,
-		Config:    cfg,
-		Status:    status,
-		Cancel:    cancel,
+		ChannelID:             ch.ID,
+		Config:                cfg,
+		Status:                status,
+		Cancel:                cancel,
+		CurrentScheduleItemID: initialItemID,
 	}
 
-	// Playout supervisor goroutine
+	// Playout supervisor goroutine respecting timeline schedule
 	go func(c context.Context, st *PlayoutChannelState) {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -302,6 +342,51 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 				return
 			case <-ticker.C:
 				e.mu.Lock()
+				now := time.Now().UTC()
+
+				if st.IsSlateActive {
+					st.Status.State = "EMERGENCY_SLATE"
+					st.Status.CurrentProgram = "EMERGENCY TECHNICAL DIFFICULTIES SLATE"
+					st.Status.UpdatedAt = now
+					e.mu.Unlock()
+					continue
+				}
+
+				// Check active scheduled program
+				if e.scheduleProvider != nil {
+					sched, _ := e.scheduleProvider.GetActiveProgram(st.ChannelID, now)
+					if sched != nil {
+						if st.CurrentScheduleItemID != sched.ID {
+							st.CurrentScheduleItemID = sched.ID
+							st.Status.CurrentProgram = sched.ProgramTitle
+							st.Status.MediaPath = sched.MediaPath
+							st.Config.InputMedia = sched.MediaPath
+							st.Status.State = "ON-AIR"
+						}
+						el := int(now.Sub(sched.StartTime).Seconds())
+						if el < 0 {
+							el = 0
+						}
+						rem := int(sched.EndTime.Sub(now).Seconds())
+						if rem < 0 {
+							rem = 0
+						}
+						st.Status.ElapsedSeconds = el
+						st.Status.RemainingSeconds = rem
+						h := el / 3600
+						m := (el % 3600) / 60
+						s := el % 60
+						st.Status.SMPTETimecode = fmt.Sprintf("%02d:%02d:%02d:00", h, m, s)
+						st.Status.UpdatedAt = now
+						e.mu.Unlock()
+						continue
+					} else if st.CurrentScheduleItemID != "" {
+						st.CurrentScheduleItemID = ""
+						st.Status.CurrentProgram = "Station Playout Loop"
+						st.Status.RemainingSeconds = 3600
+					}
+				}
+
 				st.Status.ElapsedSeconds++
 				if st.Status.RemainingSeconds > 0 {
 					st.Status.RemainingSeconds--
@@ -310,7 +395,7 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 				m := (st.Status.ElapsedSeconds % 3600) / 60
 				s := st.Status.ElapsedSeconds % 60
 				st.Status.SMPTETimecode = fmt.Sprintf("%02d:%02d:%02d:00", h, m, s)
-				st.Status.UpdatedAt = time.Now().UTC()
+				st.Status.UpdatedAt = now
 				e.mu.Unlock()
 			}
 		}
@@ -318,6 +403,27 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 
 	e.channels[ch.ID] = state
 	return &status, nil
+}
+
+// SetEmergencySlate engages or disengages emergency slate
+func (e *Engine) SetEmergencySlate(channelID string, enabled bool) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	st, ok := e.channels[channelID]
+	if !ok {
+		return fmt.Errorf("channel %s is not active", channelID)
+	}
+
+	st.IsSlateActive = enabled
+	if enabled {
+		st.Status.State = "EMERGENCY_SLATE"
+		st.Status.CurrentProgram = "EMERGENCY TECHNICAL DIFFICULTIES SLATE"
+	} else {
+		st.Status.State = "ON-AIR"
+	}
+	st.Status.UpdatedAt = time.Now().UTC()
+	return nil
 }
 
 // StopChannel stops playout for a channel

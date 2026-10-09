@@ -76,6 +76,8 @@ export const api = {
   createScheduleItem: (data) => request("/api/v1/schedule", { method: "POST", body: JSON.stringify(data) }),
   updateScheduleItem: (id, data) => request(`/api/v1/schedule/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteScheduleItem: (id) => request(`/api/v1/schedule/${id}`, { method: "DELETE" }),
+  checkScheduleConflicts: (data) => request("/api/v1/schedule/check-conflicts", { method: "POST", body: JSON.stringify(data) }),
+  toggleChannelSlate: (channelId, enabled) => request(`/api/v1/channels/${channelId}/slate`, { method: "POST", body: JSON.stringify({ enabled }) }),
 
   // Resolutions
   getResolutions: () => request("/api/v1/resolutions"),
@@ -140,6 +142,8 @@ export const api = {
   updateAgent: (id, data) => request(`/api/v1/agents/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteAgent: (id) => request(`/api/v1/agents/${id}`, { method: "DELETE" }),
   pairAgent: (data) => request("/api/v1/agents/pair", { method: "POST", body: JSON.stringify(data) }),
+  testAgentConnection: (data) => request("/api/v1/agents/test-connection", { method: "POST", body: JSON.stringify(data) }),
+  pingAgent: (id) => request(`/api/v1/agents/${id}/ping`, { method: "POST" }),
 
   // Users
   getUsers: () => request("/api/v1/users"),

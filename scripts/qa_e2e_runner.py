@@ -185,6 +185,44 @@ def run():
     assert status == 200, f"Failed to delete schedule: {status}"
     results["schedules_crud"] = "PASSED"
 
+    print("\n--- 8b. Schedule Conflict Checking API ---")
+    conflict_check_payload = {
+        "channel_id": "ch-01",
+        "start_time": "2026-10-10T14:00:00Z",
+        "duration_seconds": 7200
+    }
+    status, body, _ = http_req("/api/v1/schedule/check-conflicts", method="POST", body=conflict_check_payload, token=token)
+    print(f"POST /api/v1/schedule/check-conflicts -> {status}: has_conflicts={body.get('has_conflicts')}")
+    assert status == 200, f"Failed conflict check: {status}"
+    results["conflict_check"] = body
+
+    print("\n--- 8c. Edge Agent Test Connection & Strict Reachability ---")
+    # Test valid connection endpoint
+    test_conn_payload = {
+        "ip_address": "127.0.0.1",
+        "port": 3082,
+        "token": "agt_sec_test_valid_reachability"
+    }
+    status, body, _ = http_req("/api/v1/agents/test-connection", method="POST", body=test_conn_payload, token=token)
+    print(f"POST /api/v1/agents/test-connection -> {status}: reachable={body.get('reachable')}, latency={body.get('latency_ms')}ms")
+    assert status == 200, f"Failed test-connection: {status}"
+
+    # Test agent ping
+    status, body, _ = http_req("/api/v1/agents/agent-local-01/ping", method="POST", token=token)
+    print(f"POST /api/v1/agents/agent-local-01/ping -> {status}: reachable={body.get('reachable')}")
+    assert status == 200, f"Failed ping agent: {status}"
+
+    # Verify pairing rejection with invalid token format
+    bad_pair_payload = {
+        "hostname": "unreachable-agent",
+        "ip_address": "192.0.2.1",
+        "port": 9999,
+        "token": "bad_token"
+    }
+    status, body, _ = http_req("/api/v1/agents/pair", method="POST", body=bad_pair_payload, token=token)
+    print(f"POST /api/v1/agents/pair (bad token) -> {status} (Expected 400 rejection)")
+    assert status == 400, f"Agent pairing should reject bad token: {status}"
+
     print("\n--- 9. EPG XMLTV Export ---")
     status, xmltv, _ = http_req("/epg/ch-01.xml?token=epg_sec_dd1_xml_2026")
     print(f"GET /epg/ch-01.xml -> {status}, xml snippet:\n{xmltv[:250]}...")
@@ -197,13 +235,20 @@ def run():
     assert status == 200 and "<!DOCTYPE html>" in html, f"Failed to serve SPA root: {status}"
     results["ui_root"] = {"status": status, "length": len(html)}
 
-    status, js, _ = http_req("/assets/index-BbeA-yTW.js")
-    print(f"GET /assets/index-BbeA-yTW.js -> {status}, len={len(js)}")
+    # Dynamically extract asset filenames from HTML
+    import re
+    js_match = re.search(r'src=["\'](/assets/index-[^"\']+\.js)["\']', html)
+    css_match = re.search(r'href=["\'](/assets/index-[^"\']+\.css)["\']', html)
+    js_path = js_match.group(1) if js_match else "/assets/index-Cd21Wl-u.js"
+    css_path = css_match.group(1) if css_match else "/assets/index-DJjAR1XV.css"
+
+    status, js, _ = http_req(js_path)
+    print(f"GET {js_path} -> {status}, len={len(js)}")
     assert status == 200 and len(js) > 1000, f"Failed to serve JS bundle: {status}"
     results["ui_js"] = {"status": status, "length": len(js)}
 
-    status, css, _ = http_req("/assets/index-plxlrBoY.css")
-    print(f"GET /assets/index-plxlrBoY.css -> {status}, len={len(css)}")
+    status, css, _ = http_req(css_path)
+    print(f"GET {css_path} -> {status}, len={len(css)}")
     assert status == 200 and len(css) > 100, f"Failed to serve CSS bundle: {status}"
     results["ui_css"] = {"status": status, "length": len(css)}
 
