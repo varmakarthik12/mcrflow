@@ -77,50 +77,177 @@ By default, the XMLTV EPG endpoint and live HLS stream can be accessed publicly.
 
 ---
 
-## Quick Start with Docker
+## Docker Storage & Volume Mounts Explained
 
-### All-in-One Mode (Control Plane + Agent)
-If you want to run everything on a single machine:
+MCRFlow uses two primary volume mounts when running in Docker:
 
+1. **`-v <host-path>:/data/mcrflow` (Read-Write)**
+   - **What it is**: The system's persistent state directory.
+   - **What it stores**: User accounts, Bcrypt password hashes, channel configurations, custom resolution profiles, ad templates, agent pairing tokens, and the 10-segment rolling HLS live cache.
+   - **Permission**: Must be read-write (`rw`). If this directory is not mounted, state will be lost when the container is recreated.
+
+2. **`-v <host-path>:/media/storage:ro` (Read-Only)**
+   - **What it is**: Your content library where movies, shows, audio tracks, and bumper video files are located.
+   - **Why `:ro` (Read-Only)?**: Linear playout engines only need to read frames and probe metadata. Mounting `:ro` prevents playout processes or operators from accidentally modifying, truncating, or deleting original master video files.
+   - **Multiple Mounts**: You can mount additional folders as needed (e.g. `-v /mnt/nas/promos:/media/promos:ro` or `-v /mnt/san/commercials:/media/commercials:ro`). MCRFlow's storage manager lets you browse and schedule from any mounted path.
+
+---
+
+## Configuration: CLI Flags & Environment Variables
+
+Every setting can be configured either through command-line flags or environment variables. CLI flags take precedence over environment variables, which fall back to sensible defaults.
+
+### Control Plane (`mcrflow-control`)
+
+| CLI Flag | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--port` | `MCRFLOW_PORT` or `PORT` | `8080` | HTTP listening port for UI, REST API, and native HLS stream |
+| `--data-dir` | `MCRFLOW_DATA_DIR` or `MCRFLOW_STORAGE_PATH` | `./data` (`/data/mcrflow` in Docker) | Directory for databases, auth state, and HLS rolling cache |
+| `--media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Default media directory auto-registered in the storage browser |
+| `--tmdb-key` | `MCRFLOW_TMDB_KEY` | `""` | Optional TMDb API key for automatic movie/series metadata lookup |
+| `--ui-dir` | `MCRFLOW_UI_DIR` | `./ui-mockup` | Path to static web console files |
+
+### Edge Playout Agent (`mcrflow-agent`)
+
+| CLI Flag | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--agent-id` | `MCRFLOW_AGENT_ID` | System hostname | Unique identifier for this edge playout node |
+| `--port` | `MCRFLOW_PORT` or `PORT` | `9095` | Agent RPC / API listening port for control plane communication |
+| `--auth-file` | `MCRFLOW_AUTH_FILE` | `<data-dir>/agent_auth.json` | Path to persistent 256-bit cryptographic pairing token file |
+| `--data-dir` | `MCRFLOW_DATA_DIR` | `./data` (`/data/mcrflow` in Docker) | Base directory for agent persistent state |
+| `--media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Content mount path for video playback |
+
+---
+
+## Running with Docker by Operating System
+
+### 1. Linux (Bash)
+
+**All-in-One Mode (Control Plane + Embedded Agent):**
 ```bash
 docker run -d \
   --name mcrflow \
+  --restart unless-stopped \
   -p 8080:8080 \
   -p 9095:9095 \
-  -v /var/data/mcrflow:/data/mcrflow \
+  -e MCRFLOW_PORT=8080 \
+  -e MCRFLOW_DATA_DIR=/data/mcrflow \
+  -v /var/lib/mcrflow:/data/mcrflow \
   -v /mnt/storage/movies:/media/storage:ro \
   ghcr.io/mcrflow/mcrflow:latest
 ```
 
-Open `http://localhost:8080` in your browser to complete the first-time setup wizard.
+**Edge-Only Agent Node:**
+```bash
+docker run -d \
+  --name mcrflow-agent-delhi \
+  --restart unless-stopped \
+  -p 9095:9095 \
+  -e MCRFLOW_AGENT_ID="delhi-edge-primary" \
+  -v /var/lib/mcrflow-agent:/data/mcrflow \
+  -v /mnt/storage/movies:/media/storage:ro \
+  ghcr.io/mcrflow/mcrflow-agent:latest
+```
 
 ---
 
-### Agent-Only Mode (Distributed Edge)
-If you want to run the playout agent on a separate server or in a data center:
+### 2. macOS (Terminal / zsh)
 
+**All-in-One Mode:**
+```bash
+docker run -d \
+  --name mcrflow \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -p 9095:9095 \
+  -v "$HOME/mcrflow-data:/data/mcrflow" \
+  -v "/Volumes/MediaDrive/Movies:/media/storage:ro" \
+  ghcr.io/mcrflow/mcrflow:latest
+```
+
+**Edge-Only Agent Node:**
 ```bash
 docker run -d \
   --name mcrflow-agent \
   --restart unless-stopped \
   -p 9095:9095 \
-  -v /var/data/mcrflow-agent:/data/mcrflow \
-  -v /mnt/storage/movies:/media/storage:ro \
-  ghcr.io/mcrflow/mcrflow-agent:latest \
-  --agent-id "delhi-edge-primary"
+  -e MCRFLOW_AGENT_ID="mac-edge-studio" \
+  -v "$HOME/mcrflow-agent-data:/data/mcrflow" \
+  -v "/Volumes/MediaDrive/Movies:/media/storage:ro" \
+  ghcr.io/mcrflow/mcrflow-agent:latest
 ```
 
-Check the container logs to find the auto-generated pairing token:
+---
+
+### 3. Windows (PowerShell)
+
+**All-in-One Mode:**
+```powershell
+docker run -d `
+  --name mcrflow `
+  --restart unless-stopped `
+  -p 8080:8080 `
+  -p 9095:9095 `
+  -v C:\mcrflow\data:/data/mcrflow `
+  -v D:\BroadcastMedia\Movies:/media/storage:ro `
+  ghcr.io/mcrflow/mcrflow:latest
+```
+
+**Edge-Only Agent Node:**
+```powershell
+docker run -d `
+  --name mcrflow-agent `
+  --restart unless-stopped `
+  -p 9095:9095 `
+  -e MCRFLOW_AGENT_ID="win-edge-01" `
+  -v C:\mcrflow\agent-data:/data/mcrflow `
+  -v D:\BroadcastMedia\Movies:/media/storage:ro `
+  ghcr.io/mcrflow/mcrflow-agent:latest
+```
+
+---
+
+### 4. Windows (Command Prompt `cmd.exe`)
+
+**All-in-One Mode:**
+```cmd
+docker run -d ^
+  --name mcrflow ^
+  --restart unless-stopped ^
+  -p 8080:8080 ^
+  -p 9095:9095 ^
+  -v C:\mcrflow\data:/data/mcrflow ^
+  -v D:\BroadcastMedia\Movies:/media/storage:ro ^
+  ghcr.io/mcrflow/mcrflow:latest
+```
+
+**Edge-Only Agent Node:**
+```cmd
+docker run -d ^
+  --name mcrflow-agent ^
+  --restart unless-stopped ^
+  -p 9095:9095 ^
+  -e MCRFLOW_AGENT_ID="win-edge-01" ^
+  -v C:\mcrflow\agent-data:/data/mcrflow ^
+  -v D:\BroadcastMedia\Movies:/media/storage:ro ^
+  ghcr.io/mcrflow/mcrflow-agent:latest
+```
+
+---
+
+### Getting the Pairing Token
+
+When an edge agent starts for the first time, check its logs to retrieve the pairing token:
 ```bash
 docker logs mcrflow-agent
 ```
-Copy the token and paste it into the MCRFlow web interface under **Settings > Edge Agents > Pair Node**.
+Paste this token into the MCRFlow web interface (**Settings > Edge Agents > Pair Node**). The token is saved in the mounted `/data/mcrflow` volume and persists across container restarts and host reboots.
 
 ---
 
 ### Docker Compose
 
-For a standard setup with a control plane and two agents (primary and standby):
+For multi-node setups with a central control plane, a primary playout agent, and a hot-standby agent:
 
 ```yaml
 version: "3.9"
@@ -131,6 +258,10 @@ services:
     container_name: mcrflow-control
     ports:
       - "8080:8080"
+    environment:
+      - MCRFLOW_PORT=8080
+      - MCRFLOW_DATA_DIR=/data/mcrflow
+      - MCRFLOW_MEDIA_DIR=/media/storage
     volumes:
       - mcrflow-data:/data/mcrflow
       - /mnt/storage/movies:/media/storage:ro
@@ -141,6 +272,10 @@ services:
     container_name: mcrflow-edge-primary
     ports:
       - "9095:9095"
+    environment:
+      - MCRFLOW_AGENT_ID=delhi-edge-primary
+      - MCRFLOW_PORT=9095
+      - MCRFLOW_DATA_DIR=/data/mcrflow
     volumes:
       - edge1-data:/data/mcrflow
       - /mnt/storage/movies:/media/storage:ro
@@ -151,6 +286,10 @@ services:
     container_name: mcrflow-edge-standby
     ports:
       - "9096:9095"
+    environment:
+      - MCRFLOW_AGENT_ID=mumbai-edge-standby
+      - MCRFLOW_PORT=9095
+      - MCRFLOW_DATA_DIR=/data/mcrflow
     volumes:
       - edge2-data:/data/mcrflow
       - /mnt/storage/movies:/media/storage:ro
@@ -162,7 +301,7 @@ volumes:
   edge2-data:
 ```
 
-Start the services:
+Launch with:
 ```bash
 docker compose up -d
 ```

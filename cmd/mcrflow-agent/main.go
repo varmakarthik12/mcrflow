@@ -21,17 +21,38 @@ var (
 	date    = "unknown"
 )
 
+func getEnv(key, fallback string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if val := os.Getenv(key); val != "" {
+		var n int
+		if _, err := fmt.Sscanf(val, "%d", &n); err == nil && n > 0 {
+			return n
+		}
+	}
+	return fallback
+}
+
 func main() {
-	agentIDFlag := flag.String("agent-id", "", "Unique hostname or ID of this edge playout agent")
-	authPathFlag := flag.String("auth-file", "", "Path to persistent agent authentication file")
-	portFlag := flag.Int("port", 9095, "Edge Agent RPC / HTTP listening port")
+	defaultPort := getEnvInt("MCRFLOW_PORT", getEnvInt("PORT", 9095))
+	defaultAgentID := getEnv("MCRFLOW_AGENT_ID", "")
+	defaultAuthPath := getEnv("MCRFLOW_AUTH_FILE", "")
+
+	agentIDFlag := flag.String("agent-id", defaultAgentID, "Unique hostname or ID of this edge playout agent (env: MCRFLOW_AGENT_ID)")
+	authPathFlag := flag.String("auth-file", defaultAuthPath, "Path to persistent agent authentication file (env: MCRFLOW_AUTH_FILE)")
+	portFlag := flag.Int("port", defaultPort, "Edge Agent RPC / HTTP listening port (env: MCRFLOW_PORT)")
 	flag.Parse()
 
 	// Default auth file path based on OS
 	authPath := *authPathFlag
 	if authPath == "" {
-		if os.Getenv("MCRFLOW_AUTH_FILE") != "" {
-			authPath = os.Getenv("MCRFLOW_AUTH_FILE")
+		if os.Getenv("MCRFLOW_DATA_DIR") != "" {
+			authPath = filepath.Join(os.Getenv("MCRFLOW_DATA_DIR"), "agent_auth.json")
 		} else if _, err := os.Stat("/var/lib/mcrflow"); err == nil {
 			authPath = "/var/lib/mcrflow/agent_auth.json"
 		} else {

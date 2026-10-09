@@ -31,11 +31,33 @@ var (
 	date    = "unknown"
 )
 
+func getEnv(key, fallback string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if val := os.Getenv(key); val != "" {
+		var n int
+		if _, err := fmt.Sscanf(val, "%d", &n); err == nil && n > 0 {
+			return n
+		}
+	}
+	return fallback
+}
+
 func main() {
-	port := flag.Int("port", 8080, "HTTP server listening port")
-	dataDir := flag.String("data-dir", "./data", "Directory for local databases and persistent assets")
-	tmdbKey := flag.String("tmdb-key", "", "TMDb API key for movie metadata")
-	uiDir := flag.String("ui-dir", "./ui-mockup", "Path to web UI static assets")
+	defaultPort := getEnvInt("MCRFLOW_PORT", getEnvInt("PORT", 8080))
+	defaultDataDir := getEnv("MCRFLOW_DATA_DIR", getEnv("MCRFLOW_STORAGE_PATH", "./data"))
+	defaultTmdbKey := getEnv("MCRFLOW_TMDB_KEY", "")
+	defaultUiDir := getEnv("MCRFLOW_UI_DIR", "./ui-mockup")
+
+	port := flag.Int("port", defaultPort, "HTTP server listening port (env: MCRFLOW_PORT)")
+	dataDir := flag.String("data-dir", defaultDataDir, "Directory for persistent databases and state (env: MCRFLOW_DATA_DIR)")
+	tmdbKey := flag.String("tmdb-key", defaultTmdbKey, "TMDb API key for movie metadata (env: MCRFLOW_TMDB_KEY)")
+	uiDir := flag.String("ui-dir", defaultUiDir, "Path to web UI static assets (env: MCRFLOW_UI_DIR)")
 	flag.Parse()
 
 	log.Printf("================================================================================")

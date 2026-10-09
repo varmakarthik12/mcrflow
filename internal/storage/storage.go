@@ -59,6 +59,22 @@ func (m *Manager) loadDefaultMounts() {
 		TotalBytes:     3800 * 1024 * 1024 * 1024,
 		AvailableBytes: 1700 * 1024 * 1024 * 1024,
 	}
+
+	mediaDir := os.Getenv("MCRFLOW_MEDIA_DIR")
+	if mediaDir == "" {
+		mediaDir = "/media/storage"
+	}
+	if fi, err := os.Stat(mediaDir); err == nil && fi.IsDir() {
+		m.mounts["mount-media-storage"] = &models.StorageMount{
+			ID:             "mount-media-storage",
+			Name:           "Broadcast Media Volume (" + mediaDir + ")",
+			Type:           models.StorageLocalAlias,
+			TargetPath:     mediaDir,
+			IsActive:       true,
+			TotalBytes:     10 * 1024 * 1024 * 1024 * 1024,
+			AvailableBytes: 4 * 1024 * 1024 * 1024 * 1024,
+		}
+	}
 }
 
 // ListMounts returns all mounts.
