@@ -275,6 +275,22 @@ func TestServerAgentPairingAndNLPBot(t *testing.T) {
 		t.Fatalf("expected 200/201 for agent pair, got %d: %s", w.Code, w.Body.String())
 	}
 
+	// 1b. Agent Heartbeat (Unauthenticated by JWT, authenticated by pairing token)
+	hbBody, _ := json.Marshal(models.AgentHeartbeatPayload{
+		AgentID:        "edge-node-mumbai",
+		PairingToken:   "agt_sec_8f43a9b2c011e749a1d2e8b409c2513f",
+		CPUPercent:     18.5,
+		MemoryPercent:  42.0,
+		ActiveChannels: []string{"ch-01"},
+	})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/agents/heartbeat", bytes.NewReader(hbBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for agent heartbeat, got %d: %s", w.Code, w.Body.String())
+	}
+
 	// 2. NLP Bot Command
 	botBody, _ := json.Marshal(map[string]interface{}{
 		"command":    "channels",

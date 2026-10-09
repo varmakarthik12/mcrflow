@@ -98,6 +98,9 @@ export function ScheduleScreen({
       const results = await api.searchTmdb(q);
       if (Array.isArray(results) && results.length > 0) {
         setTmdbResult(results[0]);
+        if (!title) {
+          setTitle(results[0].title);
+        }
       } else {
         setTmdbResult(null);
       }
@@ -406,6 +409,18 @@ export function ScheduleScreen({
                     ))
                   )}
                 </div>
+              </div>
+
+              {/* Program Title */}
+              <div>
+                <label className="block text-[11px] text-gray-400 mb-1 font-medium">Program / Feature Title</label>
+                <input
+                  type="text"
+                  value={title}
+                  placeholder="Enter program or movie title..."
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-medium"
+                />
               </div>
 
               {/* Time Parameters */}

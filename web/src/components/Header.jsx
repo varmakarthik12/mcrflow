@@ -64,10 +64,10 @@ export function Header({
       <div className="flex items-center gap-3">
         {/* Brand Logo */}
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 via-sky-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-sky-500/20">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-600 via-sky-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-sky-500/20 shrink-0">
             <Radio className="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div className="hidden sm:block">
             <div className="text-sm font-black tracking-tight text-white flex items-center gap-1.5 leading-none">
               MCRFLOW <span className="text-[10px] px-1 py-0.2 rounded bg-indigo-500/20 text-indigo-400 font-mono font-semibold border border-indigo-500/30">BROADCAST</span>
             </div>
@@ -75,10 +75,10 @@ export function Header({
           </div>
         </div>
 
-        <div className="h-6 w-px bg-gray-800 mx-1"></div>
+        <div className="hidden sm:block h-6 w-px bg-gray-800 mx-1"></div>
 
         {/* Live SMPTE PAL Timecode Display */}
-        <div className="flex items-center gap-2 bg-[#0B0F17] border border-[#1F2937] px-2.5 py-1 rounded-md">
+        <div className="hidden xl:flex items-center gap-2 bg-[#0B0F17] border border-[#1F2937] px-2.5 py-1 rounded-md">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
           <span className="text-[10px] text-gray-400 font-semibold font-mono tracking-wider">PAL 25FPS</span>
           <span className="text-xs font-mono font-bold text-white tracking-widest">{smpteTimecode}</span>
@@ -86,7 +86,7 @@ export function Header({
       </div>
 
       {/* Main Screen Navigation Buttons */}
-      <nav className="flex items-center gap-1 bg-[#0B0F17] p-1 rounded-lg border border-[#1F2937]">
+      <nav className="flex items-center gap-1 bg-[#0B0F17] p-1 rounded-lg border border-[#1F2937] shrink-0">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeScreen === item.id;
@@ -94,21 +94,22 @@ export function Header({
             <button
               key={item.id}
               onClick={() => onSelectScreen(item.id)}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all ${
+              title={item.label}
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded text-xs font-semibold transition-all ${
                 isActive
                   ? 'bg-indigo-600 text-white shadow-sm'
                   : 'text-gray-300 hover:text-white hover:bg-gray-800/60'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
-              <span>{item.label}</span>
+              <span className="hidden md:inline">{item.label}</span>
             </button>
           );
         })}
       </nav>
 
       {/* Right Action Bar */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Cluster Status Badge */}
         <div className="hidden lg:flex items-center gap-1.5 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-full text-[11px] text-emerald-300 font-medium">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
@@ -116,7 +117,7 @@ export function Header({
         </div>
 
         {/* Multilingual Localization Selector */}
-        <div className="relative flex items-center">
+        <div className="relative hidden lg:flex items-center">
           <Globe className="w-3.5 h-3.5 text-sky-400 absolute left-2 pointer-events-none" />
           <select
             value={currentLanguage}

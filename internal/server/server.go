@@ -138,38 +138,38 @@ func (s *Server) setupRoutes() {
 		MaxAge:           300,
 	}))
 
-	// 1. Health check & EPG public endpoints
-	r.Get("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
-		jsonResp(w, http.StatusOK, map[string]interface{}{
-			"status":    "healthy",
-			"timestamp": time.Now().UTC(),
-			"version":   "1.0.0",
-		})
-	})
-
-	// Public EPG feed
+	// 1. Root-level Public EPG & HLS feeds
 	r.Get("/epg/{channel_id}.xml", s.handleEPGXML)
-	r.Get("/api/v1/epg/{channel_id}.xml", s.handleEPGXML)
-
-	// 2. HLS stream routes
 	r.Get("/hls/{channel_id}/master.m3u8", s.handleHLSMaster)
 	r.Get("/hls/{channel_id}/playlist.m3u8", s.handleHLSPlaylist)
 	r.Get("/hls/{channel_id}/{segment_file}", s.handleHLSSegment)
 
-	// 3. Agent heartbeat (authenticated via PairingToken)
-	r.Post("/api/v1/agents/heartbeat", s.handleAgentHeartbeat)
+	// 2. Central API v1 Router (/api/v1/*)
+	r.Route("/api/v1", func(v1 chi.Router) {
+		// Public endpoints under /api/v1
+		v1.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+			jsonResp(w, http.StatusOK, map[string]interface{}{
+				"status":    "healthy",
+				"timestamp": time.Now().UTC(),
+				"version":   "1.0.0",
+			})
+		})
+		v1.Get("/epg/{channel_id}.xml", s.handleEPGXML)
 
-	// 4. Auth routes
-	r.Get("/api/v1/auth/setup-status", s.handleSetupStatus)
-	r.Post("/api/v1/auth/setup", s.handleSetup)
-	r.Post("/api/v1/auth/login", s.handleLogin)
+		// Agent heartbeat (authenticated via PairingToken in payload)
+		v1.Post("/agents/heartbeat", s.handleAgentHeartbeat)
 
-	// 5. Protected API routes (/api/v1/*)
-	r.Route("/api/v1", func(api chi.Router) {
-		api.Use(AuthMiddleware(s.tokenSvc))
+		// Auth setup & login
+		v1.Get("/auth/setup-status", s.handleSetupStatus)
+		v1.Post("/auth/setup", s.handleSetup)
+		v1.Post("/auth/login", s.handleLogin)
 
-		// Current User
-		api.Get("/auth/me", s.handleMe)
+		// Protected API routes (/api/v1/*)
+		v1.Group(func(api chi.Router) {
+			api.Use(AuthMiddleware(s.tokenSvc))
+
+			// Current User
+			api.Get("/auth/me", s.handleMe)
 
 		// Users (Admin only)
 		api.Group(func(admin chi.Router) {
@@ -280,9 +280,10 @@ func (s *Server) setupRoutes() {
 
 		// EPG DVB-EIT
 		api.Get("/epg/{channel_id}/eit", s.handleEPGEIT)
+		})
 	})
 
-	// 6. Embedded Web Assets & Single Page Application Fallback
+	// 3. Embedded Web Assets & Single Page Application Fallback
 	r.Mount("/", web.Handler())
 }
 
@@ -1231,7 +1232,21 @@ func (s *Server) handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	agent, err := s.repo.GetEdgeAgentByID(payload.AgentID)
-	if err != nil {
+	if err != nil && payload.PairingToken != "" {
+		// Try resolving agent by pairing token if agent ID doesn't match
+		agents, listErr := s.repo.ListEdgeAgents()
+		if listErr == nil {
+			for i := range agents {
+				if agents[i].PairingToken == payload.PairingToken {
+					agent = &agents[i]
+					err = nil
+					break
+				}
+			}
+		}
+	}
+
+	if err != nil || agent == nil {
 		jsonErr(w, http.StatusNotFound, "agent not registered")
 		return
 	}
@@ -1242,7 +1257,7 @@ func (s *Server) handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	channelsJSON, _ := json.Marshal(payload.ActiveChannels)
-	if err := s.repo.UpdateEdgeAgentHeartbeat(payload.AgentID, payload.CPUPercent, payload.MemoryPercent, string(channelsJSON)); err != nil {
+	if err := s.repo.UpdateEdgeAgentHeartbeat(agent.ID, payload.CPUPercent, payload.MemoryPercent, string(channelsJSON)); err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
