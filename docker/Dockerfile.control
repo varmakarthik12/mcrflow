@@ -2,16 +2,7 @@
 # MCRFlow Master Control Plane (Control Plane + Web Management UI + REST API)
 # ==============================================================================
 
-# Stage 1: Build React UI
-FROM --platform=$BUILDPLATFORM node:22-alpine AS ui-builder
-
-WORKDIR /app/web
-COPY web/package.json ./
-RUN npm install
-COPY web/ ./
-RUN npm run build
-
-# Stage 2: Build Go binary with embedded React assets
+# Stage 1: Build Go binary with embedded React assets
 FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
 
 ARG TARGETOS=linux
@@ -26,11 +17,10 @@ RUN go mod download
 
 # Copy source and built React UI dist
 COPY . .
-COPY --from=ui-builder /app/web/dist ./web/dist
 
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /bin/mcrflow-control ./cmd/mcrflow-control
 
-# Stage 3: Runtime environment
+# Stage 2: Runtime environment
 FROM alpine:3.20 AS runtime
 
 RUN apk add --no-cache \
