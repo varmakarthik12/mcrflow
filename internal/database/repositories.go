@@ -242,6 +242,9 @@ func (r *Repository) CreateChannel(ch *models.Channel) error {
 	if ch.ID == "" {
 		ch.ID = "ch-" + uuid.New().String()[:8]
 	}
+	if ch.LogoPosition == "" {
+		ch.LogoPosition = "top-right"
+	}
 	for i := range ch.Destinations {
 		if ch.Destinations[i].Type == "" && ch.Destinations[i].Protocol != "" {
 			ch.Destinations[i].Type = strings.ToLower(strings.TrimPrefix(ch.Destinations[i].Protocol, "UDP_"))
@@ -268,9 +271,9 @@ func (r *Repository) CreateChannel(ch *models.Channel) error {
 
 	_, err := r.db.Exec(`
 		INSERT INTO channels 
-		(id, name, call_sign, resolution_id, logo_path, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		ch.ID, ch.Name, ch.CallSign, ch.ResolutionID, ch.LogoPath, ch.AdTemplateID,
+		(id, name, call_sign, resolution_id, logo_path, logo_position, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ch.ID, ch.Name, ch.CallSign, ch.ResolutionID, ch.LogoPath, ch.LogoPosition, ch.AdTemplateID,
 		ch.PrimaryAgentID, ch.FallbackAgentID, ch.HlsWebToken, ch.EpgWebToken,
 		ch.DestinationsJSON, isActiveInt, ch.CreatedAt, ch.UpdatedAt,
 	)
@@ -282,13 +285,13 @@ func (r *Repository) CreateChannel(ch *models.Channel) error {
 
 func (r *Repository) GetChannelByID(id string) (*models.Channel, error) {
 	row := r.db.QueryRow(`
-		SELECT id, name, call_sign, resolution_id, logo_path, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at
+		SELECT id, name, call_sign, resolution_id, logo_path, logo_position, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at
 		FROM channels WHERE id = ?`, id)
 
 	ch := &models.Channel{}
 	var isActiveInt int
 	err := row.Scan(
-		&ch.ID, &ch.Name, &ch.CallSign, &ch.ResolutionID, &ch.LogoPath,
+		&ch.ID, &ch.Name, &ch.CallSign, &ch.ResolutionID, &ch.LogoPath, &ch.LogoPosition,
 		&ch.AdTemplateID, &ch.PrimaryAgentID, &ch.FallbackAgentID,
 		&ch.HlsWebToken, &ch.EpgWebToken, &ch.DestinationsJSON,
 		&isActiveInt, &ch.CreatedAt, &ch.UpdatedAt,
@@ -320,7 +323,7 @@ func (r *Repository) GetChannelByID(id string) (*models.Channel, error) {
 
 func (r *Repository) ListChannels() ([]models.Channel, error) {
 	rows, err := r.db.Query(`
-		SELECT id, name, call_sign, resolution_id, logo_path, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at
+		SELECT id, name, call_sign, resolution_id, logo_path, logo_position, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at
 		FROM channels ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query channels: %w", err)
@@ -332,7 +335,7 @@ func (r *Repository) ListChannels() ([]models.Channel, error) {
 		var ch models.Channel
 		var isActiveInt int
 		err := rows.Scan(
-			&ch.ID, &ch.Name, &ch.CallSign, &ch.ResolutionID, &ch.LogoPath,
+			&ch.ID, &ch.Name, &ch.CallSign, &ch.ResolutionID, &ch.LogoPath, &ch.LogoPosition,
 			&ch.AdTemplateID, &ch.PrimaryAgentID, &ch.FallbackAgentID,
 			&ch.HlsWebToken, &ch.EpgWebToken, &ch.DestinationsJSON,
 			&isActiveInt, &ch.CreatedAt, &ch.UpdatedAt,
@@ -365,6 +368,9 @@ func (r *Repository) ListChannels() ([]models.Channel, error) {
 }
 
 func (r *Repository) UpdateChannel(ch *models.Channel) error {
+	if ch.LogoPosition == "" {
+		ch.LogoPosition = "top-right"
+	}
 	for i := range ch.Destinations {
 		if ch.Destinations[i].Type == "" && ch.Destinations[i].Protocol != "" {
 			ch.Destinations[i].Type = strings.ToLower(strings.TrimPrefix(ch.Destinations[i].Protocol, "UDP_"))
@@ -388,11 +394,11 @@ func (r *Repository) UpdateChannel(ch *models.Channel) error {
 
 	res, err := r.db.Exec(`
 		UPDATE channels 
-		SET name = ?, call_sign = ?, resolution_id = ?, logo_path = ?, ad_template_id = ?,
+		SET name = ?, call_sign = ?, resolution_id = ?, logo_path = ?, logo_position = ?, ad_template_id = ?,
 		    primary_agent_id = ?, fallback_agent_id = ?, hls_web_token = ?, epg_web_token = ?,
 		    destinations_json = ?, is_active = ?, updated_at = ?
 		WHERE id = ?`,
-		ch.Name, ch.CallSign, ch.ResolutionID, ch.LogoPath, ch.AdTemplateID,
+		ch.Name, ch.CallSign, ch.ResolutionID, ch.LogoPath, ch.LogoPosition, ch.AdTemplateID,
 		ch.PrimaryAgentID, ch.FallbackAgentID, ch.HlsWebToken, ch.EpgWebToken,
 		ch.DestinationsJSON, isActiveInt, ch.UpdatedAt, ch.ID,
 	)
@@ -880,135 +886,6 @@ func (r *Repository) DeleteAdTemplate(id string) error {
 	res, err := r.db.Exec(`DELETE FROM ad_templates WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete ad template: %w", err)
-	}
-	rowsAffected, _ := res.RowsAffected()
-	if rowsAffected == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// ==========================================
-// STORAGE MOUNT REPOSITORY
-// ==========================================
-
-func (r *Repository) CreateStorageMount(m *models.StorageMount) error {
-	if m.ID == "" {
-		m.ID = "mnt-" + uuid.New().String()[:8]
-	}
-	if m.MountType == "" && m.Type != "" {
-		m.MountType = m.Type
-	}
-	if m.MountPath == "" && m.TargetPath != "" {
-		m.MountPath = m.TargetPath
-	}
-	if m.SmbURL == "" && m.ServerHost != "" {
-		m.SmbURL = m.ServerHost
-	}
-	now := time.Now().UTC()
-	m.CreatedAt = now
-	isActiveInt := 0
-	if m.IsActive {
-		isActiveInt = 1
-	}
-
-	_, err := r.db.Exec(`
-		INSERT INTO storage_mounts 
-		(id, name, mount_type, mount_path, smb_url, is_active, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		m.ID, m.Name, m.MountType, m.MountPath, m.SmbURL, isActiveInt, m.CreatedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to insert storage mount: %w", err)
-	}
-	return nil
-}
-
-func (r *Repository) GetStorageMountByID(id string) (*models.StorageMount, error) {
-	row := r.db.QueryRow(`
-		SELECT id, name, mount_type, mount_path, smb_url, is_active, created_at
-		FROM storage_mounts WHERE id = ?`, id)
-
-	m := &models.StorageMount{}
-	var isActiveInt int
-	err := row.Scan(&m.ID, &m.Name, &m.MountType, &m.MountPath, &m.SmbURL, &isActiveInt, &m.CreatedAt)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("failed to query storage mount: %w", err)
-	}
-	m.IsActive = (isActiveInt == 1)
-	m.Type = m.MountType
-	m.TargetPath = m.MountPath
-	m.ServerHost = m.SmbURL
-	return m, nil
-}
-
-func (r *Repository) ListStorageMounts() ([]models.StorageMount, error) {
-	rows, err := r.db.Query(`
-		SELECT id, name, mount_type, mount_path, smb_url, is_active, created_at
-		FROM storage_mounts ORDER BY created_at ASC`)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query storage mounts: %w", err)
-	}
-	defer rows.Close()
-
-	list := make([]models.StorageMount, 0)
-	for rows.Next() {
-		var m models.StorageMount
-		var isActiveInt int
-		err := rows.Scan(&m.ID, &m.Name, &m.MountType, &m.MountPath, &m.SmbURL, &isActiveInt, &m.CreatedAt)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan storage mount: %w", err)
-		}
-		m.IsActive = (isActiveInt == 1)
-		m.Type = m.MountType
-		m.TargetPath = m.MountPath
-		m.ServerHost = m.SmbURL
-		list = append(list, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows iteration error in ListStorageMounts: %w", err)
-	}
-	return list, nil
-}
-
-func (r *Repository) UpdateStorageMount(m *models.StorageMount) error {
-	if m.MountType == "" && m.Type != "" {
-		m.MountType = m.Type
-	}
-	if m.MountPath == "" && m.TargetPath != "" {
-		m.MountPath = m.TargetPath
-	}
-	if m.SmbURL == "" && m.ServerHost != "" {
-		m.SmbURL = m.ServerHost
-	}
-	isActiveInt := 0
-	if m.IsActive {
-		isActiveInt = 1
-	}
-
-	res, err := r.db.Exec(`
-		UPDATE storage_mounts 
-		SET name = ?, mount_type = ?, mount_path = ?, smb_url = ?, is_active = ?
-		WHERE id = ?`,
-		m.Name, m.MountType, m.MountPath, m.SmbURL, isActiveInt, m.ID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update storage mount: %w", err)
-	}
-	rowsAffected, _ := res.RowsAffected()
-	if rowsAffected == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-func (r *Repository) DeleteStorageMount(id string) error {
-	res, err := r.db.Exec(`DELETE FROM storage_mounts WHERE id = ?`, id)
-	if err != nil {
-		return fmt.Errorf("failed to delete storage mount: %w", err)
 	}
 	rowsAffected, _ := res.RowsAffected()
 	if rowsAffected == 0 {

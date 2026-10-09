@@ -22,12 +22,10 @@ export function ScheduleScreen({
   scheduleItems = [],
   onRefreshSchedule,
   onShowToast,
-  storageMounts = [],
   adTemplates = [],
   t
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedMountId, setSelectedMountId] = useState("");
   const [currentPath, setCurrentPath] = useState("");
   const [fileList, setFileList] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
@@ -41,26 +39,19 @@ export function ScheduleScreen({
   const [tmdbResult, setTmdbResult] = useState(null);
   const [isSearchingTmdb, setIsSearchingTmdb] = useState(false);
 
-  // Sync initial mount
+  // Browse files when modal opens or path changes
   useEffect(() => {
-    if (storageMounts.length > 0 && !selectedMountId) {
-      setSelectedMountId(storageMounts[0].id);
+    if (isModalOpen) {
+      loadFiles(currentPath);
     }
-  }, [storageMounts]);
+  }, [isModalOpen, currentPath]);
 
-  // Browse files when mount or path changes
-  useEffect(() => {
-    if (isModalOpen && selectedMountId) {
-      loadFiles(selectedMountId, currentPath);
-    }
-  }, [isModalOpen, selectedMountId, currentPath]);
-
-  const loadFiles = async (mountId, path) => {
+  const loadFiles = async (path = "") => {
     try {
-      const files = await api.browseStorage(mountId, path);
-      setFileList(files || []);
+      const files = await api.browseStorage(path);
+      setFileList(Array.isArray(files) ? files : []);
     } catch (err) {
-      onShowToast("Failed to browse storage: " + err.message, "error");
+      onShowToast("Failed to browse media library: " + err.message, "error");
     }
   };
 
@@ -79,12 +70,26 @@ export function ScheduleScreen({
     } catch (e) {}
   }, [startTime, duration]);
 
+  const handleItemClick = (item) => {
+    if (item.is_dir) {
+      setCurrentPath(item.path);
+    } else {
+      handleSelectFile(item);
+    }
+  };
+
   const handleSelectFile = (file) => {
     setSelectedFile(file);
     const cleanTitle = file.name.replace(/\.[^/.]+$/, "").replace(/[\._]/g, " ");
     setTitle(cleanTitle);
     setTmdbQuery(cleanTitle);
-    if (file.probed_duration) {
+    if (file.duration_seconds) {
+      const durSec = file.duration_seconds;
+      const hh = String(Math.floor(durSec / 3600)).padStart(2, '0');
+      const mm = String(Math.floor((durSec % 3600) / 60)).padStart(2, '0');
+      const ss = String(durSec % 60).padStart(2, '0');
+      setDuration(`${hh}:${mm}:${ss}`);
+    } else if (file.probed_duration) {
       setDuration(file.probed_duration);
     }
     handleSearchTmdb(cleanTitle);
@@ -130,8 +135,8 @@ export function ScheduleScreen({
         channel_id: activeChannelId,
         program_title: title,
         title: title,
-        media_path: selectedFile?.relative_path || selectedFile?.name || "/media/movie.mp4",
-        media_file_path: selectedFile?.relative_path || selectedFile?.name || "/media/movie.mp4",
+        media_path: selectedFile?.path || selectedFile?.relative_path || selectedFile?.name || "sample_broadcast_promo.mp4",
+        media_file_path: selectedFile?.path || selectedFile?.relative_path || selectedFile?.name || "sample_broadcast_promo.mp4",
         start_time: startIso,
         duration_seconds: durSecs,
         end_time: endIso,
@@ -365,46 +370,56 @@ export function ScheduleScreen({
             </div>
 
             <div className="p-5 space-y-4 overflow-y-auto text-xs">
-              {/* Storage File Browser */}
+              {/* Local Media Library Browser */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-gray-300 uppercase tracking-wider">
-                    Browse Storage Mounts
+                  <label className="text-[11px] font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <FolderOpen className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Local Media Library (./media{currentPath ? `/${currentPath}` : ''})</span>
                   </label>
-                  <select
-                    value={selectedMountId}
-                    onChange={(e) => setSelectedMountId(e.target.value)}
-                    className="bg-[#1F2937] border border-gray-700 text-xs text-white rounded px-2 py-1 font-medium"
-                  >
-                    {storageMounts.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name} ({m.mount_type})
-                      </option>
-                    ))}
-                  </select>
+                  {currentPath && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const parent = currentPath.includes('/') ? currentPath.substring(0, currentPath.lastIndexOf('/')) : '';
+                        setCurrentPath(parent);
+                      }}
+                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-mono px-2 py-0.5 bg-gray-800 rounded border border-gray-700"
+                    >
+                      .. (Up Level)
+                    </button>
+                  )}
                 </div>
 
-                <div className="bg-[#0B0F17] border border-gray-800 rounded-lg max-h-40 overflow-y-auto divide-y divide-gray-800">
+                <div className="bg-[#0B0F17] border border-gray-800 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-800">
                   {fileList.length === 0 ? (
                     <div className="p-3 text-gray-500 font-mono text-[11px]">
-                      No media files found in selected mount directory.
+                      No media files found in ./media directory.
                     </div>
                   ) : (
                     fileList.map((f, i) => (
                       <div
                         key={i}
-                        onClick={() => handleSelectFile(f)}
+                        onClick={() => handleItemClick(f)}
                         className={`p-2 flex items-center justify-between hover:bg-[#1E293B] cursor-pointer transition-colors ${
-                          selectedFile?.name === f.name ? 'bg-indigo-950/60 border-l-2 border-indigo-500' : ''
+                          selectedFile?.path === f.path ? 'bg-indigo-950/60 border-l-2 border-indigo-500' : ''
                         }`}
                       >
                         <div className="flex items-center gap-2 truncate">
-                          <FileVideo className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                          <span className="font-mono text-sky-200 truncate">{f.name}</span>
+                          {f.is_dir ? (
+                            <FolderOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          ) : (
+                            <FileVideo className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                          )}
+                          <span className={`font-mono truncate ${f.is_dir ? 'text-amber-200 font-semibold' : 'text-sky-200'}`}>
+                            {f.name}
+                          </span>
                         </div>
-                        <span className="text-[10px] text-emerald-400 font-mono shrink-0 ml-2">
-                          {f.probed_duration || "02:15:00"}
-                        </span>
+                        {!f.is_dir && (
+                          <span className="text-[10px] text-emerald-400 font-mono shrink-0 ml-2">
+                            {f.duration_seconds ? `${Math.floor(f.duration_seconds / 60)}m` : (f.probed_duration || "02:15:00")}
+                          </span>
+                        )}
                       </div>
                     ))
                   )}

@@ -118,16 +118,6 @@ func (db *DB) Migrate() error {
 		updated_at DATETIME NOT NULL
 	);
 
-	CREATE TABLE IF NOT EXISTS storage_mounts (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		mount_type TEXT NOT NULL,
-		mount_path TEXT NOT NULL,
-		smb_url TEXT NOT NULL DEFAULT '',
-		is_active INTEGER NOT NULL DEFAULT 1,
-		created_at DATETIME NOT NULL
-	);
-
 	CREATE TABLE IF NOT EXISTS edge_agents (
 		id TEXT PRIMARY KEY,
 		hostname TEXT NOT NULL,
@@ -159,6 +149,7 @@ func (db *DB) Migrate() error {
 		call_sign TEXT NOT NULL,
 		resolution_id TEXT NOT NULL,
 		logo_path TEXT NOT NULL DEFAULT '',
+		logo_position TEXT NOT NULL DEFAULT 'top-right',
 		ad_template_id TEXT NOT NULL DEFAULT '',
 		primary_agent_id TEXT NOT NULL DEFAULT '',
 		fallback_agent_id TEXT NOT NULL DEFAULT '',
@@ -192,12 +183,17 @@ func (db *DB) Migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 	CREATE INDEX IF NOT EXISTS idx_channels_primary_agent ON channels(primary_agent_id);
 	CREATE INDEX IF NOT EXISTS idx_edge_agents_status ON edge_agents(status);
-	CREATE INDEX IF NOT EXISTS idx_storage_mounts_active ON storage_mounts(is_active);
 	CREATE INDEX IF NOT EXISTS idx_ad_templates_active ON ad_templates(is_active);
 	`
 
-	_, err := db.Exec(schema)
-	return err
+	if _, err := db.Exec(schema); err != nil {
+		return err
+	}
+
+	// Migrations: ensure logo_position exists on channels
+	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN logo_position TEXT NOT NULL DEFAULT 'top-right'`)
+	_, _ = db.Exec(`DROP TABLE IF EXISTS storage_mounts`)
+	return nil
 }
 
 // Seed initializes default presets, templates, mounts, user, and channel
@@ -422,45 +418,7 @@ func (db *DB) Seed() error {
 		}
 	}
 
-	// 3. Seed Storage Mounts (2 Mounts)
-	mounts := []models.StorageMount{
-		{
-			ID:        "mount-local-01",
-			Name:      "Local Broadcast Storage",
-			MountType: "local",
-			MountPath: "C:/media/storage",
-			SmbURL:    "",
-			IsActive:  true,
-			CreatedAt: now,
-		},
-		{
-			ID:        "mount-nas-01",
-			Name:      "Primary Media NAS",
-			MountType: "smb",
-			MountPath: "/mnt/nas/broadcast",
-			SmbURL:    "smb://nas.internal/broadcast",
-			IsActive:  true,
-			CreatedAt: now,
-		},
-	}
-
-	for _, m := range mounts {
-		act := 0
-		if m.IsActive {
-			act = 1
-		}
-		_, err := db.Exec(`
-			INSERT OR IGNORE INTO storage_mounts 
-			(id, name, mount_type, mount_path, smb_url, is_active, created_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			m.ID, m.Name, m.MountType, m.MountPath, m.SmbURL, act, m.CreatedAt,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to seed storage mount %s: %w", m.ID, err)
-		}
-	}
-
-	// 4. Seed Default Admin User
+	// 3. Seed Default Admin User
 	var count int
 	err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE username = 'admin'`).Scan(&count)
 	if err == nil && count == 0 {
@@ -582,9 +540,9 @@ func (db *DB) Seed() error {
 
 	_, err = db.Exec(`
 		INSERT OR IGNORE INTO channels 
-		(id, name, call_sign, resolution_id, logo_path, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-		"ch-01", "DD National HD", "MCR-DD1", "res-in-1080i50", "/logos/mcr_dd1.png", "tmpl-news-standard",
+		(id, name, call_sign, resolution_id, logo_path, logo_position, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+		"ch-01", "DD National HD", "MCR-DD1", "res-in-1080i50", "media/logos/channel_logo.png", "top-right", "tmpl-news-standard",
 		"agent-local-01", "agent-standby-01", "live_sec_dd1_tok_2026", "epg_sec_dd1_xml_2026", string(destBytes), now, now,
 	)
 	if err != nil {

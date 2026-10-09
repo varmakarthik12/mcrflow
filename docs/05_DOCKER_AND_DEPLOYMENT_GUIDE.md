@@ -92,7 +92,7 @@ To configure a broadcast channel with 1+1 active-passive auto-failover:
      --gpus all \
      -p 9095:9095 -p 5000-5010:5000-5010/udp \
      -v agent-delhi-auth:/var/lib/mcrflow-agent \
-     -v /nas/movies:/media/storage:ro \
+     -v /mnt/media:/media:ro \
      mcrflow-agent-only:latest
    ```
 
@@ -102,7 +102,7 @@ To configure a broadcast channel with 1+1 active-passive auto-failover:
      --gpus all \
      -p 9095:9095 -p 5000-5010:5000-5010/udp \
      -v agent-mumbai-auth:/var/lib/mcrflow-agent \
-     -v /nas/movies:/media/storage:ro \
+     -v /mnt/media:/media:ro \
      mcrflow-agent-only:latest
    ```
 
@@ -113,7 +113,7 @@ To configure a broadcast channel with 1+1 active-passive auto-failover:
 
 ---
 
-## 4. Hardware GPU Acceleration & Storage Mounts
+## 4. Hardware GPU Acceleration & Media Volume Mounts
 
 ### 4.1 GPU Passthrough
 - **NVIDIA GPU (NVENC/NVDEC)**:
@@ -121,45 +121,25 @@ To configure a broadcast channel with 1+1 active-passive auto-failover:
 - **Intel QuickSync / VAAPI**:
   Pass device nodes `--device /dev/dri:/dev/dri`. The agent selects `-vaapi_device /dev/dri/renderD128 -vf 'format=nv12,hwupload' -c:v h264_vaapi`.
 
-### 4.2 Network Storage Mounting (NAS / SMB / NFS)
-Network storage can be mounted to the container in two ways:
-1. **Host-Level Mount (Recommended for high throughput)**:
-   Mount the SMB/NFS share on the Docker host OS (`/mnt/nas_movies`), then bind-mount into the container `-v /mnt/nas_movies:/media/storage:ro`.
-2. **Container-Managed Mount (Configured via UI Screen 5)**:
-   The Control Plane executes `mount -t cifs -o username=... //nas.local/movies /media/mounts/smb1` using the container's built-in `cifs-utils` and `nfs-common`.
+### 4.2 Local Media Volume Mounting
+MCRFlow uses direct volume mounting for the local media directory (`./media` by default on host, or `/media` inside containers).
+Mount any local directory or host-mounted network share directly into the container:
+```bash
+docker run -d --name mcrflow-control \
+  -p 3081:3081 \
+  -v mcrflow-data:/data \
+  -v /mnt/media:/media:ro \
+  ghcr.io/varmakarthik12/mcrflow-control:latest
+```
+Configure custom paths using the `-media-dir` CLI flag or `MCRFLOW_MEDIA_DIR` environment variable.
 
 ---
 
-## 5. Intranet & Service Mesh Setup (Tailscale / WireGuard)
+## 5. Security & Network Hardening
 
-For multi-site setups where edge playout nodes reside behind carrier-grade NAT (CGNAT) or cellular 5G modems without static public IPs:
-
-```yaml
-services:
-  tailscale:
-    image: tailscale/tailscale:latest
-    container_name: ts-edge-delhi
-    hostname: edge-delhi-playout
-    environment:
-      - TS_AUTHKEY=tskey-auth-k123456789-xxxxxxxx
-      - TS_STATE_DIR=/var/lib/tailscale
-    volumes:
-      - ts-state:/var/lib/tailscale
-      - /dev/net/tun:/dev/net/tun
-    cap_add:
-      - NET_ADMIN
-    restart: unless-stopped
-
-  edge-agent:
-    image: mcrflow-agent-only:latest
-    network_mode: service:tailscale
-    depends_on:
-      - tailscale
-    volumes:
-      - agent-auth:/var/lib/mcrflow-agent
-      - /nas/movies:/media/storage:ro
-```
-The agent is immediately reachable on its secure Tailscale MagicDNS IP (e.g., `100.64.1.15:9095`) via WireGuard encryption without any open router ports.
+1. **Keep Playout Media Read-Only**: Always bind mount media with `:ro` to prevent accidental overwriting or corruption.
+2. **Token Security**: Treat agent pairing tokens and stream WebTokens as secrets. Rotate tokens whenever an edge node is decommissioned.
+3. **Firewall / Reverse Proxy**: Expose port 3081 behind a TLS reverse proxy (Caddy, NGINX, or Cloudflare Tunnel) in production.
 
 ---
 

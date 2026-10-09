@@ -23,10 +23,8 @@ flowchart TD
         TMDbClient["TMDb / IMDb API<br/>Metadata Fetcher"]
     end
 
-    subgraph StorageLayer ["Virtualized Storage Layer"]
-        NAS["NAS (NFS v3/v4)"]
-        SMB["SMB / CIFS Shares"]
-        LocalDisk["Local Disk Mount Alias"]
+    subgraph StorageLayer ["Media Storage Layer"]
+        LocalMedia["Local Media Directory<br/>(./media or -media-dir)"]
     end
 
     subgraph EdgePlayoutNodes ["Distributed Edge Playout Agents (Worker Nodes)"]
@@ -104,7 +102,7 @@ In professional broadcast, a channel cannot go black. MCRFlow implements two red
      - Health payload includes: `frame_drop_count`, `encoder_fps`, `audio_rms_lufs`, `cpu_percent`, `gpu_percent`.
    - **Failover Trigger Condition**:
      - 3 consecutive missed heartbeats (1,500ms total elapsed time), OR
-     - Primary agent self-reports fatal decoder stall / missing storage mount, OR
+     - Primary agent self-reports fatal decoder stall / missing media file, OR
      - Control Plane detects audio silence / black frames via stream telemetry.
    - **Takeover Action**:
      - Control Plane immediately issues an authenticated `PromoteToActive` gRPC call to the Fallback Agent.
@@ -206,13 +204,13 @@ sequenceDiagram
     actor User as Broadcast Operator (Telegram)
     participant Bot as Telegram Bot Service (Go)
     participant NLP as Natural Language Parser & Fuzzy Matcher
-    participant Storage as Virtualized Storage Mounts
+    participant Storage as Local Media Directory
     participant Sched as Broadcast Scheduler Core
     participant CP as Control Plane Database
 
     User->>Bot: "Schedule Avengers at 9 AM on Channel 1"
     Bot->>NLP: Parse intent, channel, target time & movie name
-    NLP->>Storage: Fuzzy search title "Avengers" across NAS mounts
+    NLP->>Storage: Fuzzy search title "Avengers" across local media library
     Storage-->>NLP: Matches: 1) Avengers Endgame (2019).mkv, 2) Avengers Infinity War (2018).mkv
     NLP->>Sched: Check schedule for Channel 1 at 09:00:00 IST
     Sched-->>NLP: Conflict Detected! "Morning News Live" is 08:30 - 09:30 IST

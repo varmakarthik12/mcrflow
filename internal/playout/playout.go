@@ -246,11 +246,16 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 		existing.Cancel()
 	}
 
+	logoPos := ch.LogoPosition
+	if logoPos == "" {
+		logoPos = "top-right"
+	}
+
 	cfg := PlayoutConfig{
 		InputMedia:        mediaPath,
 		Resolution:        res,
 		LogoPath:          ch.LogoPath,
-		LogoPosition:      "top-right",
+		LogoPosition:      logoPos,
 		LogoOpacity:       0.90,
 		AudioTrackIndex:   0,
 		NormalizeLoudness: true,

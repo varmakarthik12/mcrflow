@@ -129,12 +129,7 @@ def run():
     assert status == 200 and len(body) > 0, f"Failed to get ad templates: {status}"
     results["ad_templates"] = {"status": status, "count": len(body)}
 
-    print("\n--- 6. Storage Mounts & Browsing ---")
-    status, body, _ = http_req("/api/v1/storage/mounts", token=token)
-    print(f"GET /api/v1/storage/mounts -> {status}, count={len(body)}")
-    assert status == 200 and len(body) > 0, f"Failed to get storage mounts: {status}"
-    results["storage_mounts"] = {"status": status, "mounts": [m.get("name") for m in body]}
-
+    print("\n--- 6. Media Browsing & Probing ---")
     status, body, _ = http_req("/api/v1/storage/browse", token=token)
     print(f"GET /api/v1/storage/browse -> {status}, files={len(body) if isinstance(body, list) else body}")
     assert status == 200, f"Failed to browse storage: {status}"

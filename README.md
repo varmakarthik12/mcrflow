@@ -25,7 +25,7 @@ flowchart TD
     end
 
     subgraph Storage["Media Sources"]
-        NAS["NAS / SMB Storage Mounts (:ro)"]
+        LocalMedia["Local Media Directory (./media) (:ro)"]
     end
 
     subgraph Outputs["Broadcast Egress"]
@@ -39,7 +39,7 @@ flowchart TD
     API --> Users
     API --> Sched
     API --> HLS
-    Sched --> NAS
+    Sched --> LocalMedia
 
     Agent -->|"256-bit Token Pairing"| API
     Agent --> UDP
@@ -54,12 +54,12 @@ flowchart TD
 ## Core Capabilities
 
 - **Multi-Channel Playout**: Manage unlimited channels from a single dashboard. Assign channels to dedicated edge nodes with hot-standby fallback for seamless redundancy.
-- **24/7 Timeline Scheduler**: Drag and drop media from local directories, NAS, or SMB mounts. Video durations are probed automatically, and program metadata (posters, synopses) is fetched directly from TMDb for accurate Electronic Program Guides (EPG).
+- **24/7 Timeline Scheduler**: Drag and drop media from the local media directory (`./media` by default, or mounted volume). Video durations are probed automatically, and program metadata (posters, synopses) is fetched directly from TMDb for accurate Electronic Program Guides (EPG).
 - **On-Screen Graphics & Ad Studio**: Position channel bugs/logos, lower-third tickers, and scheduled commercial breaks without third-party video editors. Supports content-level and channel-level template precedence.
 - **Direct Live HLS Streaming**: Channels can be streamed directly from MCRFlow's web server. The player maintains a 10-segment sliding window and automatically prunes stale segments from disk.
 - **Indian Cable & Regional TV Presets**: Ready-to-use broadcast resolution presets (1080i50 PAL HD, 720p50, 576i SD 4:3, 576i anamorphic 16:9) with FFmpeg deinterlacing (`yadif`) and EBU R128 loudness normalization.
 - **Multilingual Web Console**: Defaults to English and includes full native translations for 10 Indian regional languages (Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia).
-- **ChatOps Scheduling**: Schedule programs via Telegram bots using natural language (e.g. *"Schedule Avengers at 16:30"*). The bot fuzzy-searches connected mounts and detects scheduling conflicts.
+- **ChatOps Scheduling**: Schedule programs via Telegram bots using natural language (e.g. *"Schedule Avengers at 16:30"*). The bot fuzzy-searches the media directory and detects scheduling conflicts.
 
 ---
 
@@ -68,9 +68,9 @@ flowchart TD
 When MCRFlow is first booted, a setup wizard prompts you to create the initial root administrator account. All administrative endpoints require authentication.
 
 Three distinct roles are supported:
-- **Admin**: Full access across all channels, edge agent pairing, storage mounts, system settings, and user management.
+- **Admin**: Full access across all channels, edge agent pairing, system settings, and user management.
 - **Operator**: Daily operational playout control, schedule viewing, ad template design, and emergency slate triggering.
-- **Content Scheduler**: Restricted strictly to media scheduling, browsing mounted storage, and probing video metadata. Cannot modify channel stream settings, pair edge nodes, or alter users.
+- **Content Scheduler**: Restricted strictly to media scheduling, browsing the local media library, and probing video metadata. Cannot modify channel stream settings, pair edge nodes, or alter users.
 
 ### Optional Stream & EPG Token Authentication
 By default, the XMLTV EPG endpoint and live HLS stream are public. To restrict playback, set an optional **WebToken** in the channel settings. When enabled, requests require `?token=YOUR_TOKEN`, otherwise returning `401 Unauthorized`.
@@ -219,10 +219,10 @@ MCRFlow images are published to the GitHub Container Registry:
 
 ### Volume Mounts Explained
 
-1. **`-v <host-path>:/data/mcrflow` (Read-Write)**:
-   Persistent state directory containing user credentials, channels, resolution presets, ad templates, pairing keys, and the rolling live HLS segment cache.
-2. **`-v <host-path>:/media/storage:ro` (Read-Only)**:
-   Your media library (movies, commercials, bumpers). Mounted `:ro` so playout processes can never accidentally modify or delete master broadcast files.
+1. **`-v <host-path>:/data` (Read-Write)**:
+   Persistent state directory containing SQLite database, user credentials, channels, resolution presets, ad templates, and pairing keys.
+2. **`-v <host-path>:/media:ro` (Read-Only)**:
+   Your local media library (movies, commercials, bumpers, logos). Defaults to `./media` when running directly on the host, or `/media` inside container environments. Mounted `:ro` so playout processes can never accidentally modify or delete master broadcast files.
 
 ### Standalone Docker Run
 ```bash
@@ -232,8 +232,8 @@ docker run -d \
   --restart unless-stopped \
   -p 3081:3081 \
   -p 3082:3082 \
-  -v /var/lib/mcrflow:/data/mcrflow \
-  -v /mnt/storage/movies:/media/storage:ro \
+  -v /var/lib/mcrflow:/data \
+  -v $(pwd)/media:/media:ro \
   ghcr.io/varmakarthik12/mcrflow:latest
 
 # Dedicated Edge Agent
@@ -242,8 +242,8 @@ docker run -d \
   --restart unless-stopped \
   -p 3082:3082 \
   -e MCRFLOW_AGENT_ID="delhi-edge-01" \
-  -v /var/lib/mcrflow-agent:/data/mcrflow \
-  -v /mnt/storage/movies:/media/storage:ro \
+  -v /var/lib/mcrflow-agent:/var/lib/mcrflow-agent \
+  -v $(pwd)/media:/media:ro \
   ghcr.io/varmakarthik12/mcrflow-agent:latest
 ```
 
@@ -253,17 +253,17 @@ version: "3.9"
 
 services:
   control-plane:
-    image: ghcr.io/varmakarthik12/mcrflow:latest
+    image: ghcr.io/varmakarthik12/mcrflow-control:latest
     container_name: mcrflow-control
     ports:
       - "3081:3081"
     environment:
       - MCRFLOW_PORT=3081
-      - MCRFLOW_DATA_DIR=/data/mcrflow
-      - MCRFLOW_MEDIA_DIR=/media/storage
+      - MCRFLOW_DATA_DIR=/data
+      - MCRFLOW_MEDIA_DIR=/media
     volumes:
-      - mcrflow-data:/data/mcrflow
-      - /mnt/storage/movies:/media/storage:ro
+      - mcrflow-data:/data
+      - ./media:/media:ro
     restart: always
 
   edge-primary:
@@ -274,10 +274,11 @@ services:
     environment:
       - MCRFLOW_AGENT_ID=delhi-edge-primary
       - MCRFLOW_PORT=3082
-      - MCRFLOW_DATA_DIR=/data/mcrflow
+      - MCRFLOW_DATA_DIR=/var/lib/mcrflow-agent
+      - MCRFLOW_MEDIA_DIR=/media
     volumes:
-      - edge1-data:/data/mcrflow
-      - /mnt/storage/movies:/media/storage:ro
+      - edge1-data:/var/lib/mcrflow-agent
+      - ./media:/media:ro
     restart: always
 
   edge-standby:
@@ -288,10 +289,11 @@ services:
     environment:
       - MCRFLOW_AGENT_ID=mumbai-edge-standby
       - MCRFLOW_PORT=3082
-      - MCRFLOW_DATA_DIR=/data/mcrflow
+      - MCRFLOW_DATA_DIR=/var/lib/mcrflow-agent
+      - MCRFLOW_MEDIA_DIR=/media
     volumes:
-      - edge2-data:/data/mcrflow
-      - /mnt/storage/movies:/media/storage:ro
+      - edge2-data:/var/lib/mcrflow-agent
+      - ./media:/media:ro
     restart: always
 
 volumes:
@@ -311,8 +313,8 @@ Settings can be passed as CLI flags or environment variables (flags take precede
 | CLI Flag | Environment Variable | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `-port` | `MCRFLOW_PORT` | `3081` | HTTP listening port for Web UI, REST API, and native HLS stream |
-| `-data-dir` | `MCRFLOW_DATA_DIR` | `./data` | Directory for SQLite/JSON databases, auth tokens, and HLS segments |
-| `-media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Default media library path registered in storage browser |
+| `-data-dir` | `MCRFLOW_DATA_DIR` | `./data` | Directory for SQLite database and runtime data |
+| `-media-dir` | `MCRFLOW_MEDIA_DIR` | `./media` (`/media` in Docker) | Local media directory path for clip playback, logos, and browsing |
 | `-tmdb-key` | `MCRFLOW_TMDB_KEY` | `""` | Optional TMDb API key for automatic movie/series metadata lookup |
 
 ### Edge Playout Agent (`mcrflow-agent`)
@@ -323,7 +325,7 @@ Settings can be passed as CLI flags or environment variables (flags take precede
 | `-port` | `MCRFLOW_PORT` | `3082` | Agent RPC/API listening port for control plane communication |
 | `-auth-file` | `MCRFLOW_AUTH_FILE` | `<data-dir>/agent_auth.json` | Path to persistent 256-bit cryptographic pairing token file |
 | `-data-dir` | `MCRFLOW_DATA_DIR` | `./data` | Working directory for agent runtime state |
-| `-media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Media storage mount path for clip playback |
+| `-media-dir` | `MCRFLOW_MEDIA_DIR` | `./media` (`/media` in Docker) | Local media directory path for clip playback and logos |
 
 ---
 

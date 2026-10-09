@@ -3,7 +3,10 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -70,28 +73,15 @@ func NewServer(cfg Config, db *database.DB) (*Server, error) {
 	schedSvc := schedule.NewService(repo)
 	resSvc := resolution.NewService(repo)
 	adTmplSvc := adtemplate.NewService(repo)
-	storageMgr := storage.NewManager(repo)
+	if cfg.MediaDir == "" {
+		cfg.MediaDir = "./media"
+	}
+	storageMgr := storage.NewManager(cfg.MediaDir)
 	tmdbClient := tmdb.NewClient(cfg.TMDBKey)
 	epgGen := epg.NewGenerator()
 	botSvc := bot.NewService(schedSvc, channelSvc, tmdbClient)
 	playoutEng := playout.NewEngine()
 	hlsMgr := hls.NewManager(repo)
-
-	// Synchronize storage mounts and channels with storageMgr & hlsMgr
-	if err := storageMgr.SyncMounts(); err != nil {
-		return nil, fmt.Errorf("failed to sync storage mounts: %w", err)
-	}
-
-	// If custom MediaDir provided, register or update local mount
-	if cfg.MediaDir != "" {
-		storageMgr.RegisterMount(models.StorageMount{
-			ID:        "mount-default-media",
-			Name:      "Default Media Library",
-			MountType: "local",
-			MountPath: cfg.MediaDir,
-			IsActive:  true,
-		})
-	}
 
 	s := &Server{
 		cfg:        cfg,
@@ -138,11 +128,12 @@ func (s *Server) setupRoutes() {
 		MaxAge:           300,
 	}))
 
-	// 1. Root-level Public EPG & HLS feeds
+	// 1. Root-level Public EPG, HLS & Static Media feeds
 	r.Get("/epg/{channel_id}.xml", s.handleEPGXML)
 	r.Get("/hls/{channel_id}/master.m3u8", s.handleHLSMaster)
 	r.Get("/hls/{channel_id}/playlist.m3u8", s.handleHLSPlaylist)
 	r.Get("/hls/{channel_id}/{segment_file}", s.handleHLSSegment)
+	r.Handle("/media/*", http.StripPrefix("/media", http.FileServer(http.Dir(s.cfg.MediaDir))))
 
 	// 2. Central API v1 Router (/api/v1/*)
 	r.Route("/api/v1", func(v1 chi.Router) {
@@ -192,6 +183,8 @@ func (s *Server) setupRoutes() {
 			operator.Post("/channels/{id}/playout/stop", s.handleStopChannelPlayout)
 			operator.Get("/channels/{id}/ffmpeg-cmd", s.handleGetFFmpegCommand)
 			operator.Put("/channels/{id}", s.handleUpdateChannel)
+			operator.Post("/channels/{id}/logo", s.handleUploadChannelLogo)
+			operator.Post("/media/upload-logo", s.handleUploadLogo)
 		})
 
 		api.Group(func(admin chi.Router) {
@@ -236,19 +229,13 @@ func (s *Server) setupRoutes() {
 			operator.Delete("/ad-templates/{id}", s.handleDeleteAdTemplate)
 		})
 
-		// Storage
-		api.Get("/storage/mounts", s.handleListStorageMounts)
-		api.Get("/storage/mounts/{id}", s.handleGetStorageMount)
+		// Media Library & Probing
+		api.Get("/media/browse", s.handleStorageBrowse)
 		api.Get("/storage/browse", s.handleStorageBrowse)
-		api.Get("/storage/browse/{mount_id}", s.handleStorageBrowse)
+		api.Get("/media/probe", s.handleStorageProbe)
+		api.Post("/media/probe", s.handleStorageProbe)
 		api.Get("/storage/probe", s.handleStorageProbe)
 		api.Post("/storage/probe", s.handleStorageProbe)
-		api.Group(func(admin chi.Router) {
-			admin.Use(RequireRole(models.RoleAdmin))
-			admin.Post("/storage/mounts", s.handleCreateStorageMount)
-			admin.Put("/storage/mounts/{id}", s.handleUpdateStorageMount)
-			admin.Delete("/storage/mounts/{id}", s.handleDeleteStorageMount)
-		})
 
 		// Edge Agents
 		api.Get("/agents", s.handleListAgents)
@@ -498,6 +485,9 @@ func (s *Server) handleGetChannel(w http.ResponseWriter, r *http.Request) {
 }
 
 func normalizeChannel(ch *models.Channel) {
+	if ch.LogoPosition == "" {
+		ch.LogoPosition = "top-right"
+	}
 	for i := range ch.Destinations {
 		dst := &ch.Destinations[i]
 		if dst.Type == "" && dst.Protocol != "" {
@@ -582,7 +572,7 @@ func (s *Server) handleStartChannelPlayout(w http.ResponseWriter, r *http.Reques
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	if body.MediaPath == "" {
-		body.MediaPath = "/media/storage/sample.mp4"
+		body.MediaPath = filepath.Join(s.cfg.MediaDir, "sample_movie.mp4")
 	}
 	if body.ProgramTitle == "" {
 		body.ProgramTitle = "Master Control Live Output"
@@ -618,11 +608,16 @@ func (s *Server) handleGetFFmpegCommand(w http.ResponseWriter, r *http.Request) 
 		res = &models.ResolutionPreset{Width: 1920, Height: 1080, FrameRate: 25.0}
 	}
 
+	logoPos := ch.LogoPosition
+	if logoPos == "" {
+		logoPos = "top-right"
+	}
+
 	cfg := playout.PlayoutConfig{
-		InputMedia:        "/media/storage/sample.mp4",
+		InputMedia:        filepath.Join(s.cfg.MediaDir, "sample_movie.mp4"),
 		Resolution:        *res,
 		LogoPath:          ch.LogoPath,
-		LogoPosition:      "top-right",
+		LogoPosition:      logoPos,
 		LogoOpacity:       0.9,
 		AudioTrackIndex:   0,
 		NormalizeLoudness: true,
@@ -930,111 +925,125 @@ func (s *Server) handleDeleteAdTemplate(w http.ResponseWriter, r *http.Request) 
 	jsonResp(w, http.StatusOK, map[string]string{"message": "ad template deleted"})
 }
 
-// Storage
-func (s *Server) handleListStorageMounts(w http.ResponseWriter, r *http.Request) {
-	mounts, err := s.repo.ListStorageMounts()
-	if err != nil {
-		jsonErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	jsonResp(w, http.StatusOK, mounts)
-}
-
-func (s *Server) handleGetStorageMount(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	m, err := s.repo.GetStorageMountByID(id)
-	if err != nil {
-		jsonErr(w, http.StatusNotFound, "storage mount not found")
-		return
-	}
-	jsonResp(w, http.StatusOK, m)
-}
-
-func normalizeStorageMount(m *models.StorageMount) {
-	if m.MountType == "" && m.Type != "" {
-		m.MountType = m.Type
-	}
-	if m.Type == "" && m.MountType != "" {
-		m.Type = m.MountType
-	}
-	if m.MountPath == "" && m.TargetPath != "" {
-		m.MountPath = m.TargetPath
-	}
-	if m.TargetPath == "" && m.MountPath != "" {
-		m.TargetPath = m.MountPath
-	}
-	if m.SmbURL == "" && m.ServerHost != "" {
-		m.SmbURL = m.ServerHost
-	}
-	if m.ServerHost == "" && m.SmbURL != "" {
-		m.ServerHost = m.SmbURL
-	}
-}
-
-func (s *Server) handleCreateStorageMount(w http.ResponseWriter, r *http.Request) {
-	var m models.StorageMount
-	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		jsonErr(w, http.StatusBadRequest, "invalid mount body")
-		return
-	}
-	normalizeStorageMount(&m)
-	if err := s.repo.CreateStorageMount(&m); err != nil {
-		jsonErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	s.storageMgr.RegisterMount(m)
-	jsonResp(w, http.StatusCreated, m)
-}
-
-func (s *Server) handleUpdateStorageMount(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	var m models.StorageMount
-	if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
-		jsonErr(w, http.StatusBadRequest, "invalid mount body")
-		return
-	}
-	m.ID = id
-	normalizeStorageMount(&m)
-	if err := s.repo.UpdateStorageMount(&m); err != nil {
-		jsonErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	s.storageMgr.RegisterMount(m)
-	jsonResp(w, http.StatusOK, m)
-}
-
-func (s *Server) handleDeleteStorageMount(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if err := s.repo.DeleteStorageMount(id); err != nil {
-		jsonErr(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	_ = s.storageMgr.SyncMounts()
-	jsonResp(w, http.StatusOK, map[string]string{"message": "storage mount deleted"})
-}
-
+// Media Library & Probing
 func (s *Server) handleStorageBrowse(w http.ResponseWriter, r *http.Request) {
-	mountID := r.URL.Query().Get("mount_id")
-	if mountID == "" {
-		mountID = chi.URLParam(r, "mount_id")
-	}
 	subPath := r.URL.Query().Get("path")
-
-	if mountID == "" {
-		mounts := s.storageMgr.ListActiveMounts()
-		if len(mounts) == 0 {
-			jsonResp(w, http.StatusOK, []models.FileEntry{})
-			return
-		}
-		mountID = mounts[0].ID
-	}
-
-	entries, err := s.storageMgr.Browse(mountID, subPath)
+	entries, err := s.storageMgr.Browse(subPath)
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	jsonResp(w, http.StatusOK, entries)
+}
+
+func (s *Server) handleUploadChannelLogo(w http.ResponseWriter, r *http.Request) {
+	channelID := chi.URLParam(r, "id")
+	ch, err := s.channelSvc.GetChannelByID(channelID)
+	if err != nil {
+		jsonErr(w, http.StatusNotFound, "channel not found")
+		return
+	}
+
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		jsonErr(w, http.StatusBadRequest, "failed to parse multipart form: "+err.Error())
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		file, header, err = r.FormFile("logo")
+		if err != nil {
+			jsonErr(w, http.StatusBadRequest, "logo file is required (field 'file' or 'logo')")
+			return
+		}
+	}
+	defer file.Close()
+
+	logosDir := filepath.Join(s.cfg.MediaDir, "logos")
+	_ = os.MkdirAll(logosDir, 0755)
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if ext == "" {
+		ext = ".png"
+	}
+	safeName := fmt.Sprintf("%s_logo%s", channelID, ext)
+	dstPath := filepath.Join(logosDir, safeName)
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to save logo on disk: "+err.Error())
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to write logo: "+err.Error())
+		return
+	}
+
+	relPath := fmt.Sprintf("media/logos/%s", safeName)
+	ch.LogoPath = relPath
+	if pos := r.FormValue("logo_position"); pos != "" {
+		ch.LogoPosition = pos
+	}
+	if err := s.channelSvc.UpdateChannel(ch); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to update channel logo: "+err.Error())
+		return
+	}
+
+	jsonResp(w, http.StatusOK, map[string]interface{}{
+		"channel_id":    ch.ID,
+		"logo_path":     ch.LogoPath,
+		"logo_position": ch.LogoPosition,
+		"url":           "/" + relPath,
+		"message":       "Channel logo uploaded successfully",
+	})
+}
+
+func (s *Server) handleUploadLogo(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		jsonErr(w, http.StatusBadRequest, "failed to parse multipart form: "+err.Error())
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		file, header, err = r.FormFile("logo")
+		if err != nil {
+			jsonErr(w, http.StatusBadRequest, "logo file is required (field 'file' or 'logo')")
+			return
+		}
+	}
+	defer file.Close()
+
+	logosDir := filepath.Join(s.cfg.MediaDir, "logos")
+	_ = os.MkdirAll(logosDir, 0755)
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if ext == "" {
+		ext = ".png"
+	}
+	safeName := fmt.Sprintf("logo_%d%s", time.Now().Unix(), ext)
+	dstPath := filepath.Join(logosDir, safeName)
+
+	dst, err := os.Create(dstPath)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to save logo on disk: "+err.Error())
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, file); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to write logo: "+err.Error())
+		return
+	}
+
+	relPath := fmt.Sprintf("media/logos/%s", safeName)
+	jsonResp(w, http.StatusOK, map[string]interface{}{
+		"logo_path": relPath,
+		"url":       "/" + relPath,
+		"message":   "Logo uploaded successfully",
+	})
 }
 
 func (s *Server) handleStorageProbe(w http.ResponseWriter, r *http.Request) {

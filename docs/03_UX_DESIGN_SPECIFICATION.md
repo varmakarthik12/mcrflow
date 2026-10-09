@@ -87,8 +87,7 @@ Television playout consoles are operated in high-stress, low-light Master Contro
 +----------------------------------------------------------------------------------------------------+
 |  MODAL / DRAWER: ADD / EDIT SCHEDULE ITEM                                                          |
 |                                                                                                    |
-|  1. CONTENT STORAGE PICKER:                                                                        |
-|  Storage Mount: [NAS Movie Vault (SMB) ▼]                                                          |
+|  1. LOCAL MEDIA LIBRARY PICKER:                                                                    |
 |  Directory:     [/media/movies/bollywood/2023/                                                  ]  |
 |  +-----------------------------------------------------------------------------------------------+ |
 |  |  📄 Jawan (2023) 1080p Atmos.mkv      [Selected]  Size: 14.2 GB  Probed Dur: 02:49:12          | |
@@ -161,7 +160,7 @@ Television playout consoles are operated in high-stress, low-light Master Contro
 +----------------------------------------------------------------------------------------------------+
 |  ADVANCED SETTINGS & INFRASTRUCTURE                                                                |
 +----------------------------------------------------------------------------------------------------+
-|  [Resolutions & Presets]  [Edge Agents & Pairing]  [Storage Mounts]  [Bot & ChatOps]  [Service Mesh]|
+|  [Resolutions & Presets]  [Edge Agents & Pairing]  [User Management]  [Bot & ChatOps]  [i18n & Regional]|
 +----------------------------------------------------------------------------------------------------+
 |  SECTION: RESOLUTION PRESET & FFMPEG PROFILE MANAGEMENT                                            |
 |  +-----------------------------------------------------------------------------------------------+ |

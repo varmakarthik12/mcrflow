@@ -57,6 +57,11 @@ func main() {
 		defaultDataDir = envData
 	}
 
+	defaultMediaDir := "./media"
+	if envMedia := os.Getenv("MCRFLOW_MEDIA_DIR"); envMedia != "" {
+		defaultMediaDir = envMedia
+	}
+
 	defaultControlURL := "http://localhost:3081"
 	if envCtrl := os.Getenv("MCRFLOW_CONTROL_URL"); envCtrl != "" {
 		defaultControlURL = envCtrl
@@ -65,10 +70,12 @@ func main() {
 	agentID := flag.String("agent-id", defaultAgentID, "Unique node identifier for this edge playout daemon")
 	port := flag.Int("port", defaultPort, "Agent RPC/API listening port for control plane communication")
 	dataDir := flag.String("data-dir", defaultDataDir, "Working directory for agent runtime state")
+	mediaDir := flag.String("media-dir", defaultMediaDir, "Local media library path for clip playback")
 	authFile := flag.String("auth-file", "", "Path to persistent 256-bit cryptographic pairing token file")
 	controlURL := flag.String("control-url", defaultControlURL, "Central Control Plane URL for heartbeats")
 
 	flag.Parse()
+	_ = mediaDir
 
 	if *showVersion {
 		fmt.Printf("mcrflow-agent version %s (commit: %s, built at: %s)\n", version, commit, date)

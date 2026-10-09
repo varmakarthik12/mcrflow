@@ -27,7 +27,6 @@ export function App() {
   const [scheduleItems, setScheduleItems] = useState([]);
   const [resolutions, setResolutions] = useState([]);
   const [adTemplates, setAdTemplates] = useState([]);
-  const [storageMounts, setStorageMounts] = useState([]);
   const [agents, setAgents] = useState([]);
   const [bots, setBots] = useState([]);
 
@@ -111,7 +110,6 @@ export function App() {
       loadChannels(),
       loadResolutions(),
       loadAdTemplates(),
-      loadStorageMounts(),
       loadAgents(),
       loadBots(),
       loadUsers(),
@@ -213,14 +211,6 @@ export function App() {
     } catch (e) {}
   };
 
-  // Storage Mounts
-  const loadStorageMounts = async () => {
-    try {
-      const data = await api.getStorageMounts();
-      if (Array.isArray(data)) setStorageMounts(data);
-    } catch (e) {}
-  };
-
   // Agents
   const loadAgents = async () => {
     try {
@@ -272,6 +262,8 @@ export function App() {
         {activeScreen === 1 && (
           <DashboardScreen
             channels={channels}
+            agents={agents}
+            scheduleItems={scheduleItems}
             onManageChannels={() => setActiveScreen(2)}
             onSelectChannel={(chId) => {
               setActiveChannelId(chId);
@@ -303,7 +295,6 @@ export function App() {
             scheduleItems={scheduleItems}
             onRefreshSchedule={loadSchedule}
             onShowToast={showToast}
-            storageMounts={storageMounts}
             adTemplates={adTemplates}
             t={t}
           />
@@ -325,8 +316,6 @@ export function App() {
             onRefreshUsers={loadUsers}
             agents={agents}
             onRefreshAgents={loadAgents}
-            storageMounts={storageMounts}
-            onRefreshMounts={loadStorageMounts}
             bots={bots}
             onRefreshBots={loadBots}
             onShowToast={showToast}

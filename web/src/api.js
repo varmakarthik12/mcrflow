@@ -91,17 +91,43 @@ export const api = {
   updateAdTemplate: (id, data) => request(`/api/v1/ad-templates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteAdTemplate: (id) => request(`/api/v1/ad-templates/${id}`, { method: "DELETE" }),
 
-  // Storage
-  getStorageMounts: () => request("/api/v1/storage/mounts"),
-  getStorageMount: (id) => request(`/api/v1/storage/mounts/${id}`),
-  createStorageMount: (data) => request("/api/v1/storage/mounts", { method: "POST", body: JSON.stringify(data) }),
-  updateStorageMount: (id, data) => request(`/api/v1/storage/mounts/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-  deleteStorageMount: (id) => request(`/api/v1/storage/mounts/${id}`, { method: "DELETE" }),
-  browseStorage: (mountId, subPath = "") => {
-    const q = mountId ? `?mount_id=${encodeURIComponent(mountId)}&path=${encodeURIComponent(subPath)}` : `?path=${encodeURIComponent(subPath)}`;
-    return request(`/api/v1/storage/browse${q}`);
-  },
+  // Storage & Media
+  browseStorage: (subPath = "") => request(`/api/v1/storage/browse?path=${encodeURIComponent(subPath)}`),
   probeFile: (path) => request(`/api/v1/storage/probe?path=${encodeURIComponent(path)}`),
+  uploadChannelLogo: async (channelId, file) => {
+    const formData = new FormData();
+    formData.append("logo", file);
+    const token = getAuthToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch(`/api/v1/channels/${channelId}/logo`, {
+      method: "POST",
+      headers,
+      body: formData
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || "Logo upload failed");
+    }
+    return res.json();
+  },
+  uploadLogo: async (file) => {
+    const formData = new FormData();
+    formData.append("logo", file);
+    const token = getAuthToken();
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    const res = await fetch("/api/v1/media/upload-logo", {
+      method: "POST",
+      headers,
+      body: formData
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      throw new Error(errData?.error || "Logo upload failed");
+    }
+    return res.json();
+  },
 
   // TMDb
   searchTmdb: (query) => request(`/api/v1/tmdb/search?query=${encodeURIComponent(query)}`),

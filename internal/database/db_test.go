@@ -55,14 +55,6 @@ func TestSeedData(t *testing.T) {
 		t.Fatalf("expected at least 3 seeded ad templates, got %d", len(templates))
 	}
 
-	// 3. Verify Storage Mounts (2 seeded)
-	mounts, err := repo.ListStorageMounts()
-	if err != nil {
-		t.Fatalf("failed to list storage mounts: %v", err)
-	}
-	if len(mounts) < 2 {
-		t.Fatalf("expected at least 2 seeded mounts, got %d", len(mounts))
-	}
 
 	// 4. Verify Default Channel ch-01
 	ch, err := repo.GetChannelByID("ch-01")
@@ -269,7 +261,7 @@ func TestEdgeAgentAndHeartbeat(t *testing.T) {
 	}
 }
 
-func TestAdTemplateAndStorageMountAndBotCRUD(t *testing.T) {
+func TestAdTemplateAndBotCRUD(t *testing.T) {
 	db, repo := setupTestDB(t)
 	defer db.Close()
 
@@ -288,24 +280,6 @@ func TestAdTemplateAndStorageMountAndBotCRUD(t *testing.T) {
 	}
 	if err := repo.DeleteAdTemplate(at.ID); err != nil {
 		t.Fatalf("failed to delete ad template: %v", err)
-	}
-
-	// Storage Mount
-	sm := &models.StorageMount{
-		Name:      "Archive Mount",
-		MountType: "local",
-		MountPath: "/media/archive",
-		IsActive:  true,
-	}
-	if err := repo.CreateStorageMount(sm); err != nil {
-		t.Fatalf("failed to create mount: %v", err)
-	}
-	sm.Name = "Archive Mount 2"
-	if err := repo.UpdateStorageMount(sm); err != nil {
-		t.Fatalf("failed to update mount: %v", err)
-	}
-	if err := repo.DeleteStorageMount(sm.ID); err != nil {
-		t.Fatalf("failed to delete mount: %v", err)
 	}
 
 	// Bot

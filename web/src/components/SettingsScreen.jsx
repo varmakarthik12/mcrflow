@@ -3,9 +3,7 @@ import {
   Sliders,
   Users,
   Radio,
-  HardDrive,
   Bot,
-  Network,
   Plus,
   Trash2,
   Copy,
@@ -24,8 +22,6 @@ export function SettingsScreen({
   onRefreshUsers,
   agents = [],
   onRefreshAgents,
-  storageMounts = [],
-  onRefreshMounts,
   bots = [],
   onRefreshBots,
   onShowToast,
@@ -63,15 +59,6 @@ export function SettingsScreen({
     ip_address: "192.168.1.100",
     port: 3082,
     token: ""
-  });
-
-  // Storage Mount Modal
-  const [isMountModalOpen, setIsMountModalOpen] = useState(false);
-  const [mountForm, setMountForm] = useState({
-    name: "Broadcast Backup SAN",
-    type: "local",
-    target_path: "/media/backup_vault",
-    server_host: ""
   });
 
   // NLP Bot Tester
@@ -161,40 +148,6 @@ export function SettingsScreen({
     }
   };
 
-  // Storage Mount
-  const handleCreateMount = async () => {
-    if (!mountForm.name || !mountForm.target_path) {
-      onShowToast("Name and target path are required", "error");
-      return;
-    }
-    try {
-      await api.createStorageMount({
-        ...mountForm,
-        mount_path: mountForm.target_path || mountForm.mount_path,
-        target_path: mountForm.target_path || mountForm.mount_path,
-        mount_type: mountForm.type || mountForm.mount_type || "local",
-        type: mountForm.type || mountForm.mount_type || "local",
-        smb_url: mountForm.server_host || mountForm.smb_url || "",
-        server_host: mountForm.server_host || mountForm.smb_url || ""
-      });
-      onShowToast(`Storage mount "${mountForm.name}" mounted!`, "success");
-      setIsMountModalOpen(false);
-      onRefreshMounts();
-    } catch (err) {
-      onShowToast("Failed to create mount: " + err.message, "error");
-    }
-  };
-
-  const handleDeleteMount = async (id, name) => {
-    try {
-      await api.deleteStorageMount(id);
-      onShowToast(`Mount "${name}" unmounted`, "info");
-      onRefreshMounts();
-    } catch (err) {
-      onShowToast("Failed to delete mount: " + err.message, "error");
-    }
-  };
-
   // NLP Bot Command Tester
   const handleTestNlp = async () => {
     if (!nlpQuery) return;
@@ -225,9 +178,7 @@ export function SettingsScreen({
           { id: "resolutions", label: "Resolutions & FFmpeg", icon: Sliders },
           { id: "users", label: `User Management (${users.length})`, icon: Users },
           { id: "agents", label: `Edge Agents (${agents.length})`, icon: Radio },
-          { id: "storage", label: `Storage Mounts (${storageMounts.length})`, icon: HardDrive },
           { id: "bots", label: `ChatOps Bots (${bots.length})`, icon: Bot },
-          { id: "mesh", label: "Tailscale Mesh", icon: Network },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -400,55 +351,7 @@ export function SettingsScreen({
         </div>
       )}
 
-      {/* Subtab 4: Storage Mounts */}
-      {activeTab === "storage" && (
-        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-4 space-y-4 overflow-y-auto">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-bold text-white">Storage Devices & NAS Appliances</h3>
-              <p className="text-[11px] text-gray-400">
-                Local NVMe directories, SMB/CIFS shares, and NFS broadcast vaults
-              </p>
-            </div>
-            <button
-              onClick={() => setIsMountModalOpen(true)}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1 shadow"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Add Mount</span>
-            </button>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {storageMounts.map((m) => (
-              <div key={m.id} className="bg-[#1F2937] border border-gray-700/80 rounded-lg p-3 space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <HardDrive className="w-4 h-4 text-sky-400" />
-                    <span className="font-bold text-white">{m.name}</span>
-                  </div>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono uppercase">
-                    {m.mount_type || m.type}
-                  </span>
-                </div>
-                <div className="text-[11px] text-gray-300 font-mono truncate">
-                  Path: {m.mount_path || m.target_path}
-                </div>
-                <div className="pt-2 border-t border-gray-700 flex justify-between items-center text-[10px]">
-                  <span className="text-emerald-400 font-mono">Status: Active Mounted</span>
-                  <button
-                    onClick={() => handleDeleteMount(m.id, m.name)}
-                    className="text-gray-400 hover:text-rose-400"
-                    title="Unmount"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Subtab 5: ChatOps Bots & Automation */}
       {activeTab === "bots" && (
@@ -493,20 +396,7 @@ export function SettingsScreen({
         </div>
       )}
 
-      {/* Subtab 6: Tailscale Mesh */}
-      {activeTab === "mesh" && (
-        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-4 space-y-3">
-          <h3 className="text-sm font-bold text-white">Intranet Service Mesh & Tailscale</h3>
-          <p className="text-[11px] text-gray-400 leading-relaxed">
-            Zero-config encrypted peer-to-peer WireGuard mesh networking between Control Plane and remote edge transmitters.
-          </p>
-          <div className="p-3 bg-[#1F2937] rounded border border-gray-700 font-mono text-xs text-emerald-300 space-y-1">
-            <div>● Tailscale IPv4: 100.64.0.10 (mcrflow-control-delhi)</div>
-            <div>● Direct Peer Connect: 100.64.0.25 (edge-agent-mumbai)</div>
-            <div>● Latency: 18.2ms • E2E WireGuard 256-bit ChaCha20</div>
-          </div>
-        </div>
-      )}
+
 
       {/* MODAL: Custom Resolution */}
       {isResModalOpen && (
@@ -683,51 +573,6 @@ export function SettingsScreen({
         </div>
       )}
 
-      {/* MODAL: Storage Mount */}
-      {isMountModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md shadow-2xl p-5 space-y-3.5 text-xs">
-            <div className="flex items-center justify-between border-b border-gray-800 pb-2">
-              <h3 className="text-sm font-bold text-white">Add Storage Device / Mount</h3>
-              <button onClick={() => setIsMountModalOpen(false)} className="text-gray-400 hover:text-white">✕</button>
-            </div>
-            <div>
-              <label className="block text-gray-400 mb-1">Mount Name</label>
-              <input
-                type="text"
-                value={mountForm.name}
-                onChange={(e) => setMountForm({ ...mountForm, name: e.target.value })}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2 py-1 text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-gray-400 mb-1">Mount Type</label>
-              <select
-                value={mountForm.type}
-                onChange={(e) => setMountForm({ ...mountForm, type: e.target.value })}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2 py-1 text-white"
-              >
-                <option value="local">Local Directory / NVMe</option>
-                <option value="smb">SMB / CIFS Network Share</option>
-                <option value="nas_nfs">NFS Appliance</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-gray-400 mb-1">Target Path / SMB URL</label>
-              <input
-                type="text"
-                value={mountForm.target_path}
-                onChange={(e) => setMountForm({ ...mountForm, target_path: e.target.value })}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2 py-1 text-white font-mono"
-              />
-            </div>
-            <div className="flex justify-end gap-2 pt-2 border-t border-gray-800">
-              <button onClick={() => setIsMountModalOpen(false)} className="px-3 py-1 bg-gray-800 text-gray-300 rounded">Cancel</button>
-              <button onClick={handleCreateMount} className="px-3 py-1 bg-indigo-600 text-white rounded font-semibold">Mount Storage</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

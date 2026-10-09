@@ -92,8 +92,8 @@ The core broadcast playlist creation and automation screen.
   - SMPTE frame-accurate timecode display (`HH:MM:SS:FF`).
   - Item status: `Played`, `On-Air Now`, `Cued Next`, `Pending`, `Missing Media Error`.
 - **Integrated Storage Browser (Source Picker)**:
-  - Dropdown selecting storage mount alias (configured in Settings: NAS, SMB, NFS, Local Storage Alias).
-  - Interactive breadcrumb file explorer (`/nas-movies/bollywood/2025/`).
+  - Local media directory file browser (defaults to `./media` or custom path configured via `-media-dir`).
+  - Interactive breadcrumb file explorer (`/media/bollywood/2025/`).
   - File details: Filename, size, extension, video codec, audio channels, duration.
   - Proactive ffprobe inspection: Auto-reads duration, container framerate, and audio track IDs upon file selection.
   - Auto-calculation: End time is automatically calculated based on Selected Start Time + Probed Video Duration.
@@ -158,29 +158,19 @@ Unified configuration for backend nodes, distributed edge agents, network mesh, 
     - Operator enters Agent IP/Host and the secure token in the UI.
     - Control Plane verifies handshake over gRPC via mTLS / token header, registers agent into cluster database, and initiates heartbeat monitoring.
     - Token survives restarts and can be rotated/revoked from this screen.
-- **Section 2: Storage Device Management**:
-  - Add and manage storage mount definitions:
-    - `NAS (NFS v3/v4)`: Server address (`192.168.1.50`), Export path (`/volume1/broadcast_media`), Mount options.
-    - `SMB / CIFS Share`: Hostname, Share name, Username, Password / Secret, Domain.
-    - `Local Filesystem Alias`: Path on host (`/mnt/storage/movies`), Friendly alias (`Local RAID Master`).
-  - Real-time mount status indicator (Mounted, Unreachable, Read-Only).
-  - Storage capacity gauge (Used / Free space, auto-warning when < 10% space remains).
-- **Section 3: Bot & ChatOps Configuration (Multiple Bots)**:
+- **Section 2: Bot & ChatOps Configuration (Multiple Bots)**:
   - Configuration page supporting multiple communication channels:
     - **Telegram Bot**: Bot Name, API Token (`bot123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`), Allowed User IDs / Chat IDs (whitelist for broadcast control security), Enabled Channels toggle.
     - Future expansion slots for Slack Webhook, WhatsApp Cloud API, and Discord.
   - Natural Language Playout Processor:
     - Telegram webhook listener parses natural commands (e.g., `"Schedule Avengers at 9 AM on Channel 1"`).
-    - Executes fuzzy search against indexed storage mounts (e.g., matches `"Avengers: Endgame (2019) 1080p.mkv"`).
+    - Executes fuzzy search against local media library (e.g., matches `"Avengers: Endgame (2019) 1080p.mkv"`).
     - Responds in chat with interactive inline keyboard buttons confirming title match.
     - **Conflict Resolution Engine**: If the 9:00 AM slot is occupied, the bot detects the collision and presents 3 instant action buttons:
       1. `[Force Overwrite Slot]` (Overwrites existing program).
       2. `[Queue After Current Ends]` (Schedules immediately after current program finishes).
       3. `[Replace Conflicting Program]` (Replaces overlapping item and ripples future schedule).
-- **Section 4: Intranet & Service Mesh (Tailscale / WireGuard)**:
-  - Tailscale AuthKey input or Tailscale Daemon status widget.
-  - Node MagicDNS name display, enabling zero-config secure edge-to-cloud mesh communication across remote data centers and cloud VPCs without public IP exposure or port forwarding.
-- **Section 5: Internationalization (i18n) & Regional Configuration**:
+- **Section 3: Internationalization (i18n) & Regional Configuration**:
   - Active UI Language selector with real-time preview (English + 10 Indian constitutional languages: Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia).
   - Timezone selector (defaults to `Asia/Kolkata` IST).
   - SMPTE framerate defaults (25 fps for PAL/India/Europe, 29.97/30 fps for NTSC).

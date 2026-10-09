@@ -51,6 +51,7 @@ type Channel struct {
 	CallSign         string              `json:"call_sign"`
 	ResolutionID     string              `json:"resolution_id"`
 	LogoPath         string              `json:"logo_path"`
+	LogoPosition     string              `json:"logo_position"` // top-right, top-left, bottom-right, bottom-left
 	AdTemplateID     string              `json:"ad_template_id"`
 	PrimaryAgentID   string              `json:"primary_agent_id"`
 	FallbackAgentID  string              `json:"fallback_agent_id"`
@@ -151,20 +152,6 @@ type AdTemplate struct {
 	IsActive             bool              `json:"is_active"`
 	CreatedAt            time.Time         `json:"created_at"`
 	UpdatedAt            time.Time         `json:"updated_at"`
-}
-
-// StorageMount represents a registered media directory, NAS share, or SMB mount
-type StorageMount struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	MountType  string    `json:"mount_type"`            // local, nas_nfs, smb
-	Type       string    `json:"type,omitempty"`        // alias for mount_type
-	MountPath  string    `json:"mount_path"`
-	TargetPath string    `json:"target_path,omitempty"` // alias for mount_path
-	SmbURL     string    `json:"smb_url"`
-	ServerHost string    `json:"server_host,omitempty"` // alias for smb_url
-	IsActive   bool      `json:"is_active"`
-	CreatedAt  time.Time `json:"created_at"`
 }
 
 // FileEntry represents a file or directory discovered in storage

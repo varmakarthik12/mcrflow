@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Tv,
   Save,
@@ -10,9 +10,11 @@ import {
   Shield,
   Key,
   Sliders,
-  Check
+  Check,
+  Upload
 } from 'lucide-react';
 import { VideoPlayer } from './VideoPlayer';
+import { api } from '../api';
 
 export function ChannelScreen({
   channels = [],
@@ -26,6 +28,8 @@ export function ChannelScreen({
   t
 }) {
   const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0] || {};
+  const logoFileInputRef = useRef(null);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -34,6 +38,8 @@ export function ChannelScreen({
     resolution_id: "res-in-1080i50",
     video_codec: "libx264",
     audio_codec: "aac",
+    logo_path: "media/logos/channel_logo.png",
+    logo_position: "top-right",
     hls_web_token: "",
     epg_web_token: "",
     udp_url: "",
@@ -64,6 +70,8 @@ export function ChannelScreen({
         resolution_id: activeChannel.resolution_id || "res-in-1080i50",
         video_codec: activeChannel.video_codec || "libx264",
         audio_codec: activeChannel.audio_codec || "aac",
+        logo_path: activeChannel.logo_path || "media/logos/channel_logo.png",
+        logo_position: activeChannel.logo_position || "top-right",
         hls_web_token: activeChannel.hls_web_token || "",
         epg_web_token: activeChannel.epg_web_token || "",
         udp_url: udp,
@@ -77,6 +85,28 @@ export function ChannelScreen({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleLogoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingLogo(true);
+    try {
+      const res = await api.uploadChannelLogo(activeChannel.id || "ch-01", file);
+      const newLogoPath = res.logo_path || `media/logos/${activeChannel.id}_logo.png`;
+      handleInputChange("logo_path", newLogoPath);
+      onShowToast("Station logo uploaded successfully!", "success");
+      onSaveChannel(activeChannel.id, {
+        ...activeChannel,
+        logo_path: newLogoPath,
+        logo_position: formData.logo_position
+      });
+    } catch (err) {
+      onShowToast("Failed to upload logo: " + err.message, "error");
+    } finally {
+      setIsUploadingLogo(false);
+      if (logoFileInputRef.current) logoFileInputRef.current.value = "";
+    }
+  };
+
   const handleSave = () => {
     const updatedChannel = {
       ...activeChannel,
@@ -86,6 +116,8 @@ export function ChannelScreen({
       resolution_id: formData.resolution_id,
       video_codec: formData.video_codec,
       audio_codec: formData.audio_codec,
+      logo_path: formData.logo_path,
+      logo_position: formData.logo_position,
       hls_web_token: formData.hls_web_token,
       epg_web_token: formData.epg_web_token,
       destinations: [
@@ -240,6 +272,56 @@ export function ChannelScreen({
             </div>
           </div>
 
+          {/* On-Air Branding & Station Bug */}
+          <div className="pt-2 border-t border-gray-800 space-y-3">
+            <h3 className="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>On-Air Branding & Station Bug</span>
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-gray-400 mb-1">Station Logo / Bug File</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={formData.logo_path}
+                    onChange={(e) => handleInputChange("logo_path", e.target.value)}
+                    placeholder="media/logos/channel_logo.png"
+                    className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                  />
+                  <input
+                    type="file"
+                    ref={logoFileInputRef}
+                    onChange={handleLogoUpload}
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => logoFileInputRef.current?.click()}
+                    disabled={isUploadingLogo}
+                    className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-xs text-white rounded font-semibold shrink-0"
+                  >
+                    {isUploadingLogo ? "Uploading..." : "Upload"}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-gray-400 mb-1">Bug Screen Position</label>
+                <select
+                  value={formData.logo_position}
+                  onChange={(e) => handleInputChange("logo_position", e.target.value)}
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="top-right">Top-Right (Standard)</option>
+                  <option value="top-left">Top-Left</option>
+                  <option value="bottom-right">Bottom-Right</option>
+                  <option value="bottom-left">Bottom-Left</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           {/* Egress Destinations */}
           <div className="pt-2 border-t border-gray-800 space-y-3">
             <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -356,6 +438,8 @@ export function ChannelScreen({
               streamUrl={resolvedHlsUrl}
               isSlate={isSlateActive}
               channelName={activeChannel.name}
+              logoPath={formData.logo_path}
+              logoPosition={formData.logo_position}
             />
 
             {/* Emergency Slate Button */}

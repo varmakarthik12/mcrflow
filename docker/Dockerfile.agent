@@ -29,10 +29,10 @@ RUN apk add --no-cache \
     curl
 
 WORKDIR /app
-RUN mkdir -p /var/lib/mcrflow-agent /media/storage
+RUN mkdir -p /var/lib/mcrflow-agent /media
 
-# Persistent volumes for auth token and media storage
-VOLUME ["/var/lib/mcrflow-agent", "/media/storage"]
+# Persistent volumes for auth token and media
+VOLUME ["/var/lib/mcrflow-agent", "/media"]
 
 COPY --from=builder /bin/mcrflow-agent /usr/local/bin/mcrflow-agent
 
@@ -40,7 +40,7 @@ EXPOSE 3082
 
 ENV MCRFLOW_PORT=3082 \
     MCRFLOW_DATA_DIR=/var/lib/mcrflow-agent \
-    MCRFLOW_MEDIA_DIR=/media/storage \
+    MCRFLOW_MEDIA_DIR=/media \
     MCRFLOW_CONTROL_URL=http://control-plane:3081
 
 ENTRYPOINT ["/usr/local/bin/mcrflow-agent"]

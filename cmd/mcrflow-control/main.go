@@ -37,7 +37,7 @@ func main() {
 		defaultDataDir = envData
 	}
 
-	defaultMediaDir := "/media/storage"
+	defaultMediaDir := "./media"
 	if envMedia := os.Getenv("MCRFLOW_MEDIA_DIR"); envMedia != "" {
 		defaultMediaDir = envMedia
 	}
@@ -46,7 +46,7 @@ func main() {
 
 	port := flag.Int("port", defaultPort, "HTTP listening port for Web UI, REST API, and native HLS stream")
 	dataDir := flag.String("data-dir", defaultDataDir, "Directory for SQLite databases, auth tokens, and HLS segments")
-	mediaDir := flag.String("media-dir", defaultMediaDir, "Default media library path registered in storage browser")
+	mediaDir := flag.String("media-dir", defaultMediaDir, "Local media library path for clip playback and broadcast assets")
 	tmdbKey := flag.String("tmdb-key", defaultTMDBKey, "Optional TMDb API key for movie/series metadata lookup")
 
 	flag.Parse()
@@ -56,10 +56,14 @@ func main() {
 		return
 	}
 
-	// Ensure data directory exists
+	// Ensure data and media directories exist
 	if err := os.MkdirAll(*dataDir, 0755); err != nil {
 		log.Fatalf("Fatal: failed to create data directory '%s': %v", *dataDir, err)
 	}
+	if err := os.MkdirAll(*mediaDir, 0755); err != nil {
+		log.Fatalf("Fatal: failed to create media directory '%s': %v", *mediaDir, err)
+	}
+	_ = os.MkdirAll(filepath.Join(*mediaDir, "logos"), 0755)
 
 	dbPath := filepath.Join(*dataDir, "mcrflow.db")
 	log.Printf("[MCRFlow] Initializing SQLite database at %s...", dbPath)
@@ -99,6 +103,7 @@ func main() {
 		log.Printf("  REST API Endpoint:      http://localhost:%d/api/v1", *port)
 		log.Printf("  Live HLS Ingress:       http://localhost:%d/hls/{channel_id}/master.m3u8", *port)
 		log.Printf("  Database Storage:       %s", dbPath)
+		log.Printf("  Media Directory:        %s", *mediaDir)
 		log.Printf("================================================================================")
 
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {

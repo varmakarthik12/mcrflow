@@ -13,11 +13,11 @@ services:
       - "3081:3081"
     volumes:
       - mcrflow-data:/data
-      - media-storage:/media/storage
+      - ../media:/media
     environment:
       - MCRFLOW_PORT=3081
       - MCRFLOW_DATA_DIR=/data
-      - MCRFLOW_MEDIA_DIR=/media/storage
+      - MCRFLOW_MEDIA_DIR=/media
       - TMDB_API_KEY=${TMDB_API_KEY:-}
     networks:
       - mcrflow-network
@@ -36,11 +36,11 @@ services:
       - "3082:3082"
     volumes:
       - mcrflow-agent-data:/var/lib/mcrflow-agent
-      - media-storage:/media/storage
+      - ../media:/media
     environment:
       - MCRFLOW_PORT=3082
       - MCRFLOW_DATA_DIR=/var/lib/mcrflow-agent
-      - MCRFLOW_MEDIA_DIR=/media/storage
+      - MCRFLOW_MEDIA_DIR=/media
       - MCRFLOW_CONTROL_URL=http://control-plane:3081
       - MCRFLOW_AGENT_ID=edge-agent-01
     depends_on:
@@ -56,6 +56,4 @@ volumes:
   mcrflow-data:
     driver: local
   mcrflow-agent-data:
-    driver: local
-  media-storage:
     driver: local

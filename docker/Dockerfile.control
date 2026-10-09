@@ -40,10 +40,10 @@ RUN apk add --no-cache \
     curl
 
 WORKDIR /app
-RUN mkdir -p /data /media/storage
+RUN mkdir -p /data /media
 
-# Default volume for persistent SQLite database and runtime data
-VOLUME ["/data"]
+# Default volumes for persistent SQLite database and media
+VOLUME ["/data", "/media"]
 
 COPY --from=builder /bin/mcrflow-control /usr/local/bin/mcrflow-control
 
@@ -51,6 +51,6 @@ EXPOSE 3081
 
 ENV MCRFLOW_PORT=3081 \
     MCRFLOW_DATA_DIR=/data \
-    MCRFLOW_MEDIA_DIR=/media/storage
+    MCRFLOW_MEDIA_DIR=/media
 
 ENTRYPOINT ["/usr/local/bin/mcrflow-control"]

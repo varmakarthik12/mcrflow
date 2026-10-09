@@ -2,11 +2,31 @@ import React, { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import { Play, Volume2, VolumeX, AlertCircle } from 'lucide-react';
 
-export function VideoPlayer({ streamUrl, isSlate = false, channelName = "Live Channel" }) {
+export function VideoPlayer({
+  streamUrl,
+  isSlate = false,
+  channelName = "Live Channel",
+  logoPath = "",
+  logoPosition = "top-right"
+}) {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [error, setError] = useState(null);
+
+  const getLogoPositionClass = (pos) => {
+    switch (pos) {
+      case 'top-left':
+        return 'top-3 left-3';
+      case 'bottom-right':
+        return 'bottom-10 right-3';
+      case 'bottom-left':
+        return 'bottom-10 left-3';
+      case 'top-right':
+      default:
+        return 'top-3 right-3';
+    }
+  };
 
   useEffect(() => {
     const video = videoRef.current;
@@ -80,6 +100,10 @@ export function VideoPlayer({ streamUrl, isSlate = false, channelName = "Live Ch
     }
   };
 
+  const normalizedLogoUrl = logoPath
+    ? (logoPath.startsWith('/') || logoPath.startsWith('http') ? logoPath : `/${logoPath}`)
+    : "";
+
   return (
     <div className="relative aspect-video bg-black rounded-lg overflow-hidden border border-gray-800 flex items-center justify-center group shadow-inner">
       <video
@@ -89,6 +113,20 @@ export function VideoPlayer({ streamUrl, isSlate = false, channelName = "Live Ch
         autoPlay
         className="w-full h-full object-contain"
       />
+
+      {/* Station Logo / Channel Bug Overlay */}
+      {normalizedLogoUrl && !isSlate && (
+        <div className={`absolute ${getLogoPositionClass(logoPosition)} z-10 pointer-events-none transition-all duration-300`}>
+          <img
+            src={normalizedLogoUrl}
+            alt="Station Logo Bug"
+            className="h-7 w-auto max-w-[100px] object-contain drop-shadow-md opacity-90"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        </div>
+      )}
 
       {/* Emergency Slate Overlay */}
       {isSlate && (

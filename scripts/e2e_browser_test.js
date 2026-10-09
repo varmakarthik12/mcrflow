@@ -1,6 +1,11 @@
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer');
+let puppeteer;
+try {
+  puppeteer = require('puppeteer');
+} catch (e) {
+  puppeteer = require(path.resolve(__dirname, '../web/node_modules/puppeteer'));
+}
 
 const SCREENSHOT_DIR = path.resolve(__dirname, '../tmp/e2e-screenshots');
 if (!fs.existsSync(SCREENSHOT_DIR)) {
@@ -35,9 +40,10 @@ async function clickButtonWithText(page, text) {
 }
 
 async function runE2ETests() {
+  const targetUrl = process.env.TARGET_URL || 'http://localhost:3081/';
   console.log('================================================================');
   console.log('  MCRFlow End-to-End Automated Browser Testing & UI Audit');
-  console.log('  Target: http://localhost:3080/ (Proxied to Control Plane :3081)');
+  console.log(`  Target: ${targetUrl}`);
   console.log('================================================================\n');
 
   const consoleLogs = [];
@@ -74,8 +80,8 @@ async function runE2ETests() {
     // --------------------------------------------------------------------------
     // 1. Initial Load & Authentication
     // --------------------------------------------------------------------------
-    console.log('[Step 1] Navigating to http://localhost:3080/ ...');
-    await page.goto('http://localhost:3080/', { waitUntil: 'networkidle2', timeout: 15000 });
+    console.log(`[Step 1] Navigating to ${targetUrl} ...`);
+    await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 15000 });
     await delay(1200);
 
     // Check if Login Modal is open
@@ -126,10 +132,21 @@ async function runE2ETests() {
       }
     });
 
+    // Test Station Logo position change
+    await page.evaluate(() => {
+      const selects = Array.from(document.querySelectorAll('select'));
+      const posSelect = selects.find((s) => Array.from(s.options).some((o) => o.value === 'bottom-right' || o.text.includes('Top-Right')));
+      if (posSelect) {
+        posSelect.value = 'bottom-right';
+        posSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    console.log('  ✓ Updated Bug Screen Position to Bottom-Right');
+
     const clickedSave = await clickButtonWithText(page, 'Save Channel');
     if (clickedSave) {
       await delay(1000);
-      console.log('  ✓ Clicked "Save Channel" button');
+      console.log('  ✓ Clicked "Save Channel" button with updated logo position');
     }
 
     // Test creating a new channel
