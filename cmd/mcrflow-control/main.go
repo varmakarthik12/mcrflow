@@ -16,11 +16,13 @@ import (
 	"mcrflow/internal/auth"
 	"mcrflow/internal/bot"
 	"mcrflow/internal/channel"
+	"mcrflow/internal/hls"
 	"mcrflow/internal/resolution"
 	"mcrflow/internal/schedule"
 	"mcrflow/internal/server"
 	"mcrflow/internal/storage"
 	"mcrflow/internal/tmdb"
+	"mcrflow/internal/user"
 )
 
 var (
@@ -52,6 +54,13 @@ func main() {
 	adStore := adtemplate.NewStore()
 	botStore := bot.NewStore(schedStore, storageMgr)
 	authMgr := auth.NewManager(authPath)
+	userStore := user.NewStore(filepath.Join(*dataDir, "users.json"))
+	hlsMgr := hls.NewManager(filepath.Join(*dataDir, "hls"), func(channelID string) string {
+		if ch, err := chStore.GetChannel(channelID); err == nil && ch != nil {
+			return ch.HlsWebToken
+		}
+		return ""
+	})
 
 	// Ensure local agent pairing token exists if running in all-in-one mode
 	creds, isFresh, err := authMgr.InitializeOrLoadAgentToken("embedded-local-agent")
@@ -78,6 +87,8 @@ func main() {
 		AdTemplateStore: adStore,
 		BotStore:        botStore,
 		AuthManager:     authMgr,
+		UserStore:       userStore,
+		HlsManager:      hlsMgr,
 		StaticFS:        staticFs,
 	})
 

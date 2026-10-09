@@ -79,7 +79,44 @@ type Channel struct {
 	AudioCodec           string              `json:"audio_codec"` // aac, ac3, mp2
 	Status               string              `json:"status"`      // ON_AIR, STANDBY, FAILOVER, ERROR
 	NowPlayingID         string              `json:"now_playing_id,omitempty"`
+	HlsWebToken          string              `json:"hls_web_token,omitempty"` // Optional query param token for HLS stream
+	EpgWebToken          string              `json:"epg_web_token,omitempty"` // Optional query param token for EPG XML
+	HlsStreamURL         string              `json:"hls_stream_url,omitempty"` // Resolved direct HLS streaming URL
 	UpdatedAt            time.Time           `json:"updated_at"`
+}
+
+// UserRole defines user authorization levels in MCRFlow.
+type UserRole string
+
+const (
+	RoleAdmin            UserRole = "admin"
+	RoleOperator         UserRole = "operator"
+	RoleContentScheduler UserRole = "content_scheduler"
+)
+
+// User represents an authorized user in MCRFlow.
+type User struct {
+	ID           string    `json:"id"`
+	Username     string    `json:"username"`
+	PasswordHash string    `json:"-"`
+	DisplayName  string    `json:"display_name"`
+	Email        string    `json:"email"`
+	Role         UserRole  `json:"role"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// UserAuthResponse is returned upon successful authentication.
+type UserAuthResponse struct {
+	Token     string    `json:"token"`
+	User      *User     `json:"user"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// SetupStatus indicates whether initial administrator setup is needed.
+type SetupStatus struct {
+	SetupRequired bool `json:"setup_required"`
+	UserCount     int  `json:"user_count"`
 }
 
 // ConflictAction determines how schedule collisions are handled.

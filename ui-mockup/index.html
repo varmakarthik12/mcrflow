@@ -173,6 +173,28 @@
         <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
         <span data-i18n="common.healthy">Cluster: 100% Up</span>
       </div>
+
+      <div class="h-6 w-px bg-gray-700 mx-0.5"></div>
+
+      <!-- Current User Auth & Role Switcher -->
+      <div class="flex items-center gap-2">
+        <button onclick="openLoginModal()" class="flex items-center gap-2 px-2.5 py-1 bg-[#1A2234] hover:bg-[#25324B] border border-[#2D3A54] hover:border-indigo-500/50 rounded transition-all text-left">
+          <div class="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-[10px] font-bold text-white shadow-sm" id="user-avatar-badge">
+            AD
+          </div>
+          <div>
+            <div class="text-[11px] font-bold text-white leading-tight flex items-center gap-1.5" id="user-name-display">
+              Admin <span class="text-[9px] px-1 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono border border-purple-500/30 uppercase" id="user-role-badge">ADMIN</span>
+            </div>
+            <div class="text-[9px] text-gray-400 leading-tight">Switch Role / Login</div>
+          </div>
+        </button>
+
+        <!-- First-Launch Setup Trigger Pill (for testing/demo) -->
+        <button onclick="openSetupModal()" title="Simulate First-Launch Admin Setup Wizard" class="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded text-[10px] font-semibold flex items-center gap-1 transition-all">
+          <span>🚀 First-Run</span>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -691,10 +713,57 @@
                 <input type="text" value="rtmp://a.rtmp.youtube.com/live2/x/live_star_in_xxxx" class="flex-1 bg-[#111827] border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 font-mono">
               </div>
 
-              <div class="flex items-center gap-3 bg-[#161F30] p-2.5 rounded border border-[#233048]">
-                <input type="checkbox" class="rounded text-indigo-600">
-                <span class="text-xs font-semibold text-gray-400 w-28">LL-HLS Package</span>
-                <input type="text" value="/var/www/hls/channel01/stream.m3u8" class="flex-1 bg-[#111827] border border-gray-700 rounded px-2 py-1 text-xs text-gray-400 font-mono">
+              <!-- Direct MCRFlow HLS Live Streaming (Web Server Native) -->
+              <div class="bg-[#1A2234] p-3 rounded-lg border border-indigo-500/40 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <input type="checkbox" checked class="rounded text-indigo-600">
+                    <span class="text-xs font-bold text-white">Direct MCRFlow HLS Live Stream</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono font-semibold">10-Segment Rolling Window</span>
+                  </div>
+                  <span class="text-[10px] text-sky-400 font-mono">#EXT-X-MEDIA-SEQUENCE Auto-Pruned</span>
+                </div>
+
+                <div class="space-y-1">
+                  <label class="block text-[10px] text-gray-400">Resolved Live HLS Stream URL (Native MCRFlow HTTP Web Server):</label>
+                  <div class="flex items-center gap-2">
+                    <input type="text" id="channel-resolved-hls-url" value="http://playout.mcrflow.tv:8080/hls/ch-01/master.m3u8?token=hls_sec_8849b21a" readonly class="flex-1 bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-sky-300 font-mono select-all">
+                    <button onclick="copyHlsUrl()" class="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1 shadow-sm transition-all">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                      Copy HLS URL
+                    </button>
+                    <button onclick="previewHlsStream()" class="px-2.5 py-1.5 bg-[#1E293B] hover:bg-[#334155] text-gray-200 border border-gray-700 rounded text-xs font-semibold flex items-center gap-1 transition-all">
+                      ▶ Live Preview
+                    </button>
+                  </div>
+                </div>
+
+                <!-- WebToken Security Options -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-gray-800">
+                  <div class="space-y-1">
+                    <div class="flex items-center justify-between">
+                      <label class="text-[10px] text-gray-300 font-semibold flex items-center gap-1">
+                        <span>HLS WebToken Security</span>
+                        <span class="text-[9px] text-amber-400 font-normal">Optional ?token=</span>
+                      </label>
+                      <button onclick="generateRandomToken('hls-token-input')" class="text-[9px] text-sky-400 hover:text-sky-300 font-mono">🎲 Gen Token</button>
+                    </div>
+                    <input type="text" id="hls-token-input" value="hls_sec_8849b21a" placeholder="Leave empty for public HLS stream" class="w-full bg-[#111827] border border-gray-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-indigo-500">
+                    <p class="text-[9px] text-gray-500 leading-tight">When set, stream requests without the matching ?token= query parameter are rejected (HTTP 401).</p>
+                  </div>
+
+                  <div class="space-y-1">
+                    <div class="flex items-center justify-between">
+                      <label class="text-[10px] text-gray-300 font-semibold flex items-center gap-1">
+                        <span>XMLTV EPG WebToken</span>
+                        <span class="text-[9px] text-amber-400 font-normal">Optional ?token=</span>
+                      </label>
+                      <button onclick="generateRandomToken('epg-token-input')" class="text-[9px] text-sky-400 hover:text-sky-300 font-mono">🎲 Gen Token</button>
+                    </div>
+                    <input type="text" id="epg-token-input" value="epg_sec_99a12c44" placeholder="Leave empty for public XMLTV EPG" class="w-full bg-[#111827] border border-gray-700 rounded px-2 py-1 text-xs text-white font-mono focus:outline-none focus:border-indigo-500">
+                    <p class="text-[9px] text-gray-500 leading-tight">Public by default. When set, EPG XML access requires this query token parameter.</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1238,6 +1307,10 @@
             <span>Resolutions & FFmpeg Presets</span>
             <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono">Indian Cable</span>
           </button>
+          <button onclick="switchSettingsTab('users')" id="set-tab-users" class="w-full text-left px-3 py-2 rounded text-xs font-semibold text-gray-300 hover:bg-[#1E293B] flex items-center justify-between">
+            <span>Users & RBAC Permissions</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 font-mono">3 Roles</span>
+          </button>
           <button onclick="switchSettingsTab('agents')" id="set-tab-agents" class="w-full text-left px-3 py-2 rounded text-xs font-semibold bg-indigo-600 text-white flex items-center justify-between">
             <span>Edge Agents & Token Pairing</span>
             <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
@@ -1461,6 +1534,148 @@
                   <div>Audio Filter: <strong class="text-white">loudnorm=I=-24:LRA=7:TP=-2</strong></div>
                   <div>Color: <strong class="text-white">BT.709 HD</strong></div>
                   <div>Bitrate: <strong class="text-sky-400">7000 kbps CBR</strong></div>
+                </div>
+              </div>
+            </div>
+          <!-- TAB: USERS & RBAC PERMISSIONS -->
+          <div id="set-content-users" class="space-y-4 hidden">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                  <span>User Management & Role-Based Access Control (RBAC)</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-400 font-semibold border border-purple-500/30">JWT Session Security</span>
+                </h3>
+                <p class="text-xs text-gray-400">Manage operator credentials, assign cryptographic roles, and enforce strict API endpoint permission boundaries</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button onclick="openCreateUserModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white flex items-center gap-1.5 shadow">
+                  <span>+ Add New User</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- User KPI Summary Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div class="bg-[#1A2234] border border-[#2D3A54] p-3 rounded-lg">
+                <div class="text-[10px] text-gray-400">Total System Users</div>
+                <div class="text-lg font-bold text-white mt-0.5" id="user-count-display">3 Active</div>
+                <div class="text-[9px] text-emerald-400">Persistent Disk Store</div>
+              </div>
+              <div class="bg-[#1A2234] border border-[#2D3A54] p-3 rounded-lg">
+                <div class="text-[10px] text-gray-400">Administrators (Full Control)</div>
+                <div class="text-lg font-bold text-purple-400 mt-0.5">1 Root Admin</div>
+                <div class="text-[9px] text-gray-400">Unrestricted API Scope</div>
+              </div>
+              <div class="bg-[#1A2234] border border-[#2D3A54] p-3 rounded-lg">
+                <div class="text-[10px] text-gray-400">Broadcast Operators</div>
+                <div class="text-lg font-bold text-sky-400 mt-0.5">1 MCR Desk</div>
+                <div class="text-[9px] text-gray-400">Channel & Playout Egress</div>
+              </div>
+              <div class="bg-[#1A2234] border border-[#2D3A54] p-3 rounded-lg">
+                <div class="text-[10px] text-gray-400">Content Schedulers</div>
+                <div class="text-lg font-bold text-emerald-400 mt-0.5">1 Dedicated</div>
+                <div class="text-[9px] text-amber-400 font-semibold">Strictly Scheduler Only</div>
+              </div>
+            </div>
+
+            <!-- Users List Table -->
+            <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg overflow-hidden">
+              <div class="p-3 bg-[#161F30] border-b border-[#2D3A54] flex items-center justify-between">
+                <span class="text-xs font-bold text-white uppercase tracking-wider">Registered System Users</span>
+                <span class="text-[10px] text-gray-400 font-mono">Bcrypt Password Hashing • Constant-Time Token Verification</span>
+              </div>
+              <div class="divide-y divide-[#2D3A54] text-xs">
+                <!-- User 1: Admin -->
+                <div class="p-3 flex items-center justify-between hover:bg-[#1E293B]/60 transition-all">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center text-xs font-bold text-white shadow">
+                      AD
+                    </div>
+                    <div>
+                      <div class="font-bold text-white flex items-center gap-2">
+                        <span>Chief Broadcast Engineer</span>
+                        <span class="font-mono text-gray-400 text-[11px]">(@admin)</span>
+                        <span class="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono border border-purple-500/30 uppercase font-semibold">admin</span>
+                        <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 font-mono">Primary Admin</span>
+                      </div>
+                      <div class="text-[10px] text-gray-400 mt-0.5">chief@mcrflow.tv • Full Control Plane Access, Edge Node Pairing, User Management</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-emerald-400 font-mono">● Active</span>
+                    <button onclick="switchSimulatedUser('admin', 'Chief Admin', 'AD')" class="px-2 py-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 rounded text-[11px] font-semibold">Simulate Role</button>
+                  </div>
+                </div>
+
+                <!-- User 2: Operator -->
+                <div class="p-3 flex items-center justify-between hover:bg-[#1E293B]/60 transition-all">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-sky-600 to-cyan-500 flex items-center justify-center text-xs font-bold text-white shadow">
+                      RK
+                    </div>
+                    <div>
+                      <div class="font-bold text-white flex items-center gap-2">
+                        <span>Rajesh Kumar</span>
+                        <span class="font-mono text-gray-400 text-[11px]">(@operator_raj)</span>
+                        <span class="text-[10px] px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300 font-mono border border-sky-500/30 uppercase font-semibold">operator</span>
+                      </div>
+                      <div class="text-[10px] text-gray-400 mt-0.5">rajesh@mcrflow.tv • Channel Config, On-Air Emergency Slate, Audio/Subtitle Routing, Ad Templates</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-emerald-400 font-mono">● Active</span>
+                    <button onclick="switchSimulatedUser('operator', 'Rajesh Kumar', 'RK')" class="px-2 py-1 bg-sky-600/20 hover:bg-sky-600/40 text-sky-300 border border-sky-500/30 rounded text-[11px] font-semibold">Simulate Role</button>
+                  </div>
+                </div>
+
+                <!-- User 3: Content Scheduler -->
+                <div class="p-3 flex items-center justify-between hover:bg-[#1E293B]/60 transition-all">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-xs font-bold text-white shadow">
+                      RS
+                    </div>
+                    <div>
+                      <div class="font-bold text-white flex items-center gap-2">
+                        <span>Rahul Sharma</span>
+                        <span class="font-mono text-gray-400 text-[11px]">(@scheduler_rahul)</span>
+                        <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30 uppercase font-semibold">content_scheduler</span>
+                        <span class="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">RESTRICTED SCOPE</span>
+                      </div>
+                      <div class="text-[10px] text-gray-400 mt-0.5">rahul@mcrflow.tv • Scheduling Timelines, NAS Storage Browser, TMDb Metadata Lookup Only</div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-emerald-400 font-mono">● Active</span>
+                    <button onclick="switchSimulatedUser('content_scheduler', 'Rahul Sharma', 'RS')" class="px-2 py-1 bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/30 rounded text-[11px] font-semibold">Simulate Role</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- RBAC Security Matrix Breakdown Card -->
+            <div class="bg-[#161F30] border border-[#233048] rounded-lg p-3.5 space-y-2">
+              <h4 class="text-xs font-bold text-white flex items-center gap-2">
+                <span>🛡️ API Endpoint Access & RBAC Enforcement Policy</span>
+                <span class="text-[10px] font-normal text-gray-400">Enforced by backend authMiddleware at /api/v1/*</span>
+              </h4>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px]">
+                <div class="bg-[#111827] p-2.5 rounded border border-purple-500/30 space-y-1">
+                  <div class="font-bold text-purple-300 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-purple-400"></span> admin
+                  </div>
+                  <p class="text-gray-400 text-[10px]">Unrestricted access to all endpoints: User CRUD, Edge Node token pairing, Channel management, Storage, Resolution presets, System reboot.</p>
+                </div>
+                <div class="bg-[#111827] p-2.5 rounded border border-sky-500/30 space-y-1">
+                  <div class="font-bold text-sky-300 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-sky-400"></span> operator
+                  </div>
+                  <p class="text-gray-400 text-[10px]">Channel creation and edits, resolution presets, ad template CG overlays, emergency slate firing, live stream monitoring. Forbidden: User management.</p>
+                </div>
+                <div class="bg-[#111827] p-2.5 rounded border border-emerald-500/30 space-y-1">
+                  <div class="font-bold text-emerald-300 flex items-center gap-1.5">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span> content_scheduler
+                  </div>
+                  <p class="text-gray-400 text-[10px]">Strictly restricted to adding/updating playout schedule items, browsing NAS/SMB storage, probing media files, and TMDb metadata search. Returns 403 Forbidden for channel creation, user edits, or agent pairing.</p>
                 </div>
               </div>
             </div>
@@ -2054,6 +2269,187 @@
     </div>
   </div>
 
+  <!-- ==================================================================== -->
+  <!-- MODAL: FIRST-LAUNCH SETUP WIZARD (CREATE FIRST ADMINISTRATOR) -->
+  <!-- ==================================================================== -->
+  <div id="setup-modal" class="hidden fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-indigo-500/50 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden anim-zoom">
+      <div class="px-5 py-4 bg-gradient-to-r from-indigo-900/60 to-[#1A2234] border-b border-indigo-500/30 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center shadow-md">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">First-Launch Master Playout Setup</h3>
+            <p class="text-[11px] text-indigo-300">Create the primary Root Administrator account</p>
+          </div>
+        </div>
+        <button onclick="closeSetupModal()" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div class="bg-indigo-950/40 border border-indigo-500/30 p-3 rounded-lg text-indigo-200 space-y-1">
+          <div class="font-bold flex items-center gap-1.5">
+            <span>🛡️ Broadcast Cluster Initialization</span>
+          </div>
+          <p class="text-[11px] text-gray-300">No administrators are currently registered. In compliance with security standards, create the root administrator account. All playout control plane APIs will require cryptographic authentication thereafter.</p>
+        </div>
+
+        <div class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Root Admin Username</label>
+              <input type="text" id="setup-username" value="admin" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+            </div>
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Full Display Name</label>
+              <input type="text" id="setup-fullname" value="Chief Broadcast Engineer" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white">
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Official Engineering Email</label>
+            <input type="email" id="setup-email" value="chief@mcrflow.tv" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white">
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Master Password</label>
+              <input type="password" id="setup-password" value="SuperAdminPass2026!" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+            </div>
+            <div>
+              <label class="block text-[11px] text-gray-400 mb-1">Confirm Master Password</label>
+              <input type="password" id="setup-password-confirm" value="SuperAdminPass2026!" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-5 py-3.5 bg-[#1A2234] border-t border-[#2D3A54] flex justify-between items-center">
+        <span class="text-[10px] text-gray-400 font-mono">Role: admin (Permanent Root)</span>
+        <div class="flex gap-2">
+          <button onclick="closeSetupModal()" class="px-3.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs font-semibold">Cancel</button>
+          <button onclick="completeInitialSetup()" class="px-4 py-1.5 bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white rounded text-xs font-semibold shadow-lg">Initialize & Launch MCRFlow</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- MODAL: LOGIN & ROLE SWITCHER -->
+  <!-- ==================================================================== -->
+  <div id="login-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md shadow-2xl overflow-hidden anim-zoom">
+      <div class="px-5 py-3.5 bg-[#1A2234] border-b border-[#2D3A54] flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-indigo-600 flex items-center justify-center">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+          </div>
+          <h3 class="text-sm font-bold text-white">MCRFlow Operator Authentication</h3>
+        </div>
+        <button onclick="closeLoginModal()" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 text-xs">
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">Username</label>
+          <input type="text" id="login-username" value="admin" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+        </div>
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">Password</label>
+          <input type="password" id="login-password" value="••••••••••••" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+        </div>
+
+        <button onclick="performLogin()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold shadow transition-all">
+          Sign In with Credentials
+        </button>
+
+        <div class="pt-3 border-t border-gray-800 space-y-2">
+          <div class="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Quick Role Profile Switcher (Simulation):</div>
+          <div class="space-y-1.5">
+            <button onclick="switchSimulatedUser('admin', 'Chief Admin', 'AD')" class="w-full p-2 bg-[#1A2234] hover:bg-[#25324B] border border-purple-500/30 rounded flex items-center justify-between text-left transition-all">
+              <div class="flex items-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-purple-600 flex items-center justify-center text-[9px] font-bold text-white">AD</span>
+                <div>
+                  <div class="font-bold text-white text-[11px]">Chief Broadcast Engineer</div>
+                  <div class="text-[9px] text-gray-400">Full System Control, User Admin, Edge Nodes</div>
+                </div>
+              </div>
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-mono uppercase font-semibold">ADMIN</span>
+            </button>
+
+            <button onclick="switchSimulatedUser('operator', 'Rajesh Kumar', 'RK')" class="w-full p-2 bg-[#1A2234] hover:bg-[#25324B] border border-sky-500/30 rounded flex items-center justify-between text-left transition-all">
+              <div class="flex items-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-sky-600 flex items-center justify-center text-[9px] font-bold text-white">RK</span>
+                <div>
+                  <div class="font-bold text-white text-[11px]">Rajesh Kumar (MCR Desk)</div>
+                  <div class="text-[9px] text-gray-400">Channels, Live Playout, Ad Overlays, Emergency Slate</div>
+                </div>
+              </div>
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 font-mono uppercase font-semibold">OPERATOR</span>
+            </button>
+
+            <button onclick="switchSimulatedUser('content_scheduler', 'Rahul Sharma', 'RS')" class="w-full p-2 bg-[#1A2234] hover:bg-[#25324B] border border-emerald-500/30 rounded flex items-center justify-between text-left transition-all">
+              <div class="flex items-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-emerald-600 flex items-center justify-center text-[9px] font-bold text-white">RS</span>
+                <div>
+                  <div class="font-bold text-white text-[11px]">Rahul Sharma (Scheduler)</div>
+                  <div class="text-[9px] text-amber-300">Restricted: Media Scheduling & Storage Only</div>
+                </div>
+              </div>
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono uppercase font-semibold">SCHEDULER</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- MODAL: ADD NEW SYSTEM USER -->
+  <!-- ==================================================================== -->
+  <div id="create-user-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md shadow-2xl overflow-hidden anim-zoom">
+      <div class="px-5 py-3.5 bg-[#1A2234] border-b border-[#2D3A54] flex items-center justify-between">
+        <h3 class="text-sm font-bold text-white">Add System Operator / User</h3>
+        <button onclick="closeCreateUserModal()" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="p-5 space-y-3.5 text-xs">
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">Username (Login ID)</label>
+          <input type="text" id="nu-username" placeholder="e.g. scheduler_priya" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+        </div>
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">Full Display Name</label>
+          <input type="text" id="nu-fullname" placeholder="e.g. Priya Nair" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white">
+        </div>
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">Official Email</label>
+          <input type="email" id="nu-email" placeholder="e.g. priya@mcrflow.tv" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white">
+        </div>
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">Initial Password</label>
+          <input type="password" id="nu-password" placeholder="Min 8 characters" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+        </div>
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">Assigned Security Role</label>
+          <select id="nu-role" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-medium">
+            <option value="content_scheduler" selected>content_scheduler (Restricted to Scheduling & Storage)</option>
+            <option value="operator">operator (Channel Management, Playout Egress & Slate)</option>
+            <option value="admin">admin (Full Unrestricted System Administration)</option>
+          </select>
+          <p class="text-[10px] text-gray-400 mt-1">Role 'content_scheduler' cannot modify channel settings, edge agents, or user accounts.</p>
+        </div>
+      </div>
+
+      <div class="px-5 py-3 bg-[#1A2234] border-t border-[#2D3A54] flex justify-end gap-2">
+        <button onclick="closeCreateUserModal()" class="px-3.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs font-semibold">Cancel</button>
+        <button onclick="saveNewUser()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold shadow">Create User</button>
+      </div>
+    </div>
+  </div>
+
 
   <!-- Client-side Interactive JavaScript Engine -->
   <script>
@@ -2092,7 +2488,7 @@
 
     // Settings Subtabs
     function switchSettingsTab(tabName) {
-      const tabs = ['resolutions', 'agents', 'storage', 'bots', 'mesh', 'i18n'];
+      const tabs = ['resolutions', 'users', 'agents', 'storage', 'bots', 'mesh', 'i18n'];
       tabs.forEach(t => {
         const btn = document.getElementById(`set-tab-${t}`);
         const content = document.getElementById(`set-content-${t}`);
@@ -2321,6 +2717,108 @@
     function confirmPairing() {
       alert("Handshake verified via cryptographically secure token. Edge Agent paired and active!");
       closePairModal();
+    }
+
+    // Setup Modal Operations
+    function openSetupModal() {
+      document.getElementById('setup-modal').classList.remove('hidden');
+    }
+    function closeSetupModal() {
+      document.getElementById('setup-modal').classList.add('hidden');
+    }
+    function completeInitialSetup() {
+      const u = document.getElementById('setup-username').value;
+      const n = document.getElementById('setup-fullname').value;
+      alert(`Initial setup completed! Root Administrator "${u}" (${n}) registered with Bcrypt password hashing. Authentication is now active cluster-wide.`);
+      closeSetupModal();
+      switchSimulatedUser('admin', n, 'AD');
+    }
+
+    // Login Modal Operations
+    function openLoginModal() {
+      document.getElementById('login-modal').classList.remove('hidden');
+    }
+    function closeLoginModal() {
+      document.getElementById('login-modal').classList.add('hidden');
+    }
+    function performLogin() {
+      const u = document.getElementById('login-username').value;
+      alert(`Authenticated successfully as user "${u}". Cryptographic JWT bearer session issued.`);
+      closeLoginModal();
+    }
+    function switchSimulatedUser(role, displayName, initials) {
+      const nameEl = document.getElementById('user-name-display');
+      const roleEl = document.getElementById('user-role-badge');
+      const avatarEl = document.getElementById('user-avatar-badge');
+
+      if (avatarEl) avatarEl.textContent = initials;
+      if (nameEl) {
+        nameEl.innerHTML = `${displayName} <span class="text-[9px] px-1 py-0.2 rounded font-mono border uppercase font-semibold" id="user-role-badge">${role}</span>`;
+      }
+
+      const newRoleEl = document.getElementById('user-role-badge');
+      if (newRoleEl) {
+        if (role === 'admin') {
+          newRoleEl.className = "text-[9px] px-1 py-0.2 rounded bg-purple-500/20 text-purple-300 font-mono border border-purple-500/30 uppercase font-semibold";
+        } else if (role === 'operator') {
+          newRoleEl.className = "text-[9px] px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 font-mono border border-sky-500/30 uppercase font-semibold";
+        } else {
+          newRoleEl.className = "text-[9px] px-1 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono border border-emerald-500/30 uppercase font-semibold";
+        }
+      }
+
+      closeLoginModal();
+
+      if (role === 'content_scheduler') {
+        alert(`Active Role Switched to: [content_scheduler]\n\nScope Notice:\n• Permitted: Scheduling timelines & NAS/SMB storage file browsing.\n• Restricted (403 Forbidden): Cannot create/edit channels, modify edge agents, or alter user accounts.`);
+      } else {
+        alert(`Active Role Switched to: [${role}] (${displayName}).`);
+      }
+    }
+
+    // User Creation Modal Operations
+    function openCreateUserModal() {
+      document.getElementById('create-user-modal').classList.remove('hidden');
+    }
+    function closeCreateUserModal() {
+      document.getElementById('create-user-modal').classList.add('hidden');
+    }
+    function saveNewUser() {
+      const u = document.getElementById('nu-username').value;
+      const r = document.getElementById('nu-role').value;
+      alert(`User "${u}" with role "${r}" successfully created with hashed password and persistent storage!`);
+      closeCreateUserModal();
+    }
+
+    // HLS Stream & Token Utilities
+    function copyHlsUrl() {
+      const input = document.getElementById('channel-resolved-hls-url');
+      if (input) {
+        input.select();
+        navigator.clipboard.writeText(input.value).then(() => {
+          alert("HLS Stream URL copied to clipboard!\n" + input.value);
+        }).catch(() => {
+          alert("HLS Stream URL:\n" + input.value);
+        });
+      }
+    }
+    function previewHlsStream() {
+      const input = document.getElementById('channel-resolved-hls-url');
+      const url = input ? input.value : "";
+      alert("Launching HLS Web Preview Player...\nStream URL: " + url + "\nRolling Buffer: 10 active segments (#EXT-X-MEDIA-SEQUENCE auto-pruned)");
+    }
+    function generateRandomToken(targetId) {
+      const chars = 'abcdef0123456789';
+      let tok = targetId.includes('hls') ? 'hls_sec_' : 'epg_sec_';
+      for (let i = 0; i < 16; i++) {
+        tok += chars[Math.floor(Math.random() * chars.length)];
+      }
+      const el = document.getElementById(targetId);
+      if (el) el.value = tok;
+      const resolvedEl = document.getElementById('channel-resolved-hls-url');
+      if (resolvedEl && targetId.includes('hls')) {
+        resolvedEl.value = `http://playout.mcrflow.tv:8080/hls/ch-01/master.m3u8?token=${tok}`;
+      }
     }
 
     // Multilingual Localization Dictionaries (English + 10 Indian Languages)
