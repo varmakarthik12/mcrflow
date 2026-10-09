@@ -23,9 +23,9 @@ fi
 
 echo "================================================================================"
 echo "  MCRFLOW PLAYOUT - ALL-IN-ONE CONTAINER BOOTED"
-echo "  Web Management UI: http://localhost:8080"
+echo "  Web Management UI: http://localhost:3081"
 echo "  Control Plane gRPC: :9090"
-echo "  Embedded Agent:     :9095 (Auto-Paired locally)"
+echo "  Embedded Agent:     :3082 (Auto-Paired locally)"
 echo "================================================================================"
 
 exec "$@"

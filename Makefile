@@ -16,7 +16,7 @@ help:
 	@echo "  make dev-control     Run Control Plane with live auto-reload (Air)"
 	@echo "  make dev-backend     Alias for dev-control"
 	@echo "  make dev-agent       Run Edge Playout Agent with live auto-reload (Air)"
-	@echo "  make dev-ui          Run Web UI development server on port 3000"
+	@echo "  make dev-ui          Run Web UI dev server on port 3080 (proxies to :3081)"
 	@echo ""
 	@echo "  make build           Compile all binaries into $(BIN_DIR)/"
 	@echo "  make build-control   Compile $(BIN_DIR)/mcrflow-control"
@@ -64,18 +64,10 @@ dev-agent:
 		go run ./cmd/mcrflow-agent; \
 	fi
 
-# Run UI standalone dev server on port 3000
+# Run UI standalone dev server on port 3080 (reverse proxying /api/* and /hls/* to :3081)
 dev-ui:
-	@echo "--> Starting Web UI Dev Server on http://localhost:3000..."
-	@if command -v npx >/dev/null 2>&1; then \
-		npx serve web -l 3000; \
-	elif command -v python3 >/dev/null 2>&1; then \
-		python3 -m http.server 3000 --directory web; \
-	elif command -v python >/dev/null 2>&1; then \
-		python -m http.server 3000 --directory web; \
-	else \
-		echo "Neither npx nor python found. Open web/index.html in browser directly."; \
-	fi
+	@echo "--> Starting Web UI Dev Server on http://localhost:3080 (proxying to :3081)..."
+	go run ./scripts/dev-ui-server.go
 
 # Build all binaries
 build: build-control build-agent

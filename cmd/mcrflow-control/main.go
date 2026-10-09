@@ -50,7 +50,7 @@ func getEnvInt(key string, fallback int) int {
 }
 
 func main() {
-	defaultPort := getEnvInt("MCRFLOW_PORT", getEnvInt("PORT", 8080))
+	defaultPort := getEnvInt("MCRFLOW_PORT", getEnvInt("PORT", 3081))
 	defaultDataDir := getEnv("MCRFLOW_DATA_DIR", getEnv("MCRFLOW_STORAGE_PATH", "./data"))
 	defaultTmdbKey := getEnv("MCRFLOW_TMDB_KEY", "")
 

@@ -39,7 +39,7 @@ func getEnvInt(key string, fallback int) int {
 }
 
 func main() {
-	defaultPort := getEnvInt("MCRFLOW_PORT", getEnvInt("PORT", 9095))
+	defaultPort := getEnvInt("MCRFLOW_PORT", getEnvInt("PORT", 3082))
 	defaultAgentID := getEnv("MCRFLOW_AGENT_ID", "")
 	defaultAuthPath := getEnv("MCRFLOW_AUTH_FILE", "")
 

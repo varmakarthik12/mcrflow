@@ -30,7 +30,7 @@ EOF
     echo "  MCRFLOW EDGE PLAYOUT AGENT - CRYPTOGRAPHIC PAIRING REQUIRED"
     echo "================================================================================"
     echo "  Agent ID:         ${AGENT_ID}"
-    echo "  Listen Port:      :9095 (gRPC / mTLS)"
+    echo "  Listen Port:      :3082 (gRPC / mTLS)"
     echo "  Persistent Token: ${AGENT_TOKEN}"
     echo ""
     echo "  👉 Copy and paste the token above into MCRFlow Web UI:"

@@ -217,7 +217,7 @@ func (m *Manager) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func ResolveHlsStreamURL(baseURL, channelID, webToken string) string {
 	base := strings.TrimRight(baseURL, "/")
 	if base == "" {
-		base = "http://localhost:8080"
+		base = "http://localhost:3081"
 	}
 	url := fmt.Sprintf("%s/hls/%s/master.m3u8", base, channelID)
 	if webToken != "" {

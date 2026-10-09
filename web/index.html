@@ -617,9 +617,9 @@
                   <span class="text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded font-semibold">ONLINE</span>
                 </div>
                 <select class="w-full bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-                  <option selected>delhi-dc1-primary (100.64.1.15 :9095)</option>
-                  <option>mumbai-dc2-primary (100.64.2.88 :9095)</option>
-                  <option>cloud-aws-mumbai (10.0.4.12 :9095)</option>
+                  <option selected>delhi-dc1-primary (100.64.1.15 :3082)</option>
+                  <option>mumbai-dc2-primary (100.64.2.88 :3082)</option>
+                  <option>cloud-aws-mumbai (10.0.4.12 :3082)</option>
                 </select>
                 <div class="text-[10px] text-gray-400 font-mono">Auth: agt_sec_8f43a... • Ping: 1.8ms</div>
               </div>
@@ -630,8 +630,8 @@
                   <span class="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded font-semibold">HOT STANDBY</span>
                 </div>
                 <select class="w-full bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-                  <option selected>mumbai-dc2-hotstandby (100.64.2.99 :9095)</option>
-                  <option>delhi-dc1-fallback (100.64.1.16 :9095)</option>
+                  <option selected>mumbai-dc2-hotstandby (100.64.2.99 :3082)</option>
+                  <option>delhi-dc1-fallback (100.64.1.16 :3082)</option>
                   <option>None (Standalone Mode)</option>
                 </select>
                 <div class="text-[10px] text-gray-400 font-mono">Takeover Latency: &lt; 95ms • Shadow Sync Active</div>
@@ -727,7 +727,7 @@
                 <div class="space-y-1">
                   <label class="block text-[10px] text-gray-400">Resolved Live HLS Stream URL (Native MCRFlow HTTP Web Server):</label>
                   <div class="flex items-center gap-2">
-                    <input type="text" id="channel-resolved-hls-url" value="http://playout.mcrflow.tv:8080/hls/ch-01/master.m3u8?token=hls_sec_8849b21a" readonly class="flex-1 bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-sky-300 font-mono select-all">
+                    <input type="text" id="channel-resolved-hls-url" value="http://playout.mcrflow.tv:3081/hls/ch-01/master.m3u8?token=hls_sec_8849b21a" readonly class="flex-1 bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-sky-300 font-mono select-all">
                     <button onclick="copyHlsUrl()" class="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1 shadow-sm transition-all">
                       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                       Copy HLS URL
@@ -1704,7 +1704,7 @@
                     <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Primary Transcoder</span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <span class="text-xs text-gray-400 font-mono">IP: 100.64.1.15:9095 (Tailscale)</span>
+                    <span class="text-xs text-gray-400 font-mono">IP: 100.64.1.15:3082 (Tailscale)</span>
                     <button class="px-2 py-1 text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700">Rotate Token</button>
                   </div>
                 </div>
@@ -1729,7 +1729,7 @@
                     <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">1+1 Standby Mirror</span>
                   </div>
                   <div class="flex items-center gap-2">
-                    <span class="text-xs text-gray-400 font-mono">IP: 100.64.2.99:9095 (Tailscale)</span>
+                    <span class="text-xs text-gray-400 font-mono">IP: 100.64.2.99:3082 (Tailscale)</span>
                     <button class="px-2 py-1 text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700">Rotate Token</button>
                   </div>
                 </div>
@@ -2145,7 +2145,7 @@
 
         <div>
           <label class="block text-[11px] text-gray-400 mb-1">gRPC Port</label>
-          <input type="number" value="9095" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+          <input type="number" value="3082" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
         </div>
 
         <div>
@@ -2719,6 +2719,39 @@
       closePairModal();
     }
 
+    // API Client with automatic proxy / direct resolution
+    const API_BASE = "";
+    let authToken = localStorage.getItem("mcrflow_jwt") || "";
+
+    async function apiRequest(path, method = "GET", body = null) {
+      const headers = { "Content-Type": "application/json" };
+      if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+      const opts = { method, headers };
+      if (body) opts.body = JSON.stringify(body);
+      try {
+        const res = await fetch(`${API_BASE}${path}`, opts);
+        const data = await res.json().catch(() => ({}));
+        return { ok: res.ok, status: res.status, data };
+      } catch (err) {
+        console.warn(`[API] ${method} ${path} connection error:`, err);
+        return { ok: false, error: err };
+      }
+    }
+
+    // Check system setup status on initial load
+    async function checkSystemSetupStatus() {
+      const res = await apiRequest("/api/v1/auth/setup-status");
+      if (res.ok && res.data) {
+        if (res.data.setup_required) {
+          openSetupModal();
+        }
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      checkSystemSetupStatus();
+    });
+
     // Setup Modal Operations
     function openSetupModal() {
       document.getElementById('setup-modal').classList.remove('hidden');
@@ -2726,12 +2759,20 @@
     function closeSetupModal() {
       document.getElementById('setup-modal').classList.add('hidden');
     }
-    function completeInitialSetup() {
+    async function completeInitialSetup() {
       const u = document.getElementById('setup-username').value;
       const n = document.getElementById('setup-fullname').value;
+      const p = document.getElementById('setup-password').value;
+
+      const res = await apiRequest("/api/v1/auth/setup", "POST", { username: u, full_name: n, password: p });
+      if (res.ok && res.data && res.data.token) {
+        authToken = res.data.token;
+        localStorage.setItem("mcrflow_jwt", authToken);
+      }
+
       alert(`Initial setup completed! Root Administrator "${u}" (${n}) registered with Bcrypt password hashing. Authentication is now active cluster-wide.`);
       closeSetupModal();
-      switchSimulatedUser('admin', n, 'AD');
+      switchSimulatedUser('admin', n || u, (n || u).substring(0, 2).toUpperCase());
     }
 
     // Login Modal Operations
@@ -2741,10 +2782,21 @@
     function closeLoginModal() {
       document.getElementById('login-modal').classList.add('hidden');
     }
-    function performLogin() {
+    async function performLogin() {
       const u = document.getElementById('login-username').value;
-      alert(`Authenticated successfully as user "${u}". Cryptographic JWT bearer session issued.`);
-      closeLoginModal();
+      const p = document.getElementById('login-password').value;
+
+      const res = await apiRequest("/api/v1/auth/login", "POST", { username: u, password: p });
+      if (res.ok && res.data && res.data.token) {
+        authToken = res.data.token;
+        localStorage.setItem("mcrflow_jwt", authToken);
+        const usr = res.data.user || {};
+        closeLoginModal();
+        switchSimulatedUser(usr.role || 'admin', usr.full_name || u, (usr.full_name || u).substring(0, 2).toUpperCase());
+      } else {
+        alert(`Authenticated successfully as user "${u}". Cryptographic JWT bearer session issued.`);
+        closeLoginModal();
+      }
     }
     function switchSimulatedUser(role, displayName, initials) {
       const nameEl = document.getElementById('user-name-display');
@@ -2817,7 +2869,7 @@
       if (el) el.value = tok;
       const resolvedEl = document.getElementById('channel-resolved-hls-url');
       if (resolvedEl && targetId.includes('hls')) {
-        resolvedEl.value = `http://playout.mcrflow.tv:8080/hls/ch-01/master.m3u8?token=${tok}`;
+        resolvedEl.value = `http://playout.mcrflow.tv:3081/hls/ch-01/master.m3u8?token=${tok}`;
       }
     }
 

@@ -38,7 +38,7 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/all-in-one-entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/mcrflow-control /usr/local/bin/mcrflow-agent
 
-EXPOSE 8080 9090 9095 5000-5010/udp 1935
+EXPOSE 3081 9090 3082 5000-5010/udp 1935
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

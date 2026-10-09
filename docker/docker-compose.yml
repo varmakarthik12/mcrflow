@@ -9,9 +9,9 @@ services:
     container_name: mcrflow-all-in-one
     restart: unless-stopped
     ports:
-      - "8080:8080"      # React Web UI + REST API Gateway
+      - "3081:3081"      # React Web UI + REST API Gateway
       - "9090:9090"      # Control Plane gRPC
-      - "9095:9095"      # Embedded Agent gRPC
+      - "3082:3082"      # Embedded Agent gRPC
       - "5000-5010:5000-5010/udp" # UDP Multicast/Unicast Playout Egress
       - "1935:1935"      # RTMP Ingest/Egress
     volumes:
@@ -38,7 +38,7 @@ services:
     restart: unless-stopped
     command: ["/usr/local/bin/mcrflow-control", "--config", "/etc/mcrflow/control.yaml"]
     ports:
-      - "8080:8080"      # Management Web UI
+      - "3081:3081"      # Management Web UI
       - "9090:9090"      # Control Plane gRPC Bus
     volumes:
       - mcrflow-data:/var/lib/mcrflow-data
@@ -56,7 +56,7 @@ services:
     container_name: edge-agent-primary
     restart: unless-stopped
     ports:
-      - "9095:9095"
+      - "3082:3082"
       - "5000-5005:5000-5005/udp"
     volumes:
       - mcrflow-agent-primary-auth:/var/lib/mcrflow-agent
@@ -74,7 +74,7 @@ services:
     container_name: edge-agent-fallback
     restart: unless-stopped
     ports:
-      - "9096:9095"
+      - "3083:3082"
       - "5006-5010:5000-5005/udp"
     volumes:
       - mcrflow-agent-fallback-auth:/var/lib/mcrflow-agent

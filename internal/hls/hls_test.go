@@ -113,13 +113,13 @@ func TestHlsHttpServingAndTokenSecurity(t *testing.T) {
 	}
 
 	// Test 5: Direct URL resolution
-	urlPub := ResolveHlsStreamURL("http://localhost:8080", "ch-public", "")
-	if urlPub != "http://localhost:8080/hls/ch-public/master.m3u8" {
+	urlPub := ResolveHlsStreamURL("http://localhost:3081", "ch-public", "")
+	if urlPub != "http://localhost:3081/hls/ch-public/master.m3u8" {
 		t.Fatalf("unexpected resolved public url: %s", urlPub)
 	}
 
-	urlSec := ResolveHlsStreamURL("http://localhost:8080", "ch-secure", "tok_premium_9988")
-	if urlSec != "http://localhost:8080/hls/ch-secure/master.m3u8?token=tok_premium_9988" {
+	urlSec := ResolveHlsStreamURL("http://localhost:3081", "ch-secure", "tok_premium_9988")
+	if urlSec != "http://localhost:3081/hls/ch-secure/master.m3u8?token=tok_premium_9988" {
 		t.Fatalf("unexpected resolved secure url: %s", urlSec)
 	}
 
@@ -127,8 +127,8 @@ func TestHlsHttpServingAndTokenSecurity(t *testing.T) {
 		ID:          "ch-01",
 		HlsWebToken: "secret123",
 	}
-	UpdateChannelHlsDestination(ch, "http://mcr.station.tv:8080")
-	if ch.HlsStreamURL != "http://mcr.station.tv:8080/hls/ch-01/master.m3u8?token=secret123" {
+	UpdateChannelHlsDestination(ch, "http://mcr.station.tv:3081")
+	if ch.HlsStreamURL != "http://mcr.station.tv:3081/hls/ch-01/master.m3u8?token=secret123" {
 		t.Fatalf("unexpected ch.HlsStreamURL: %s", ch.HlsStreamURL)
 	}
 	if len(ch.Destinations) != 1 || ch.Destinations[0].Protocol != models.ProtocolHLS {

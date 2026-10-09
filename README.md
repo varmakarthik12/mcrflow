@@ -13,7 +13,7 @@ The system consists of two core components: a central **Control Plane** (serving
 ```mermaid
 flowchart TD
     subgraph ControlPlane["Central Control Plane (Go + Embedded React Console)"]
-        UI["Web Management Console (:8080)"]
+        UI["Web Management Console (:3081)"]
         API["REST & RPC Control Services"]
         HLS["Native HLS Streamer (10-Seg Rolling Cache)"]
         Sched["24/7 Timeline Scheduler"]
@@ -21,7 +21,7 @@ flowchart TD
     end
 
     subgraph EdgeAgents["Edge Playout Node"]
-        Agent["Playout Agent (:9095)"]
+        Agent["Playout Agent (:3082)"]
     end
 
     subgraph Storage["Media Sources"]
@@ -96,9 +96,9 @@ curl -LO https://github.com/varmakarthik12/mcrflow/releases/latest/download/mcrf
 tar -xzf mcrflow-control_1.0.0_linux_amd64.tar.gz
 
 # Run the control plane
-./mcrflow-control --port 8080 --data-dir ./data
+./mcrflow-control --port 3081 --data-dir ./data
 ```
-Open `http://localhost:8080` in your browser to launch the web console.
+Open `http://localhost:3081` in your browser to launch the web console.
 
 #### Step 3: Download & Run Edge Playout Agent
 ```bash
@@ -106,7 +106,7 @@ curl -LO https://github.com/varmakarthik12/mcrflow/releases/latest/download/mcrf
 tar -xzf mcrflow-agent_1.0.0_linux_amd64.tar.gz
 
 # Start the edge agent daemon
-./mcrflow-agent --agent-id delhi-edge-01 --port 9095
+./mcrflow-agent --agent-id delhi-edge-01 --port 3082
 ```
 On initial boot, the agent prints its cryptographic pairing token in the console:
 ```text
@@ -129,7 +129,7 @@ After=network.target
 Type=simple
 User=mcrflow
 WorkingDirectory=/var/lib/mcrflow
-ExecStart=/usr/local/bin/mcrflow-control --port 8080 --data-dir /var/lib/mcrflow/data
+ExecStart=/usr/local/bin/mcrflow-control --port 3081 --data-dir /var/lib/mcrflow/data
 Restart=always
 RestartSec=5
 
@@ -169,12 +169,12 @@ xattr -d com.apple.quarantine mcrflow-agent 2>/dev/null || true
 #### Step 3: Run Binaries
 ```bash
 # Terminal 1: Launch Control Plane
-./mcrflow-control --port 8080
+./mcrflow-control --port 3081
 
 # Terminal 2: Launch Playout Agent
-./mcrflow-agent --agent-id mac-studio-01 --port 9095
+./mcrflow-agent --agent-id mac-studio-01 --port 3082
 ```
-Access the dashboard at `http://localhost:8080`.
+Access the dashboard at `http://localhost:3081`.
 
 ---
 
@@ -202,12 +202,12 @@ Expand-Archive -Path mcrflow-agent_1.0.0_windows_amd64.zip -DestinationPath C:\m
 ```powershell
 # Start Control Plane
 cd C:\mcrflow
-.\mcrflow-control.exe -port 8080 -data-dir C:\mcrflow\data
+.\mcrflow-control.exe -port 3081 -data-dir C:\mcrflow\data
 
 # In a separate window, start Edge Agent
-.\mcrflow-agent.exe -agent-id win-edge-01 -port 9095
+.\mcrflow-agent.exe -agent-id win-edge-01 -port 3082
 ```
-Open `http://localhost:8080` in Edge, Chrome, or Firefox.
+Open `http://localhost:3081` in Edge, Chrome, or Firefox.
 
 ---
 
@@ -230,8 +230,8 @@ MCRFlow images are published to the GitHub Container Registry:
 docker run -d \
   --name mcrflow \
   --restart unless-stopped \
-  -p 8080:8080 \
-  -p 9095:9095 \
+  -p 3081:3081 \
+  -p 3082:3082 \
   -v /var/lib/mcrflow:/data/mcrflow \
   -v /mnt/storage/movies:/media/storage:ro \
   ghcr.io/varmakarthik12/mcrflow:latest
@@ -240,7 +240,7 @@ docker run -d \
 docker run -d \
   --name mcrflow-agent \
   --restart unless-stopped \
-  -p 9095:9095 \
+  -p 3082:3082 \
   -e MCRFLOW_AGENT_ID="delhi-edge-01" \
   -v /var/lib/mcrflow-agent:/data/mcrflow \
   -v /mnt/storage/movies:/media/storage:ro \
@@ -256,9 +256,9 @@ services:
     image: ghcr.io/varmakarthik12/mcrflow:latest
     container_name: mcrflow-control
     ports:
-      - "8080:8080"
+      - "3081:3081"
     environment:
-      - MCRFLOW_PORT=8080
+      - MCRFLOW_PORT=3081
       - MCRFLOW_DATA_DIR=/data/mcrflow
       - MCRFLOW_MEDIA_DIR=/media/storage
     volumes:
@@ -270,10 +270,10 @@ services:
     image: ghcr.io/varmakarthik12/mcrflow-agent:latest
     container_name: mcrflow-edge-primary
     ports:
-      - "9095:9095"
+      - "3082:3082"
     environment:
       - MCRFLOW_AGENT_ID=delhi-edge-primary
-      - MCRFLOW_PORT=9095
+      - MCRFLOW_PORT=3082
       - MCRFLOW_DATA_DIR=/data/mcrflow
     volumes:
       - edge1-data:/data/mcrflow
@@ -284,10 +284,10 @@ services:
     image: ghcr.io/varmakarthik12/mcrflow-agent:latest
     container_name: mcrflow-edge-standby
     ports:
-      - "9096:9095"
+      - "3083:3082"
     environment:
       - MCRFLOW_AGENT_ID=mumbai-edge-standby
-      - MCRFLOW_PORT=9095
+      - MCRFLOW_PORT=3082
       - MCRFLOW_DATA_DIR=/data/mcrflow
     volumes:
       - edge2-data:/data/mcrflow
@@ -310,7 +310,7 @@ Settings can be passed as CLI flags or environment variables (flags take precede
 
 | CLI Flag | Environment Variable | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `-port` | `MCRFLOW_PORT` | `8080` | HTTP listening port for Web UI, REST API, and native HLS stream |
+| `-port` | `MCRFLOW_PORT` | `3081` | HTTP listening port for Web UI, REST API, and native HLS stream |
 | `-data-dir` | `MCRFLOW_DATA_DIR` | `./data` | Directory for SQLite/JSON databases, auth tokens, and HLS segments |
 | `-media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Default media library path registered in storage browser |
 | `-tmdb-key` | `MCRFLOW_TMDB_KEY` | `""` | Optional TMDb API key for automatic movie/series metadata lookup |
@@ -320,7 +320,7 @@ Settings can be passed as CLI flags or environment variables (flags take precede
 | CLI Flag | Environment Variable | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `-agent-id` | `MCRFLOW_AGENT_ID` | Hostname | Unique node identifier for this edge playout daemon |
-| `-port` | `MCRFLOW_PORT` | `9095` | Agent RPC/API listening port for control plane communication |
+| `-port` | `MCRFLOW_PORT` | `3082` | Agent RPC/API listening port for control plane communication |
 | `-auth-file` | `MCRFLOW_AUTH_FILE` | `<data-dir>/agent_auth.json` | Path to persistent 256-bit cryptographic pairing token file |
 | `-data-dir` | `MCRFLOW_DATA_DIR` | `./data` | Working directory for agent runtime state |
 | `-media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Media storage mount path for clip playback |
@@ -346,7 +346,7 @@ make install-tools
 | :--- | :--- | :--- |
 | `make dev-control` | `air -c .air.control.toml` | Run Control Plane with live auto-reload on Go file edits |
 | `make dev-agent` | `air -c .air.agent.toml` | Run Edge Playout Agent with live auto-reload on Go file edits |
-| `make dev-ui` | `npx serve web -l 3000` | Start Web UI development server on `http://localhost:3000` |
+| `make dev-ui` | `go run ./scripts/dev-ui-server.go` | Start Web UI dev server on `http://localhost:3080` (reverse proxies to `:3081`) |
 | `make build` | `go build ...` | Compile all binaries into `./bin/` |
 | `make test` | `go test -v ./...` | Run all unit and integration test suites |
 | `make test-unit` | `go test -v ./internal/...` | Run unit tests only |
