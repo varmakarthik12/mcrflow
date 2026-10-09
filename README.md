@@ -318,32 +318,73 @@ If you prefer not to use Docker, standalone binaries for Linux, macOS, and Windo
 
 ---
 
-## Building from Source
+## Local Development & Makefile Guide
 
-### Prerequisites
-- **Go 1.23+**
-- **FFmpeg 6.0+** with `libx264` (and NVENC or VAAPI for hardware acceleration)
+MCRFlow includes a complete `Makefile` along with **[Air](https://github.com/air-verse/air)** configurations for instant live-reload during backend and edge development.
 
-### Build Commands
+### 1. Install Tooling
 ```bash
 # Clone the repository
 git clone https://github.com/mcrflow/mcrflow.git
 cd mcrflow
 
-# Build the control plane service
-go build -o bin/mcrflow-control ./cmd/mcrflow-control
-
-# Build the edge agent
-go build -o bin/mcrflow-agent ./cmd/mcrflow-agent
+# Install Air hot-reload tool
+make install-tools
+# or directly: go install github.com/air-verse/air@latest
 ```
 
-### Running Tests
-```bash
-# Run all unit tests
-go test -v ./internal/...
+### 2. Available `make` Targets
 
-# Run the end-to-end integration test
-go test -v ./tests/e2e/...
+| Target | Command | Description |
+| :--- | :--- | :--- |
+| `make dev-control` | `air -c .air.control.toml` | Run Control Plane with live auto-reload on Go file edits |
+| `make dev-backend` | Alias for `dev-control` | Run Control Plane backend |
+| `make dev-agent` | `air -c .air.agent.toml` | Run Edge Playout Agent with live auto-reload on Go file edits |
+| `make dev-ui` | `npx serve ui-mockup -l 3000` | Start Web UI development server on `http://localhost:3000` |
+| `make build` | `go build ...` | Compile all binaries (`mcrflow-control` & `mcrflow-agent`) into `./bin/` |
+| `make test` | `go test -v ./...` | Run all test suites across the repository |
+| `make test-unit` | `go test -v ./internal/...` | Run unit tests only |
+| `make test-e2e` | `go test -v ./tests/e2e/...` | Run end-to-end integration test suite |
+| `make test-race` | `go test -race -v ./...` | Run tests with Go race detector enabled |
+| `make fmt` | `go fmt ./...` | Auto-format Go code |
+| `make vet` | `go vet ./...` | Run Go static analysis |
+| `make clean` | `rm -rf bin/ tmp/` | Clean build artifacts and temporary files |
+
+---
+
+### 3. Running Dev Servers
+
+#### Terminal 1 — Control Plane (Live Reload)
+```bash
+make dev-control
+# or directly: air -c .air.control.toml
+```
+
+#### Terminal 2 — Edge Playout Agent (Live Reload)
+```bash
+make dev-agent
+# or directly: air -c .air.agent.toml
+```
+
+#### Terminal 3 — Web UI Development Server
+```bash
+make dev-ui
+# or directly with npx: npx serve ui-mockup -l 3000
+# or directly with Python: python -m http.server 3000 --directory ui-mockup
+```
+
+Open `http://localhost:3000` to interact with the UI, or navigate to `http://localhost:8080` where the control plane serves both the API and embedded UI assets.
+
+---
+
+### 4. Compiling Binaries Directly
+If you prefer building without `make`:
+```bash
+# Build control plane binary
+go build -o bin/mcrflow-control ./cmd/mcrflow-control
+
+# Build edge agent binary
+go build -o bin/mcrflow-agent ./cmd/mcrflow-agent
 ```
 
 ---
