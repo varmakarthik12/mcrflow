@@ -1,0 +1,61 @@
+services:
+  # ============================================================================
+  # MCRFlow Control Plane (Web Management Console & Orchestrator)
+  # ============================================================================
+  control-plane:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.control
+    image: varmakarthik12/mcrflow-control:latest
+    container_name: mcrflow-control
+    restart: unless-stopped
+    ports:
+      - "3081:3081"
+    volumes:
+      - mcrflow-data:/data
+      - media-storage:/media/storage
+    environment:
+      - MCRFLOW_PORT=3081
+      - MCRFLOW_DATA_DIR=/data
+      - MCRFLOW_MEDIA_DIR=/media/storage
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+    networks:
+      - mcrflow-network
+
+  # ============================================================================
+  # MCRFlow Edge Playout Agent (Headless Playout Worker Node)
+  # ============================================================================
+  edge-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+    image: varmakarthik12/mcrflow-agent:latest
+    container_name: mcrflow-agent
+    restart: unless-stopped
+    ports:
+      - "3082:3082"
+    volumes:
+      - mcrflow-agent-data:/var/lib/mcrflow-agent
+      - media-storage:/media/storage
+    environment:
+      - MCRFLOW_PORT=3082
+      - MCRFLOW_DATA_DIR=/var/lib/mcrflow-agent
+      - MCRFLOW_MEDIA_DIR=/media/storage
+      - MCRFLOW_CONTROL_URL=http://control-plane:3081
+      - MCRFLOW_AGENT_ID=edge-agent-01
+    depends_on:
+      - control-plane
+    networks:
+      - mcrflow-network
+
+networks:
+  mcrflow-network:
+    driver: bridge
+
+volumes:
+  mcrflow-data:
+    driver: local
+  mcrflow-agent-data:
+    driver: local
+  media-storage:
+    driver: local

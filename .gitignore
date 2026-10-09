@@ -1,0 +1,14 @@
+bin/
+data/
+*.exe
+*.log
+*.ts
+!sample.ts
+!*.ts.go
+.air/
+/dist/
+tmp/
+.DS_Store
+node_modules/
+.gemini/
+qa_api_results.json

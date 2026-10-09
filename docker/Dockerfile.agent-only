@@ -1,0 +1,41 @@
+# ==============================================================================
+# MCRFlow Playout - Headless Edge Playout Agent Container
+# ==============================================================================
+
+# Stage 1: Build Headless Go Playout Agent
+FROM golang:1.23-bookworm AS builder
+WORKDIR /app
+COPY go.mod go.sum* ./
+RUN go mod download 2>/dev/null || true
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/mcrflow-agent ./cmd/mcrflow-agent
+
+# Stage 2: Minimal Broadcast Runtime with Hardware Acceleration
+FROM ubuntu:24.04 AS runtime
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install FFmpeg, GStreamer, network filesystem clients, and OpenSSL
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    jq \
+    openssl \
+    ffmpeg \
+    cifs-utils \
+    nfs-common \
+    vainfo \
+    mesa-va-drivers \
+    && rm -rf /var/lib/apt/lists/*
+
+# Setup persistent token volume and working directories
+RUN mkdir -p /var/lib/mcrflow-agent /media/storage
+VOLUME ["/var/lib/mcrflow-agent", "/media/storage"]
+
+COPY --from=builder /bin/mcrflow-agent /usr/local/bin/mcrflow-agent
+COPY docker/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh
+RUN chmod +x /usr/local/bin/agent-entrypoint.sh /usr/local/bin/mcrflow-agent
+
+EXPOSE 3082 5000-5010/udp 1935
+
+ENTRYPOINT ["/usr/local/bin/agent-entrypoint.sh"]
+CMD ["/usr/local/bin/mcrflow-agent", "--config", "/etc/mcrflow-agent/config.yaml"]

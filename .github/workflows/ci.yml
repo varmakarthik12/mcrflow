@@ -1,0 +1,98 @@
+name: MCRFlow CI & Merge Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Test & Verify Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'web/package.json'
+
+      - name: Build React Web UI
+        run: |
+          cd web
+          npm ci || npm install
+          npm run build
+          cd ..
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Install FFmpeg (Media Probing Runtime)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Verify Go Dependencies
+        run: go mod download
+
+      - name: Run Go Unit & E2E Integration Tests
+        run: go test -v -race ./...
+
+      - name: Compile MCRFlow Control Plane Binary
+        run: go build -v -o bin/mcrflow-control ./cmd/mcrflow-control
+
+      - name: Compile MCRFlow Edge Playout Agent Binary
+        run: go build -v -o bin/mcrflow-agent ./cmd/mcrflow-agent
+
+      - name: Verify Embedded UI Assets
+        run: |
+          test -f web/dist/index.html || exit 1
+          echo "Production React UI assets verified successfully"
+
+  lint:
+    name: Code Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Run Go Vet
+        run: go vet ./...
+
+  docker-dry-run:
+    name: Docker Build Dry Run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Control Plane Image Dry-Run
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.control
+          push: false
+          tags: varmakarthik12/mcrflow-control:test
+
+      - name: Build Edge Agent Image Dry-Run
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.agent
+          push: false
+          tags: varmakarthik12/mcrflow-agent:test

@@ -1,0 +1,46 @@
+# ==============================================================================
+# MCRFlow Edge Playout Agent Daemon
+# ==============================================================================
+
+# Stage 1: Build binary
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+WORKDIR /app
+ENV GOTOOLCHAIN=auto
+
+# Cache dependencies
+COPY go.mod go.sum* ./
+RUN go mod download
+
+# Compile static Linux binary
+COPY . .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /bin/mcrflow-agent ./cmd/mcrflow-agent
+
+# Stage 2: Runtime environment
+FROM alpine:3.20 AS runtime
+
+RUN apk add --no-cache \
+    ca-certificates \
+    ffmpeg \
+    tzdata \
+    curl
+
+WORKDIR /app
+RUN mkdir -p /var/lib/mcrflow-agent /media/storage
+
+# Persistent volumes for auth token and media storage
+VOLUME ["/var/lib/mcrflow-agent", "/media/storage"]
+
+COPY --from=builder /bin/mcrflow-agent /usr/local/bin/mcrflow-agent
+
+EXPOSE 3082
+
+ENV MCRFLOW_PORT=3082 \
+    MCRFLOW_DATA_DIR=/var/lib/mcrflow-agent \
+    MCRFLOW_MEDIA_DIR=/media/storage \
+    MCRFLOW_CONTROL_URL=http://control-plane:3081
+
+ENTRYPOINT ["/usr/local/bin/mcrflow-agent"]

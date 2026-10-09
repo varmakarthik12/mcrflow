@@ -1,0 +1,56 @@
+# ==============================================================================
+# MCRFlow Master Control Plane (Control Plane + Web Management UI + REST API)
+# ==============================================================================
+
+# Stage 1: Build React UI
+FROM --platform=$BUILDPLATFORM node:22-alpine AS ui-builder
+
+WORKDIR /app/web
+COPY web/package.json ./
+RUN npm install
+COPY web/ ./
+RUN npm run build
+
+# Stage 2: Build Go binary with embedded React assets
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+
+WORKDIR /app
+ENV GOTOOLCHAIN=auto
+
+# Cache Go dependencies
+COPY go.mod go.sum* ./
+RUN go mod download
+
+# Copy source and built React UI dist
+COPY . .
+COPY --from=ui-builder /app/web/dist ./web/dist
+
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /bin/mcrflow-control ./cmd/mcrflow-control
+
+# Stage 3: Runtime environment
+FROM alpine:3.20 AS runtime
+
+RUN apk add --no-cache \
+    ca-certificates \
+    ffmpeg \
+    tzdata \
+    curl
+
+WORKDIR /app
+RUN mkdir -p /data /media/storage
+
+# Default volume for persistent SQLite database and runtime data
+VOLUME ["/data"]
+
+COPY --from=builder /bin/mcrflow-control /usr/local/bin/mcrflow-control
+
+EXPOSE 3081
+
+ENV MCRFLOW_PORT=3081 \
+    MCRFLOW_DATA_DIR=/data \
+    MCRFLOW_MEDIA_DIR=/media/storage
+
+ENTRYPOINT ["/usr/local/bin/mcrflow-control"]

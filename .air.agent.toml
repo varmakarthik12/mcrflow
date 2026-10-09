@@ -1,0 +1,50 @@
+# Air configuration for MCRFlow Edge Playout Agent (Live Reload)
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./bin/mcrflow-agent ./cmd/mcrflow-agent"
+  bin = "./bin/mcrflow-agent"
+  entrypoint = "./bin/mcrflow-agent"
+  delay = 500
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "bin", "web", "docs", "data"]
+  exclude_file = []
+  exclude_regex = ["_test\\.go$"]
+  exclude_unchanged = false
+  follow_symlink = false
+  full_bin = ""
+  include_dir = ["cmd/mcrflow-agent", "internal"]
+  include_ext = ["go"]
+  include_file = []
+  kill_delay = "0s"
+  log = "build-errors.log"
+  poll = false
+  poll_interval = 0
+  rerun = false
+  rerun_delay = 500
+  send_interrupt = false
+  stop_on_error = true
+
+[build.windows]
+  cmd = "go build -o ./bin/mcrflow-agent.exe ./cmd/mcrflow-agent"
+  bin = "./bin/mcrflow-agent.exe"
+  entrypoint = "./bin/mcrflow-agent.exe"
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  main_only = false
+  time = false
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = false
+  keep_scroll = true

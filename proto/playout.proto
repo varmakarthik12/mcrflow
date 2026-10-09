@@ -1,0 +1,621 @@
+syntax = "proto3";
+
+package playout.v1;
+
+option go_package = "github.com/sources/stream/proto/v1;playoutv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+// ============================================================================
+// Channel Management Service
+// ============================================================================
+
+service ChannelService {
+  rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse);
+  rpc GetChannel(GetChannelRequest) returns (Channel);
+  rpc CreateChannel(CreateChannelRequest) returns (Channel);
+  rpc UpdateChannel(UpdateChannelRequest) returns (Channel);
+  rpc DeleteChannel(DeleteChannelRequest) returns (DeleteChannelResponse);
+  
+  rpc TriggerEmergencySlate(EmergencySlateRequest) returns (EmergencySlateResponse);
+  rpc SkipNext(SkipNextRequest) returns (SkipNextResponse);
+}
+
+enum RedundancyMode {
+  REDUNDANCY_MODE_UNSPECIFIED = 0;
+  REDUNDANCY_MODE_ACTIVE_PASSIVE_AUTO_FAILOVER = 1;
+  REDUNDANCY_MODE_ONE_PLUS_ONE_MIRRORING = 2;
+  REDUNDANCY_MODE_STANDALONE_NO_FALLBACK = 3;
+}
+
+enum StreamProtocol {
+  STREAM_PROTOCOL_UNSPECIFIED = 0;
+  STREAM_PROTOCOL_UDP_MULTICAST = 1;
+  STREAM_PROTOCOL_SRT = 2;
+  STREAM_PROTOCOL_RTMP = 3;
+  STREAM_PROTOCOL_HLS = 4;
+  STREAM_PROTOCOL_NDI = 5;
+}
+
+message StreamDestination {
+  StreamProtocol protocol = 1;
+  bool enabled = 2;
+  string endpoint_url = 3; // e.g. udp://239.255.0.1:5000 or rtmp://a.rtmp.youtube.com/live2
+  string srt_mode = 4; // CALLER, LISTENER, RENDEZVOUS
+  int32 srt_latency_ms = 5;
+  string srt_passphrase = 6;
+  string stream_key = 7;
+}
+
+message Channel {
+  string id = 1;
+  string name = 2;
+  string call_sign = 3;
+  int32 logical_channel_number = 4;
+  string logo_url = 5;
+  string logo_position = 6; // TOP_RIGHT, TOP_LEFT, BOTTOM_RIGHT, BOTTOM_LEFT
+  float logo_opacity = 7;
+  
+  string primary_agent_id = 8;
+  string fallback_agent_id = 9;
+  RedundancyMode redundancy_mode = 10;
+  
+  string default_ad_template_id = 11;
+  repeated StreamDestination destinations = 12;
+  
+  string resolution = 13; // 1080p50, 1080p59.94, 720p60, 4K_2160p
+  string video_codec = 14; // H264, HEVC
+  int32 video_bitrate_kbps = 15;
+  string audio_codec = 16; // AAC, AC3
+  int32 audio_bitrate_kbps = 17;
+  
+  string status = 18; // ON_AIR, STANDBY, FAILOVER, ERROR
+  google.protobuf.Timestamp updated_at = 19;
+}
+
+message ListChannelsRequest {}
+message ListChannelsResponse {
+  repeated Channel channels = 1;
+}
+
+message GetChannelRequest {
+  string id = 1;
+}
+
+message CreateChannelRequest {
+  Channel channel = 1;
+}
+
+message UpdateChannelRequest {
+  Channel channel = 1;
+}
+
+message DeleteChannelRequest {
+  string id = 1;
+}
+
+message DeleteChannelResponse {
+  bool success = 1;
+}
+
+message EmergencySlateRequest {
+  string channel_id = 1;
+  bool engage = 2;
+  string custom_slate_message = 3;
+}
+
+message EmergencySlateResponse {
+  bool success = 1;
+  string status = 2;
+}
+
+message SkipNextRequest {
+  string channel_id = 1;
+}
+
+message SkipNextResponse {
+  bool success = 1;
+  string now_playing_id = 2;
+}
+
+// ============================================================================
+// Scheduling & Playlist Service
+// ============================================================================
+
+service ScheduleService {
+  rpc ListSchedule(ListScheduleRequest) returns (ListScheduleResponse);
+  rpc CreateScheduleItem(CreateScheduleItemRequest) returns (ScheduleItem);
+  rpc UpdateScheduleItem(UpdateScheduleItemRequest) returns (ScheduleItem);
+  rpc DeleteScheduleItem(DeleteScheduleItemRequest) returns (DeleteScheduleItemResponse);
+  rpc ResolveConflict(ResolveConflictRequest) returns (ResolveConflictResponse);
+}
+
+enum ScheduleConflictAction {
+  CONFLICT_ACTION_UNSPECIFIED = 0;
+  CONFLICT_ACTION_FORCE_OVERWRITE = 1;
+  CONFLICT_ACTION_QUEUE_AFTER = 2;
+  CONFLICT_ACTION_REPLACE_CONFLICT = 3;
+}
+
+message AudioTrackSelection {
+  int32 stream_index = 1;
+  string language_code = 2; // hin, tam, tel, eng
+  string channels = 3; // 2.0, 5.1
+  bool ebu_r128_normalize = 4;
+}
+
+message SubtitleTrackSelection {
+  int32 stream_index = 1;
+  string language_code = 2;
+  bool burn_in = 3; // true for open burn-in, false for CEA-608/708 VANC
+}
+
+message TmdbMetadata {
+  int64 tmdb_id = 1;
+  string title = 2;
+  string localized_title = 3;
+  string overview = 4;
+  string poster_url = 5;
+  string backdrop_url = 6;
+  int32 release_year = 7;
+  repeated string genres = 8;
+  string content_rating = 9; // U, U/A 13+, U/A 16+, A, PG-13, R
+  int32 runtime_minutes = 10;
+}
+
+message AdvancedFfmpegConfig {
+  string custom_video_filters = 1;
+  string custom_audio_filters = 2;
+  string custom_muxer_args = 3;
+  int32 service_pid = 4;
+  int32 pmt_pid = 5;
+}
+
+message ScheduleItem {
+  string id = 1;
+  string channel_id = 2;
+  string storage_mount_id = 3;
+  string media_file_path = 4;
+  
+  google.protobuf.Timestamp start_time = 5;
+  google.protobuf.Timestamp end_time = 6;
+  google.protobuf.Duration duration = 7;
+  
+  TmdbMetadata tmdb_metadata = 8;
+  
+  // Ad template precedence: if non-empty, overrides channel global template
+  string content_ad_template_id = 9;
+  
+  AudioTrackSelection audio_selection = 10;
+  SubtitleTrackSelection subtitle_selection = 11;
+  AdvancedFfmpegConfig advanced_ffmpeg = 12;
+  
+  string status = 13; // PLAYED, ON_AIR, CUED, PENDING
+}
+
+message ListScheduleRequest {
+  string channel_id = 1;
+  google.protobuf.Timestamp from_time = 2;
+  google.protobuf.Timestamp to_time = 3;
+}
+
+message ListScheduleResponse {
+  repeated ScheduleItem items = 1;
+}
+
+message CreateScheduleItemRequest {
+  ScheduleItem item = 1;
+  ScheduleConflictAction on_conflict = 2;
+}
+
+message UpdateScheduleItemRequest {
+  ScheduleItem item = 1;
+}
+
+message DeleteScheduleItemRequest {
+  string id = 1;
+}
+
+message DeleteScheduleItemResponse {
+  bool success = 1;
+}
+
+message ResolveConflictRequest {
+  ScheduleItem new_item = 1;
+  ScheduleConflictAction action = 2;
+}
+
+message ResolveConflictResponse {
+  bool success = 1;
+  repeated ScheduleItem impacted_items = 2;
+}
+
+// ============================================================================
+// Storage Management Service
+// ============================================================================
+
+service StorageService {
+  rpc ListStorageMounts(ListStorageMountsRequest) returns (ListStorageMountsResponse);
+  rpc CreateStorageMount(CreateStorageMountRequest) returns (StorageMount);
+  rpc UpdateStorageMount(UpdateStorageMountRequest) returns (StorageMount);
+  rpc DeleteStorageMount(DeleteStorageMountRequest) returns (DeleteStorageMountResponse);
+  rpc BrowseStorage(BrowseStorageRequest) returns (BrowseStorageResponse);
+  rpc ProbeMedia(ProbeMediaRequest) returns (ProbeMediaResponse);
+}
+
+enum StorageType {
+  STORAGE_TYPE_UNSPECIFIED = 0;
+  STORAGE_TYPE_LOCAL_ALIAS = 1;
+  STORAGE_TYPE_NFS = 2;
+  STORAGE_TYPE_SMB = 3;
+}
+
+message StorageMount {
+  string id = 1;
+  string name = 2;
+  StorageType type = 3;
+  string target_path = 4;
+  string server_host = 5;
+  string share_name = 6;
+  string username = 7;
+  bool is_active = 8;
+  int64 total_bytes = 9;
+  int64 available_bytes = 10;
+}
+
+message ListStorageMountsRequest {}
+message ListStorageMountsResponse {
+  repeated StorageMount mounts = 1;
+}
+
+message CreateStorageMountRequest {
+  StorageMount mount = 1;
+  string secret_password = 2;
+}
+
+message UpdateStorageMountRequest {
+  StorageMount mount = 1;
+  string secret_password = 2;
+}
+
+message DeleteStorageMountRequest {
+  string id = 1;
+}
+
+message DeleteStorageMountResponse {
+  bool success = 1;
+}
+
+message FileEntry {
+  string name = 1;
+  string relative_path = 2;
+  bool is_directory = 3;
+  int64 size_bytes = 4;
+  google.protobuf.Timestamp mod_time = 5;
+  string probed_duration = 6; // e.g. "02:14:32"
+}
+
+message BrowseStorageRequest {
+  string mount_id = 1;
+  string sub_path = 2;
+}
+
+message BrowseStorageResponse {
+  string current_path = 1;
+  repeated FileEntry entries = 2;
+}
+
+message AudioStreamInfo {
+  int32 index = 1;
+  string codec = 2;
+  string language = 3;
+  int32 channels = 4;
+  int32 sample_rate = 5;
+}
+
+message SubtitleStreamInfo {
+  int32 index = 1;
+  string codec = 2;
+  string language = 3;
+  string title = 4;
+}
+
+message ProbeMediaRequest {
+  string mount_id = 1;
+  string relative_path = 2;
+}
+
+message ProbeMediaResponse {
+  google.protobuf.Duration duration = 1;
+  string resolution = 2;
+  float framerate = 3;
+  string video_codec = 4;
+  repeated AudioStreamInfo audio_streams = 5;
+  repeated SubtitleStreamInfo subtitle_streams = 6;
+  int64 file_size_bytes = 7;
+}
+
+// ============================================================================
+// Graphics & Ad Template Service
+// ============================================================================
+
+service AdTemplateService {
+  rpc ListAdTemplates(ListAdTemplatesRequest) returns (ListAdTemplatesResponse);
+  rpc GetAdTemplate(GetAdTemplateRequest) returns (AdTemplate);
+  rpc CreateAdTemplate(CreateAdTemplateRequest) returns (AdTemplate);
+  rpc UpdateAdTemplate(UpdateAdTemplateRequest) returns (AdTemplate);
+  rpc DeleteAdTemplate(DeleteAdTemplateRequest) returns (DeleteAdTemplateResponse);
+}
+
+enum BannerTransition {
+  BANNER_TRANSITION_FADE = 0;
+  BANNER_TRANSITION_SLIDE_LEFT = 1;
+  BANNER_TRANSITION_SLIDE_RIGHT = 2;
+  BANNER_TRANSITION_SLIDE_BOTTOM = 3;
+  BANNER_TRANSITION_ZOOM = 4;
+  BANNER_TRANSITION_BOUNCE = 5;
+  BANNER_TRANSITION_WIPE = 6;
+}
+
+message BannerOverlayElement {
+  string id = 1;
+  string element_type = 2; // IMAGE, GIF, VIDEO, TICKER_TEXT, LOWER_THIRD
+  string asset_url = 3;
+  string text_content = 4;
+  
+  float pos_x_percent = 5; // 0.0 - 100.0%
+  float pos_y_percent = 6; // 0.0 - 100.0%
+  float width_percent = 7;
+  float height_percent = 8;
+  float opacity = 9;
+  
+  BannerTransition entrance_animation = 10;
+  BannerTransition exit_animation = 11;
+  int32 animation_duration_ms = 12;
+  
+  int32 start_offset_seconds = 13;
+  int32 display_duration_seconds = 14;
+  int32 repeat_interval_seconds = 15; // 0 for once
+}
+
+message AdRollClip {
+  string id = 1;
+  string media_path = 2;
+  int32 duration_seconds = 3;
+  string title = 4;
+}
+
+message AdRollSlot {
+  string slot_type = 1; // PRE_ROLL, MID_ROLL, POST_ROLL
+  int32 mid_roll_offset_seconds = 2;
+  repeated AdRollClip clips = 3;
+  bool emit_scte35 = 4;
+  int32 scte35_event_id = 5;
+}
+
+message AdTemplate {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  
+  // Section A: On-Screen Banners
+  repeated BannerOverlayElement banner_overlays = 4;
+  
+  // Section B: Commercial Ad Rolls
+  repeated AdRollSlot ad_rolls = 5;
+}
+
+message ListAdTemplatesRequest {}
+message ListAdTemplatesResponse {
+  repeated AdTemplate templates = 1;
+}
+
+message GetAdTemplateRequest {
+  string id = 1;
+}
+
+message CreateAdTemplateRequest {
+  AdTemplate template = 1;
+}
+
+message UpdateAdTemplateRequest {
+  AdTemplate template = 1;
+}
+
+message DeleteAdTemplateRequest {
+  string id = 1;
+}
+
+message DeleteAdTemplateResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Edge Agent & Health Telemetry Service
+// ============================================================================
+
+service EdgeAgentService {
+  rpc ListAgents(ListAgentsRequest) returns (ListAgentsResponse);
+  rpc PairAgent(PairAgentRequest) returns (PairAgentResponse);
+  rpc ResetAgentToken(ResetAgentTokenRequest) returns (ResetAgentTokenResponse);
+  rpc StreamHeartbeat(stream AgentTelemetry) returns (stream ControlCommand);
+}
+
+message EdgeAgent {
+  string id = 1;
+  string hostname = 2;
+  string ip_address = 3;
+  string tailscale_ip = 4;
+  string status = 5; // ONLINE, STREAMING, STANDBY, OFFLINE
+  float cpu_usage_percent = 6;
+  float gpu_usage_percent = 7;
+  float memory_usage_percent = 8;
+  repeated string active_channel_ids = 9;
+  google.protobuf.Timestamp last_heartbeat = 10;
+}
+
+message ListAgentsRequest {}
+message ListAgentsResponse {
+  repeated EdgeAgent agents = 1;
+}
+
+message PairAgentRequest {
+  string agent_id = 1;
+  string ip_address = 2;
+  int32 grpc_port = 3;
+  string pairing_token = 4;
+}
+
+message PairAgentResponse {
+  bool success = 1;
+  string message = 2;
+  EdgeAgent agent = 3;
+}
+
+message ResetAgentTokenRequest {
+  string agent_id = 1;
+}
+
+message ResetAgentTokenResponse {
+  bool success = 1;
+  string new_pairing_token = 2;
+}
+
+message AgentTelemetry {
+  string agent_id = 1;
+  string channel_id = 2;
+  int64 frame_counter = 3;
+  float current_fps = 4;
+  int32 dropped_frames = 5;
+  float audio_lufs = 6;
+  float cpu_percent = 7;
+  float gpu_percent = 8;
+  google.protobuf.Timestamp timestamp = 9;
+}
+
+message ControlCommand {
+  string command_id = 1;
+  string action = 2; // PROMOTE_TO_ACTIVE, RELOAD_PLAYLIST, SLATE_ENGAGE, SHUTDOWN
+  string payload_json = 3;
+}
+
+// ============================================================================
+// Telegram & Multi-Bot Configuration Service
+// ============================================================================
+
+service BotService {
+  rpc ListBotConfigs(ListBotConfigsRequest) returns (ListBotConfigsResponse);
+  rpc SaveBotConfig(SaveBotConfigRequest) returns (BotConfig);
+  rpc DeleteBotConfig(DeleteBotConfigRequest) returns (DeleteBotConfigResponse);
+  rpc TestBotConnection(TestBotConnectionRequest) returns (TestBotConnectionResponse);
+  rpc ProcessNaturalLanguageCommand(NlpScheduleCommandRequest) returns (NlpScheduleCommandResponse);
+}
+
+message BotConfig {
+  string id = 1;
+  string platform = 2; // TELEGRAM, SLACK, WHATSAPP
+  string bot_name = 3;
+  string api_token = 4; // Obfuscated on retrieval
+  repeated string allowed_chat_ids = 5;
+  repeated string enabled_channel_ids = 6;
+  bool is_active = 7;
+  string webhook_url = 8;
+}
+
+message ListBotConfigsRequest {}
+message ListBotConfigsResponse {
+  repeated BotConfig bots = 1;
+}
+
+message SaveBotConfigRequest {
+  BotConfig bot = 1;
+}
+
+message DeleteBotConfigRequest {
+  string id = 1;
+}
+
+message DeleteBotConfigResponse {
+  bool success = 1;
+}
+
+message TestBotConnectionRequest {
+  string id = 1;
+}
+
+message TestBotConnectionResponse {
+  bool success = 1;
+  string bot_username = 2;
+}
+
+message NlpScheduleCommandRequest {
+  string bot_id = 1;
+  string user_id = 2;
+  string natural_language_text = 3; // e.g. "Schedule Avengers at 9 AM"
+  string preferred_language = 4; // en, hi, ta, te
+}
+
+message NlpScheduleCommandResponse {
+  string parsed_channel_id = 1;
+  google.protobuf.Timestamp proposed_start_time = 2;
+  repeated FileEntry matched_media_files = 3;
+  bool conflict_detected = 4;
+  ScheduleItem conflicting_item = 5;
+  string user_prompt_message = 6;
+}
+
+// ============================================================================
+// Resolution Preset & Video Encoding Customization Service
+// ============================================================================
+
+service ResolutionService {
+  rpc ListResolutions(ListResolutionsRequest) returns (ListResolutionsResponse);
+  rpc GetResolution(GetResolutionRequest) returns (ResolutionPreset);
+  rpc CreateResolution(CreateResolutionRequest) returns (ResolutionPreset);
+  rpc UpdateResolution(UpdateResolutionRequest) returns (ResolutionPreset);
+  rpc DeleteResolution(DeleteResolutionRequest) returns (DeleteResolutionResponse);
+}
+
+message ResolutionPreset {
+  string id = 1;
+  string name = 2;
+  int32 width = 3;
+  int32 height = 4;
+  double fps = 5;
+  bool is_interlaced = 6;
+  string interlace_mode = 7; // tff, bff, progressive
+  string aspect_ratio = 8;   // 16:9, 4:3
+  string default_video_bitrate = 9;
+  string default_audio_bitrate = 10;
+  string color_space = 11;   // bt709, bt601
+  string custom_ffmpeg_filters = 12;
+  bool is_built_in = 13;
+  string region_tag = 14;    // IN_CABLE, GLOBAL
+}
+
+message ListResolutionsRequest {}
+message ListResolutionsResponse {
+  repeated ResolutionPreset presets = 1;
+}
+
+message GetResolutionRequest {
+  string id = 1;
+}
+
+message CreateResolutionRequest {
+  ResolutionPreset preset = 1;
+}
+
+message UpdateResolutionRequest {
+  ResolutionPreset preset = 1;
+}
+
+message DeleteResolutionRequest {
+  string id = 1;
+}
+
+message DeleteResolutionResponse {
+  bool success = 1;
+}
+
