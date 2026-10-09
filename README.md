@@ -1,37 +1,37 @@
 # MCRFlow
 
-MCRFlow is a modern, web-based TV playout and master control system written in Go and React. It is designed to run 24/7 linear channels reliably without relying on expensive legacy hardware dongles or clunky desktop software.
+MCRFlow is an open-source, web-based TV playout automation and master control system written in Go and React. It is engineered to run 24/7 broadcast television and linear streaming channels reliably without expensive legacy hardware dongles or complex desktop client setups.
 
-Whether you run a local digital cable channel, an educational television network, or a FAST streaming station, MCRFlow gives you scheduling, on-screen graphics, direct HLS live streaming, and automated EPG generation through a clean web interface.
+Whether you run a digital cable television channel, an educational network, or a 24/7 FAST streaming station, MCRFlow gives you timeline scheduling, on-screen graphics, ad insertion, direct HLS live streaming, and automated EPG generation through a clean web console.
 
 ---
 
 ## Architecture
 
-The system is split into two parts: a central **Control Plane** (which serves the web UI and handles scheduling/metadata) and lightweight **Edge Playout Agents** (which do the actual video encoding and stream delivery).
+The system consists of two core components: a central **Control Plane** (serving the embedded web UI, managing timeline schedules, and providing REST APIs) and lightweight **Edge Playout Agents** (executing video transcoding, graphics compositing, and network stream egress).
 
 ```mermaid
 flowchart TD
-    subgraph ControlPlane["Control Plane (Go + React)"]
-        UI["Web Management Console"]
-        API["Control Plane Service"]
-        HLS["Native HLS Streamer"]
-        Sched["Timeline Scheduler"]
-        Users["User & Auth Store"]
+    subgraph ControlPlane["Central Control Plane (Go + Embedded React Console)"]
+        UI["Web Management Console (:8080)"]
+        API["REST & RPC Control Services"]
+        HLS["Native HLS Streamer (10-Seg Rolling Cache)"]
+        Sched["24/7 Timeline Scheduler"]
+        Users["Auth & RBAC Store"]
     end
 
     subgraph EdgeAgents["Edge Playout Node"]
-        Agent["Playout Agent (FFmpeg / NVENC)"]
+        Agent["Playout Agent (:9095)"]
     end
 
     subgraph Storage["Media Sources"]
-        NAS["NAS / SMB Storage"]
+        NAS["NAS / SMB Storage Mounts (:ro)"]
     end
 
     subgraph Outputs["Broadcast Egress"]
         UDP["UDP TS Multicast (Cable Mux)"]
         SRT["SRT / RTMP Stream"]
-        HLSOut["HLS Live Stream"]
+        HLSOut["Direct HLS Live Stream"]
         EPG["XMLTV EPG Feed"]
     end
 
@@ -41,7 +41,7 @@ flowchart TD
     API --> HLS
     Sched --> NAS
 
-    Agent -->|"Token Authenticated"| API
+    Agent -->|"256-bit Token Pairing"| API
     Agent --> UDP
     Agent --> SRT
     Agent --> HLS
@@ -51,203 +51,203 @@ flowchart TD
 
 ---
 
-## What It Does
+## Core Capabilities
 
-- **Multi-Channel Playout**: Manage multiple channels from one dashboard. Each channel can be assigned to an edge node with an optional hot-standby node for automatic failover.
-- **24/7 Timeline Scheduling**: Drag and drop videos from connected storage mounts (NAS, SMB, or local disk). Durations are automatically detected, and movie details (posters, descriptions) are pulled directly from TMDb for accurate EPGs.
-- **On-Screen Graphics & Ad Maker**: Add channel logos, lower-third banners, scrolling news tickers, and scheduled commercial breaks without needing third-party video editors.
-- **Built-in HLS Live Streaming**: Channels can be streamed directly from MCRFlow's web server. Playlists maintain a live 10-segment rolling window, automatically deleting older segments from disk to keep storage clean.
-- **Indian Cable & Regional TV Presets**: Ready-to-use video presets for Indian broadcast operations (1080i50 PAL HD, 720p50, 576i SD 4:3, and 576i anamorphic 16:9), along with custom FFmpeg filter chains (`yadif` deinterlacing, EBU R128 loudness normalization).
-- **Multilingual Web Interface**: Defaults to English and includes full native translations for 10 Indian regional languages (Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia).
-- **Telegram Bot ChatOps**: Schedule content using natural language (e.g. *"Schedule Avengers at 16:30"*). The bot fuzzy-searches the media mount, reports conflicts, and lets you queue or replace programs right from chat.
+- **Multi-Channel Playout**: Manage unlimited channels from a single dashboard. Assign channels to dedicated edge nodes with hot-standby fallback for seamless redundancy.
+- **24/7 Timeline Scheduler**: Drag and drop media from local directories, NAS, or SMB mounts. Video durations are probed automatically, and program metadata (posters, synopses) is fetched directly from TMDb for accurate Electronic Program Guides (EPG).
+- **On-Screen Graphics & Ad Studio**: Position channel bugs/logos, lower-third tickers, and scheduled commercial breaks without third-party video editors. Supports content-level and channel-level template precedence.
+- **Direct Live HLS Streaming**: Channels can be streamed directly from MCRFlow's web server. The player maintains a 10-segment sliding window and automatically prunes stale segments from disk.
+- **Indian Cable & Regional TV Presets**: Ready-to-use broadcast resolution presets (1080i50 PAL HD, 720p50, 576i SD 4:3, 576i anamorphic 16:9) with FFmpeg deinterlacing (`yadif`) and EBU R128 loudness normalization.
+- **Multilingual Web Console**: Defaults to English and includes full native translations for 10 Indian regional languages (Hindi, Tamil, Telugu, Bengali, Marathi, Gujarati, Kannada, Malayalam, Punjabi, Odia).
+- **ChatOps Scheduling**: Schedule programs via Telegram bots using natural language (e.g. *"Schedule Avengers at 16:30"*). The bot fuzzy-searches connected mounts and detects scheduling conflicts.
 
 ---
 
 ## Access & User Roles
 
-When you first launch MCRFlow, you will be prompted to create the initial administrator account. Once created, all administrative actions require signing in.
+When MCRFlow is first booted, a setup wizard prompts you to create the initial root administrator account. All administrative endpoints require authentication.
 
-MCRFlow comes with three built-in roles:
-- **Admin**: Full control over channels, edge nodes, storage mounts, system settings, and user accounts.
-- **Operator**: Day-to-day channel operations, playout controls, ad templates, and emergency standby slate triggering.
-- **Content Scheduler**: Dedicated to media scheduling, browsing storage, and probing video files. Schedulers cannot alter channel configurations, pair edge agents, or manage user accounts.
+Three distinct roles are supported:
+- **Admin**: Full access across all channels, edge agent pairing, storage mounts, system settings, and user management.
+- **Operator**: Daily operational playout control, schedule viewing, ad template design, and emergency slate triggering.
+- **Content Scheduler**: Restricted strictly to media scheduling, browsing mounted storage, and probing video metadata. Cannot modify channel stream settings, pair edge nodes, or alter users.
 
-### Stream & EPG Security
-By default, the XMLTV EPG endpoint and live HLS stream can be accessed publicly. If you want to protect them, you can configure an optional **WebToken** in the channel settings. When set, requests must include `?token=YOUR_TOKEN`, or the server returns `401 Unauthorized`.
-
----
-
-## Docker Storage & Volume Mounts Explained
-
-MCRFlow uses two primary volume mounts when running in Docker:
-
-1. **`-v <host-path>:/data/mcrflow` (Read-Write)**
-   - **What it is**: The system's persistent state directory.
-   - **What it stores**: User accounts, Bcrypt password hashes, channel configurations, custom resolution profiles, ad templates, agent pairing tokens, and the 10-segment rolling HLS live cache.
-   - **Permission**: Must be read-write (`rw`). If this directory is not mounted, state will be lost when the container is recreated.
-
-2. **`-v <host-path>:/media/storage:ro` (Read-Only)**
-   - **What it is**: Your content library where movies, shows, audio tracks, and bumper video files are located.
-   - **Why `:ro` (Read-Only)?**: Linear playout engines only need to read frames and probe metadata. Mounting `:ro` prevents playout processes or operators from accidentally modifying, truncating, or deleting original master video files.
-   - **Multiple Mounts**: You can mount additional folders as needed (e.g. `-v /mnt/nas/promos:/media/promos:ro` or `-v /mnt/san/commercials:/media/commercials:ro`). MCRFlow's storage manager lets you browse and schedule from any mounted path.
+### Optional Stream & EPG Token Authentication
+By default, the XMLTV EPG endpoint and live HLS stream are public. To restrict playback, set an optional **WebToken** in the channel settings. When enabled, requests require `?token=YOUR_TOKEN`, otherwise returning `401 Unauthorized`.
 
 ---
 
-## Configuration: CLI Flags & Environment Variables
+## Running Standalone Release Binaries by OS
 
-Every setting can be configured either through command-line flags or environment variables. CLI flags take precedence over environment variables, which fall back to sensible defaults.
+Precompiled binaries for Linux, macOS, and Windows are published for every release on [GitHub Releases](https://github.com/varmakarthik12/mcrflow/releases). The Control Plane binary is completely self-contained with the Web Management Console embedded inside.
 
-### Control Plane (`mcrflow-control`)
+### 1. Linux (`amd64` / `arm64`)
 
-| CLI Flag | Environment Variable | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--port` | `MCRFLOW_PORT` or `PORT` | `8080` | HTTP listening port for UI, REST API, and native HLS stream |
-| `--data-dir` | `MCRFLOW_DATA_DIR` or `MCRFLOW_STORAGE_PATH` | `./data` (`/data/mcrflow` in Docker) | Directory for databases, auth state, and HLS rolling cache |
-| `--media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Default media directory auto-registered in the storage browser |
-| `--tmdb-key` | `MCRFLOW_TMDB_KEY` | `""` | Optional TMDb API key for automatic movie/series metadata lookup |
-
-### Edge Playout Agent (`mcrflow-agent`)
-
-| CLI Flag | Environment Variable | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--agent-id` | `MCRFLOW_AGENT_ID` | System hostname | Unique identifier for this edge playout node |
-| `--port` | `MCRFLOW_PORT` or `PORT` | `9095` | Agent RPC / API listening port for control plane communication |
-| `--auth-file` | `MCRFLOW_AUTH_FILE` | `<data-dir>/agent_auth.json` | Path to persistent 256-bit cryptographic pairing token file |
-| `--data-dir` | `MCRFLOW_DATA_DIR` | `./data` (`/data/mcrflow` in Docker) | Base directory for agent persistent state |
-| `--media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Content mount path for video playback |
-
----
-
-## Running with Docker by Operating System
-
-### 1. Linux (Bash)
-
-**All-in-One Mode (Control Plane + Embedded Agent):**
+#### Step 1: Install Playout Runtime (Edge Agents)
+For nodes running playout encoding and media probing, install FFmpeg:
 ```bash
+sudo apt update && sudo apt install -y ffmpeg ca-certificates
+```
+
+#### Step 2: Download & Run Control Plane
+```bash
+# Download the latest release for Linux amd64 (or arm64)
+curl -LO https://github.com/varmakarthik12/mcrflow/releases/latest/download/mcrflow-control_1.0.0_linux_amd64.tar.gz
+tar -xzf mcrflow-control_1.0.0_linux_amd64.tar.gz
+
+# Run the control plane
+./mcrflow-control --port 8080 --data-dir ./data
+```
+Open `http://localhost:8080` in your browser to launch the web console.
+
+#### Step 3: Download & Run Edge Playout Agent
+```bash
+curl -LO https://github.com/varmakarthik12/mcrflow/releases/latest/download/mcrflow-agent_1.0.0_linux_amd64.tar.gz
+tar -xzf mcrflow-agent_1.0.0_linux_amd64.tar.gz
+
+# Start the edge agent daemon
+./mcrflow-agent --agent-id delhi-edge-01 --port 9095
+```
+On initial boot, the agent prints its cryptographic pairing token in the console:
+```text
+================================================================================
+  MCRFLOW EDGE PLAYOUT AGENT - CRYPTOGRAPHIC PAIRING REQUIRED
+  Agent ID:      delhi-edge-01
+  Pairing Token: agt_sec_a1b2c3d4...
+================================================================================
+```
+Copy and paste this token into the web UI (**Settings > Edge Agents > Pair Node**).
+
+#### Optional: Run as a `systemd` Service
+Create `/etc/systemd/system/mcrflow-control.service`:
+```ini
+[Unit]
+Description=MCRFlow Master Control Plane
+After=network.target
+
+[Service]
+Type=simple
+User=mcrflow
+WorkingDirectory=/var/lib/mcrflow
+ExecStart=/usr/local/bin/mcrflow-control --port 8080 --data-dir /var/lib/mcrflow/data
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+Enable and start the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now mcrflow-control
+```
+
+---
+
+### 2. macOS (Apple Silicon `arm64` & Intel `amd64`)
+
+#### Step 1: Install FFmpeg (Optional for Edge Nodes)
+```bash
+brew install ffmpeg
+```
+
+#### Step 2: Download & Extract
+Download the appropriate archive from [GitHub Releases](https://github.com/varmakarthik12/mcrflow/releases):
+- Apple Silicon (M1/M2/M3/M4): `mcrflow-control_1.0.0_darwin_arm64.tar.gz`
+- Intel Mac: `mcrflow-control_1.0.0_darwin_amd64.tar.gz`
+
+```bash
+# Example for Apple Silicon:
+tar -xzf mcrflow-control_1.0.0_darwin_arm64.tar.gz
+tar -xzf mcrflow-agent_1.0.0_darwin_arm64.tar.gz
+
+# If downloaded via Safari/Chrome, clear the macOS quarantine attribute:
+xattr -d com.apple.quarantine mcrflow-control 2>/dev/null || true
+xattr -d com.apple.quarantine mcrflow-agent 2>/dev/null || true
+```
+
+#### Step 3: Run Binaries
+```bash
+# Terminal 1: Launch Control Plane
+./mcrflow-control --port 8080
+
+# Terminal 2: Launch Playout Agent
+./mcrflow-agent --agent-id mac-studio-01 --port 9095
+```
+Access the dashboard at `http://localhost:8080`.
+
+---
+
+### 3. Windows (`amd64` / `arm64`)
+
+#### Step 1: Install FFmpeg (For Edge Nodes)
+Ensure `ffmpeg.exe` and `ffprobe.exe` are in your Windows `PATH`:
+```powershell
+winget install Gyan.FFmpeg
+# or via Chocolatey: choco install ffmpeg
+```
+
+#### Step 2: Download & Extract
+Download the `.zip` packages from [GitHub Releases](https://github.com/varmakarthik12/mcrflow/releases):
+- `mcrflow-control_1.0.0_windows_amd64.zip`
+- `mcrflow-agent_1.0.0_windows_amd64.zip`
+
+Extract them in Explorer or via PowerShell:
+```powershell
+Expand-Archive -Path mcrflow-control_1.0.0_windows_amd64.zip -DestinationPath C:\mcrflow
+Expand-Archive -Path mcrflow-agent_1.0.0_windows_amd64.zip -DestinationPath C:\mcrflow
+```
+
+#### Step 3: Run via PowerShell or Command Prompt
+```powershell
+# Start Control Plane
+cd C:\mcrflow
+.\mcrflow-control.exe -port 8080 -data-dir C:\mcrflow\data
+
+# In a separate window, start Edge Agent
+.\mcrflow-agent.exe -agent-id win-edge-01 -port 9095
+```
+Open `http://localhost:8080` in Edge, Chrome, or Firefox.
+
+---
+
+## Running with Docker
+
+MCRFlow images are published to the GitHub Container Registry:
+- `ghcr.io/varmakarthik12/mcrflow:latest` (All-in-One Turnkey: Control Plane + Web UI + Local Agent)
+- `ghcr.io/varmakarthik12/mcrflow-agent:latest` (Headless Edge Agent)
+
+### Volume Mounts Explained
+
+1. **`-v <host-path>:/data/mcrflow` (Read-Write)**:
+   Persistent state directory containing user credentials, channels, resolution presets, ad templates, pairing keys, and the rolling live HLS segment cache.
+2. **`-v <host-path>:/media/storage:ro` (Read-Only)**:
+   Your media library (movies, commercials, bumpers). Mounted `:ro` so playout processes can never accidentally modify or delete master broadcast files.
+
+### Standalone Docker Run
+```bash
+# All-in-One Container
 docker run -d \
   --name mcrflow \
   --restart unless-stopped \
   -p 8080:8080 \
   -p 9095:9095 \
-  -e MCRFLOW_PORT=8080 \
-  -e MCRFLOW_DATA_DIR=/data/mcrflow \
   -v /var/lib/mcrflow:/data/mcrflow \
   -v /mnt/storage/movies:/media/storage:ro \
   ghcr.io/varmakarthik12/mcrflow:latest
-```
 
-**Edge-Only Agent Node:**
-```bash
+# Dedicated Edge Agent
 docker run -d \
-  --name mcrflow-agent-delhi \
+  --name mcrflow-agent \
   --restart unless-stopped \
   -p 9095:9095 \
-  -e MCRFLOW_AGENT_ID="delhi-edge-primary" \
+  -e MCRFLOW_AGENT_ID="delhi-edge-01" \
   -v /var/lib/mcrflow-agent:/data/mcrflow \
   -v /mnt/storage/movies:/media/storage:ro \
   ghcr.io/varmakarthik12/mcrflow-agent:latest
 ```
 
----
-
-### 2. macOS (Terminal / zsh)
-
-**All-in-One Mode:**
-```bash
-docker run -d \
-  --name mcrflow \
-  --restart unless-stopped \
-  -p 8080:8080 \
-  -p 9095:9095 \
-  -v "$HOME/mcrflow-data:/data/mcrflow" \
-  -v "/Volumes/MediaDrive/Movies:/media/storage:ro" \
-  ghcr.io/varmakarthik12/mcrflow:latest
-```
-
-**Edge-Only Agent Node:**
-```bash
-docker run -d \
-  --name mcrflow-agent \
-  --restart unless-stopped \
-  -p 9095:9095 \
-  -e MCRFLOW_AGENT_ID="mac-edge-studio" \
-  -v "$HOME/mcrflow-agent-data:/data/mcrflow" \
-  -v "/Volumes/MediaDrive/Movies:/media/storage:ro" \
-  ghcr.io/varmakarthik12/mcrflow-agent:latest
-```
-
----
-
-### 3. Windows (PowerShell)
-
-**All-in-One Mode:**
-```powershell
-docker run -d `
-  --name mcrflow `
-  --restart unless-stopped `
-  -p 8080:8080 `
-  -p 9095:9095 `
-  -v C:\mcrflow\data:/data/mcrflow `
-  -v D:\BroadcastMedia\Movies:/media/storage:ro `
-  ghcr.io/varmakarthik12/mcrflow:latest
-```
-
-**Edge-Only Agent Node:**
-```powershell
-docker run -d `
-  --name mcrflow-agent `
-  --restart unless-stopped `
-  -p 9095:9095 `
-  -e MCRFLOW_AGENT_ID="win-edge-01" `
-  -v C:\mcrflow\agent-data:/data/mcrflow `
-  -v D:\BroadcastMedia\Movies:/media/storage:ro `
-  ghcr.io/varmakarthik12/mcrflow-agent:latest
-```
-
----
-
-### 4. Windows (Command Prompt `cmd.exe`)
-
-**All-in-One Mode:**
-```cmd
-docker run -d ^
-  --name mcrflow ^
-  --restart unless-stopped ^
-  -p 8080:8080 ^
-  -p 9095:9095 ^
-  -v C:\mcrflow\data:/data/mcrflow ^
-  -v D:\BroadcastMedia\Movies:/media/storage:ro ^
-  ghcr.io/varmakarthik12/mcrflow:latest
-```
-
-**Edge-Only Agent Node:**
-```cmd
-docker run -d ^
-  --name mcrflow-agent ^
-  --restart unless-stopped ^
-  -p 9095:9095 ^
-  -e MCRFLOW_AGENT_ID="win-edge-01" ^
-  -v C:\mcrflow\agent-data:/data/mcrflow ^
-  -v D:\BroadcastMedia\Movies:/media/storage:ro ^
-  ghcr.io/varmakarthik12/mcrflow-agent:latest
-```
-
----
-
-### Getting the Pairing Token
-
-When an edge agent starts for the first time, check its logs to retrieve the pairing token:
-```bash
-docker logs mcrflow-agent
-```
-Paste this token into the MCRFlow web interface (**Settings > Edge Agents > Pair Node**). The token is saved in the mounted `/data/mcrflow` volume and persists across container restarts and host reboots.
-
----
-
-### Docker Compose
-
-For multi-node setups with a central control plane, a primary playout agent, and a hot-standby agent:
-
+### Docker Compose (High-Availability Topology)
 ```yaml
 version: "3.9"
 
@@ -300,97 +300,78 @@ volumes:
   edge2-data:
 ```
 
-Launch with:
-```bash
-docker compose up -d
-```
-
 ---
 
-## Standalone Binaries (Non-Docker)
+## Configuration Reference
 
-If you prefer not to use Docker, standalone binaries for Linux, macOS, and Windows are available from the GitHub Releases page:
+Settings can be passed as CLI flags or environment variables (flags take precedence).
 
-- **Linux**: `.deb`, `.rpm`, and `.tar.gz` packages (with systemd service support).
-- **Windows**: `.zip` archive containing Windows executables.
-- **macOS**: `.tar.gz` archive for both Apple Silicon and Intel.
+### Control Plane (`mcrflow-control`)
+
+| CLI Flag | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `-port` | `MCRFLOW_PORT` | `8080` | HTTP listening port for Web UI, REST API, and native HLS stream |
+| `-data-dir` | `MCRFLOW_DATA_DIR` | `./data` | Directory for SQLite/JSON databases, auth tokens, and HLS segments |
+| `-media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Default media library path registered in storage browser |
+| `-tmdb-key` | `MCRFLOW_TMDB_KEY` | `""` | Optional TMDb API key for automatic movie/series metadata lookup |
+
+### Edge Playout Agent (`mcrflow-agent`)
+
+| CLI Flag | Environment Variable | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `-agent-id` | `MCRFLOW_AGENT_ID` | Hostname | Unique node identifier for this edge playout daemon |
+| `-port` | `MCRFLOW_PORT` | `9095` | Agent RPC/API listening port for control plane communication |
+| `-auth-file` | `MCRFLOW_AUTH_FILE` | `<data-dir>/agent_auth.json` | Path to persistent 256-bit cryptographic pairing token file |
+| `-data-dir` | `MCRFLOW_DATA_DIR` | `./data` | Working directory for agent runtime state |
+| `-media-dir` | `MCRFLOW_MEDIA_DIR` | `/media/storage` | Media storage mount path for clip playback |
 
 ---
 
 ## Local Development & Makefile Guide
 
-MCRFlow includes a complete `Makefile` along with **[Air](https://github.com/air-verse/air)** configurations for instant live-reload during backend and edge development.
+MCRFlow includes a `Makefile` and **[Air](https://github.com/air-verse/air)** live-reload configurations.
 
-### 1. Install Tooling
+### 1. Tooling Installation
 ```bash
-# Clone the repository
 git clone https://github.com/varmakarthik12/mcrflow.git
 cd mcrflow
 
-# Install Air hot-reload tool
+# Install Air live-reload tool
 make install-tools
-# or directly: go install github.com/air-verse/air@latest
 ```
 
-### 2. Available `make` Targets
+### 2. Common `make` Targets
 
 | Target | Command | Description |
 | :--- | :--- | :--- |
 | `make dev-control` | `air -c .air.control.toml` | Run Control Plane with live auto-reload on Go file edits |
-| `make dev-backend` | Alias for `dev-control` | Run Control Plane backend |
 | `make dev-agent` | `air -c .air.agent.toml` | Run Edge Playout Agent with live auto-reload on Go file edits |
 | `make dev-ui` | `npx serve web -l 3000` | Start Web UI development server on `http://localhost:3000` |
-| `make build` | `go build ...` | Compile all binaries (`mcrflow-control` & `mcrflow-agent`) into `./bin/` |
-| `make test` | `go test -v ./...` | Run all test suites across the repository |
+| `make build` | `go build ...` | Compile all binaries into `./bin/` |
+| `make test` | `go test -v ./...` | Run all unit and integration test suites |
 | `make test-unit` | `go test -v ./internal/...` | Run unit tests only |
 | `make test-e2e` | `go test -v ./tests/e2e/...` | Run end-to-end integration test suite |
-| `make test-race` | `go test -race -v ./...` | Run tests with Go race detector enabled |
-| `make fmt` | `go fmt ./...` | Auto-format Go code |
+| `make fmt` | `go fmt ./...` | Format all Go source files |
 | `make vet` | `go vet ./...` | Run Go static analysis |
 | `make clean` | `rm -rf bin/ tmp/` | Clean build artifacts and temporary files |
 
----
-
 ### 3. Running Dev Servers
-
-#### Terminal 1 — Control Plane (Live Reload)
 ```bash
+# Terminal 1: Control Plane with hot reload
 make dev-control
-# or directly: air -c .air.control.toml
-```
 
-#### Terminal 2 — Edge Playout Agent (Live Reload)
-```bash
+# Terminal 2: Edge Agent with hot reload
 make dev-agent
-# or directly: air -c .air.agent.toml
-```
 
-#### Terminal 3 — Web UI Development Server
-```bash
+# Terminal 3: UI Server (optional during frontend modifications)
 make dev-ui
-# or directly with npx: npx serve web -l 3000
-# or directly with Python: python -m http.server 3000 --directory web
-```
-
-Open `http://localhost:3000` to interact with the UI, or navigate to `http://localhost:8080` where the control plane serves both the API and embedded UI assets.
-
----
-
-### 4. Compiling Binaries Directly
-If you prefer building without `make`:
-```bash
-# Build control plane binary
-go build -o bin/mcrflow-control ./cmd/mcrflow-control
-
-# Build edge agent binary
-go build -o bin/mcrflow-agent ./cmd/mcrflow-agent
 ```
 
 ---
 
 ## Contributing
 
-Contributions and bug reports are welcome! If you find an issue or have a feature request, please open an issue or submit a pull request. Make sure tests pass before submitting (`go test -v ./...`).
+Contributions and bug reports are welcome! Please open an issue or pull request on [GitHub](https://github.com/varmakarthik12/mcrflow). Verify that all tests pass (`go test -v ./...`) before submitting code.
 
 ---
 
