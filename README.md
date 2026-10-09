@@ -346,7 +346,7 @@ make install-tools
 | :--- | :--- | :--- |
 | `make dev-control` | `air -c .air.control.toml` | Run Control Plane with live auto-reload on Go file edits |
 | `make dev-agent` | `air -c .air.agent.toml` | Run Edge Playout Agent with live auto-reload on Go file edits |
-| `make dev-ui` | `go run ./scripts/dev-ui-server.go` | Start Web UI dev server on `http://localhost:3080` (reverse proxies to `:3081`) |
+| `make dev-ui` | `npm --prefix web run dev` | Start Vite React dev server with Hot Module Replacement (HMR) on `http://localhost:3080` (reverse proxies to `:3081`) |
 | `make build` | `go build ...` | Compile all binaries into `./bin/` |
 | `make test` | `go test -v ./...` | Run all unit and integration test suites |
 | `make test-unit` | `go test -v ./internal/...` | Run unit tests only |
@@ -363,7 +363,7 @@ make dev-control
 # Terminal 2: Edge Agent with hot reload
 make dev-agent
 
-# Terminal 3: UI Server (optional during frontend modifications)
+# Terminal 3: Vite React Web UI with Hot Module Replacement (HMR)
 make dev-ui
 ```
 

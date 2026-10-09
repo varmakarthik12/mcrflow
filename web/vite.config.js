@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+const controlPort = process.env.CONTROL || process.env.MCRFLOW_CONTROL_PORT || '3081'
+const backendTarget = process.env.MCRFLOW_CONTROL_URL || `http://localhost:${controlPort}`
+
 export default defineConfig({
   plugins: [react()],
   server: {
@@ -8,15 +11,15 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:3081',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/hls': {
-        target: 'http://localhost:3081',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/epg': {
-        target: 'http://localhost:3081',
+        target: backendTarget,
         changeOrigin: true,
       }
     }

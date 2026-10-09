@@ -22,6 +22,7 @@ ifeq ($(OS),Windows_NT)
   AIR := $(shell where air 2>nul)
   SET_CONTROL_ENV := set MCRFLOW_PORT=$(CONTROL)&&
   SET_AGENT_ENV := set MCRFLOW_PORT=$(AGENT)&& set MCRFLOW_CONTROL_URL=http://localhost:$(CONTROL)&&
+  SET_UI_ENV := set CONTROL=$(CONTROL)&& set MCRFLOW_CONTROL_URL=http://localhost:$(CONTROL)&&
 else
   SHELL := /bin/bash
   .SHELLFLAGS := -c
@@ -31,6 +32,7 @@ else
   AIR := $(shell which air 2>/dev/null)
   SET_CONTROL_ENV := MCRFLOW_PORT=$(CONTROL)
   SET_AGENT_ENV := MCRFLOW_PORT=$(AGENT) MCRFLOW_CONTROL_URL=http://localhost:$(CONTROL)
+  SET_UI_ENV := CONTROL=$(CONTROL) MCRFLOW_CONTROL_URL=http://localhost:$(CONTROL)
 endif
 
 .PHONY: help build build-control build-agent test test-unit test-e2e dev-control dev-agent dev-ui dev run clean docker-build docker-compose-up docker-compose-down fmt vet tidy
@@ -46,7 +48,7 @@ help:
 	@echo   make test            Run all tests across the repository
 	@echo   make dev-control     Run Control Plane on port $(CONTROL) (Air or go run)
 	@echo   make dev-agent       Run Edge Playout Agent on port $(AGENT) (Air or go run)
-	@echo   make dev-ui          Run Web UI Dev Server on port $(UI) (proxies to :$(CONTROL))
+	@echo   make dev-ui          Run Vite React Dev Server with HMR on port $(UI) (proxies to :$(CONTROL))
 	@echo   make run             Run Control Plane service
 	@echo   make docker-build    Build Docker images for Control Plane and Edge Agent
 	@echo   make clean           Remove bin/, dist/, tmp/, data/ and logs
@@ -106,8 +108,8 @@ else
 endif
 
 dev-ui:
-	@echo [MCRFlow] Starting Web UI Dev Server on port $(UI) (proxying to :$(CONTROL))...
-	go run ./scripts/dev-ui-server.go -port $(UI) -backend http://localhost:$(CONTROL)
+	@echo [MCRFlow] Starting Vite React Dev Server with HMR on port $(UI) (proxying to :$(CONTROL))...
+	$(SET_UI_ENV) npm --prefix web run dev -- --port $(UI)
 
 # Default development runner
 run: dev-control
