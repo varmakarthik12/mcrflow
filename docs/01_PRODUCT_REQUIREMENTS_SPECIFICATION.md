@@ -1,7 +1,7 @@
 # Product Requirements Specification (PRS)
 ## Next-Gen Cloud-Native TV Playout & Channel Automation Platform
 **Codename:** `MCRFlow Playout`  
-**Target Class:** Enterprise-Grade Master Control & Playout Automation (Alternative to PlayBox Neo, Beluga / BroadStream, Cinegy Air, Pebble Beach Marina)
+**Target Class:** Enterprise-Grade Master Control & Playout Automation
 
 ---
 
@@ -9,8 +9,8 @@
 
 Modern television broadcasting and FAST (Free Ad-Supported Streaming TV) networks require 24/7 linear playout automation that is agile, resilient, cost-effective, and independent of proprietary hardware dongles.
 
-Legacy systems such as **PlayBox Neo** (AirBox Neo / TitleBox Neo), **BroadStream Beluga (OASIS)**, **Cinegy Air**, and **Pebble Beach Marina** typically suffer from:
-- Reliance on monolithic Windows servers and hardware USB dongles.
+Traditional linear playout systems typically suffer from:
+- Reliance on monolithic servers and hardware USB license dongles.
 - Fragmented management UIs across separate desktop applications (separate playout scheduler, graphics maker, capture utility, and monitoring console).
 - Rigid on-premise infrastructure with complex, vendor-locked redundancy switches.
 - Clunky metadata entry with manual copy-pasting from movie databases.
@@ -20,24 +20,23 @@ Legacy systems such as **PlayBox Neo** (AirBox Neo / TitleBox Neo), **BroadStrea
 
 ---
 
-## 2. Competitive Benchmarking Matrix
+## 2. Industry Capabilities Matrix & Feature Standards
 
-| Feature / Capability | PlayBox Neo (AirBox/TitleBox) | Beluga Playout (BroadStream) | Cinegy Air PRO | Pebble Beach (Marina/Orca) | **MCRFlow Playout (Our Platform)** |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Architecture** | Windows Monolithic Win32 | Windows Server / Client | Windows Server / DVB | Virtualized / Linux / Win | **Cloud-Native Linux/Docker, Go + React** |
-| **Web UI Management** | Partial (Multi Playout Mgr) | Web client available | Web control interface | Marina web UI | **Single Responsive React UI for N Channels** |
-| **Edge Agent Scalability** | Fixed physical servers | Fixed hardware | Fixed nodes | Hypervisor VMs | **Dockerized Go Agent: All-in-One or Edge-Only** |
-| **Zero-Interruption Redundancy** | 1+1 Hardware bypass | 1+1 Mirroring | Redundant playout nodes | N+M Virtualized failover | **1+1 & N+M Hot Standby, Virtual IP / SRT Hitless** |
-| **Agent Authentication** | Hardware Dongle (HASP) | License Server | Dongle / Network license | License Manager | **Auto-Generated Cryptographic Pairing Tokens** |
-| **Streaming Outputs** | SDI, NDI, UDP TS, RTMP | SDI, NDI, UDP, SRT | SDI, SMPTE 2110, SRT, UDP | SDI, ST 2110, SRT, HLS | **Multi-dest: UDP, SRT, RTMP, HLS, NDI, DeckLink** |
-| **Graphics & Ad Maker** | TitleBox (Separate Win32 app)| Integrated OASIS CG | Cinegy Type (Separate) | Integrated CG Engine | **Built-in WYSIWYG Drag-and-Drop Canvas with CSS/Canvas Animations** |
-| **Ad Splicing & Cueing** | SCTE-35 / SCTE-104 | SCTE-35 / Opt-out | SCTE-35 digital insertion | SCTE-35 / SCTE-104 | **SCTE-35 Splice Cues + Ad Break Pre/Mid/Post-Roll** |
-| **Metadata Enrichment** | Manual CSV/XML import | Manual XML/ADI import | Manual / Cinegy Archive | MAM integration (Pebble) | **Inline Seamless TMDb / IMDb / TVDb Search & Autofill** |
-| **Auto EPG Generation** | DVB EIT / XMLTV tool | XMLTV / PSIP generator | XMLTV / DVB-SI | SCTE-118 / DVB / PSIP | **Built-in DVB-SI EIT, XMLTV, JSON, SCTE-118 Export** |
-| **ChatOps / Remote Bot** | None | None | None | None | **Telegram Bot NLP Scheduling + Fuzzy Search + Conflict Resolver** |
-| **Storage Connectors** | Local drives / UNC share | UNC share / SAN | Cinegy Storage / SMB | SAN / NAS / S3 | **NAS (NFS/SMB), Local Disk Alias, Object Storage** |
-| **Internationalization** | English / Limited | English / Spanish | English / German / Russian | English | **English Default + 10 Indian Languages Built-in** |
-
+| Feature / Capability | Traditional Playout Systems | **MCRFlow Playout (Our Platform)** |
+| :--- | :--- | :--- |
+| **Architecture** | Monolithic OS server / client | **Cloud-Native Linux/Docker, Go + React** |
+| **Web UI Management** | Fragmented desktop tools / partial web | **Single Responsive React UI for N Channels** |
+| **Edge Agent Scalability** | Fixed physical server instances | **Dockerized Go Agent: All-in-One or Edge-Only** |
+| **Zero-Interruption Redundancy** | Hardware bypass / manual switchover | **1+1 & N+M Hot Standby, Virtual IP / SRT Hitless** |
+| **Agent Authentication** | Hardware USB dongle / node-locked license | **Auto-Generated Cryptographic Pairing Tokens** |
+| **Streaming Outputs** | Limited SDI / UDP card outputs | **Multi-dest: UDP, SRT, RTMP, HLS, NDI, DeckLink** |
+| **Graphics & Ad Maker** | Separate standalone CG software suites | **Built-in WYSIWYG Drag-and-Drop Canvas with CSS/Canvas Animations** |
+| **Ad Splicing & Cueing** | Basic external GPI triggers | **SCTE-35 Splice Cues + Ad Break Pre/Mid/Post-Roll** |
+| **Metadata Enrichment** | Manual CSV/XML import | **Inline Seamless TMDb / IMDb / TVDb Search & Autofill** |
+| **Auto EPG Generation** | External XMLTV converter utility | **Built-in DVB-SI EIT, XMLTV, JSON, SCTE-118 Export** |
+| **ChatOps / Remote Bot** | None | **Telegram Bot NLP Scheduling + Fuzzy Search + Conflict Resolver** |
+| **Storage Connectors** | Local drives / fixed UNC share | **NAS (NFS/SMB), Local Disk Alias, Object Storage** |
+| **Internationalization** | Single-language / English only | **English Default + 10 Indian Languages Built-in** |
 ---
 
 ## 3. Detailed Product Capabilities & Functional Specifications
