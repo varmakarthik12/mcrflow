@@ -1,5 +1,5 @@
 # ==============================================================================
-# OmniStream Playout - Headless Edge Playout Agent Container
+# MCRFlow Playout - Headless Edge Playout Agent Container
 # ==============================================================================
 
 # Stage 1: Build Headless Go Playout Agent
@@ -8,8 +8,8 @@ WORKDIR /app
 COPY go.mod go.sum* ./
 RUN go mod download 2>/dev/null || true
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/playout-agent ./cmd/playout-agent 2>/dev/null || \
-    (mkdir -p /bin && echo "#!/bin/sh" > /bin/playout-agent && chmod +x /bin/playout-agent)
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/mcrflow-agent ./cmd/mcrflow-agent 2>/dev/null || \
+    (mkdir -p /bin && echo "#!/bin/sh" > /bin/mcrflow-agent && chmod +x /bin/mcrflow-agent)
 
 # Stage 2: Minimal Broadcast Runtime with Hardware Acceleration
 FROM ubuntu:24.04 AS runtime
@@ -29,14 +29,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Setup persistent token volume and working directories
-RUN mkdir -p /var/lib/playout-agent /media/storage
-VOLUME ["/var/lib/playout-agent", "/media/storage"]
+RUN mkdir -p /var/lib/mcrflow-agent /media/storage
+VOLUME ["/var/lib/mcrflow-agent", "/media/storage"]
 
-COPY --from=builder /bin/playout-agent /usr/local/bin/playout-agent
+COPY --from=builder /bin/mcrflow-agent /usr/local/bin/mcrflow-agent
 COPY docker/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh
-RUN chmod +x /usr/local/bin/agent-entrypoint.sh /usr/local/bin/playout-agent
+RUN chmod +x /usr/local/bin/agent-entrypoint.sh /usr/local/bin/mcrflow-agent
 
 EXPOSE 9095 5000-5010/udp 1935
 
 ENTRYPOINT ["/usr/local/bin/agent-entrypoint.sh"]
-CMD ["/usr/local/bin/playout-agent", "--config", "/etc/playout-agent/config.yaml"]
+CMD ["/usr/local/bin/mcrflow-agent", "--config", "/etc/mcrflow-agent/config.yaml"]

@@ -1,0 +1,86 @@
+version: 2
+
+project_name: mcrflow
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # 1. All-in-One Binary: MCRFlow Control Plane + Embedded UI + Playout Engine
+  - id: mcrflow-control
+    main: ./cmd/mcrflow-control
+    binary: mcrflow-control
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+  # 2. Agent-Only Binary: Headless MCRFlow Edge Playout Agent Daemon
+  - id: mcrflow-agent
+    main: ./cmd/mcrflow-agent
+    binary: mcrflow-agent
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - id: mcrflow-all-in-one-archive
+    builds:
+      - mcrflow-control
+    name_template: "{{ .ProjectName }}-control_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - docs/*
+      - ui-mockup/*
+
+  - id: mcrflow-agent-only-archive
+    builds:
+      - mcrflow-agent
+    name_template: "{{ .ProjectName }}-agent_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - docs/05_DOCKER_AND_DEPLOYMENT_GUIDE.md
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

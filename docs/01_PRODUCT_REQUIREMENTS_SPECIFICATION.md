@@ -1,6 +1,6 @@
 # Product Requirements Specification (PRS)
 ## Next-Gen Cloud-Native TV Playout & Channel Automation Platform
-**Codename:** `OmniStream Playout`  
+**Codename:** `MCRFlow Playout`  
 **Target Class:** Enterprise-Grade Master Control & Playout Automation (Alternative to PlayBox Neo, Beluga / BroadStream, Cinegy Air, Pebble Beach Marina)
 
 ---
@@ -16,13 +16,13 @@ Legacy systems such as **PlayBox Neo** (AirBox Neo / TitleBox Neo), **BroadStrea
 - Clunky metadata entry with manual copy-pasting from movie databases.
 - Inflexible deployment without native containerization or modern API-first architectures.
 
-**OmniStream Playout** solves this by providing a unified, web-native **React frontend** backed by high-performance **Go microservices** and distributed **Go Edge Playout Agents**. It combines broadcast-grade master control automation, real-time SCTE-35 ad insertion, intuitive WYSIWYG animated graphics creation, redundant failover, inline TMDb metadata enrichment, intelligent Telegram bot ChatOps, and deep multi-language localization (defaulting to English with native support for all 10 Indian constitutional languages).
+**MCRFlow Playout** solves this by providing a unified, web-native **React frontend** backed by high-performance **Go microservices** and distributed **Go Edge Playout Agents**. It combines broadcast-grade master control automation, dynamic resolution & FFmpeg profile management (with out-of-the-box presets for Indian Cable & DTH operations), real-time SCTE-35 ad insertion, intuitive WYSIWYG animated graphics creation, redundant failover, inline TMDb metadata enrichment, intelligent Telegram bot ChatOps, cross-platform standalone binaries via GoReleaser, and deep multi-language localization (defaulting to English with native support for all 10 Indian constitutional languages).
 
 ---
 
 ## 2. Competitive Benchmarking Matrix
 
-| Feature / Capability | PlayBox Neo (AirBox/TitleBox) | Beluga Playout (BroadStream) | Cinegy Air PRO | Pebble Beach (Marina/Orca) | **OmniStream Playout (Our Platform)** |
+| Feature / Capability | PlayBox Neo (AirBox/TitleBox) | Beluga Playout (BroadStream) | Cinegy Air PRO | Pebble Beach (Marina/Orca) | **MCRFlow Playout (Our Platform)** |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Architecture** | Windows Monolithic Win32 | Windows Server / Client | Windows Server / DVB | Virtualized / Linux / Win | **Cloud-Native Linux/Docker, Go + React** |
 | **Web UI Management** | Partial (Multi Playout Mgr) | Web client available | Web control interface | Marina web UI | **Single Responsive React UI for N Channels** |

@@ -1,5 +1,5 @@
 # ==============================================================================
-# OmniStream Playout - All-in-One Container (UI + Control Plane + Local Agent)
+# MCRFlow Playout - All-in-One Container (UI + Control Plane + Local Agent)
 # ==============================================================================
 
 # Stage 1: Build React Frontend
@@ -8,7 +8,7 @@ WORKDIR /app/ui
 COPY ui/package*.json ./
 RUN npm ci --prefer-offline 2>/dev/null || true
 COPY ui/ ./
-RUN npm run build 2>/dev/null || (mkdir -p dist && echo "<h1>OmniStream Playout UI</h1>" > dist/index.html)
+RUN npm run build 2>/dev/null || (mkdir -p dist && echo "<h1>MCRFlow Playout UI</h1>" > dist/index.html)
 
 # Stage 2: Build Go Control Plane & Edge Agent
 FROM golang:1.23-bookworm AS go-builder
@@ -16,10 +16,10 @@ WORKDIR /app
 COPY go.mod go.sum* ./
 RUN go mod download 2>/dev/null || true
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/omnistream-control ./cmd/control-plane 2>/dev/null || \
-    (mkdir -p /bin && echo "#!/bin/sh" > /bin/omnistream-control && chmod +x /bin/omnistream-control)
-RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/playout-agent ./cmd/playout-agent 2>/dev/null || \
-    (mkdir -p /bin && echo "#!/bin/sh" > /bin/playout-agent && chmod +x /bin/playout-agent)
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/mcrflow-control ./cmd/mcrflow-control 2>/dev/null || \
+    (mkdir -p /bin && echo "#!/bin/sh" > /bin/mcrflow-control && chmod +x /bin/mcrflow-control)
+RUN CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o /bin/mcrflow-agent ./cmd/mcrflow-agent 2>/dev/null || \
+    (mkdir -p /bin && echo "#!/bin/sh" > /bin/mcrflow-agent && chmod +x /bin/mcrflow-agent)
 
 # Stage 3: Broadcast Runtime
 FROM ubuntu:24.04 AS runtime
@@ -38,16 +38,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create persistent storage directories
-RUN mkdir -p /var/lib/playout-agent /var/lib/omnistream-data /var/www/omnistream /media/storage
-VOLUME ["/var/lib/playout-agent", "/var/lib/omnistream-data", "/media/storage"]
+RUN mkdir -p /var/lib/mcrflow-agent /var/lib/mcrflow-data /var/www/mcrflow /media/storage
+VOLUME ["/var/lib/mcrflow-agent", "/var/lib/mcrflow-data", "/media/storage"]
 
 # Copy artifacts
-COPY --from=ui-builder /app/ui/dist /var/www/omnistream
-COPY --from=go-builder /bin/omnistream-control /usr/local/bin/omnistream-control
-COPY --from=go-builder /bin/playout-agent /usr/local/bin/playout-agent
+COPY --from=ui-builder /app/ui/dist /var/www/mcrflow
+COPY --from=go-builder /bin/mcrflow-control /usr/local/bin/mcrflow-control
+COPY --from=go-builder /bin/mcrflow-agent /usr/local/bin/mcrflow-agent
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/all-in-one-entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/omnistream-control /usr/local/bin/playout-agent
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/mcrflow-control /usr/local/bin/mcrflow-agent
 
 EXPOSE 8080 9090 9095 5000-5010/udp 1935
 

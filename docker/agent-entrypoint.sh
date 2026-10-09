@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 
-AUTH_DIR="/var/lib/playout-agent"
+AUTH_DIR="/var/lib/mcrflow-agent"
 AUTH_FILE="${AUTH_DIR}/agent_auth.json"
 
 mkdir -p "${AUTH_DIR}"
 
 if [ ! -f "${AUTH_FILE}" ]; then
-    echo "[OMNISTREAM AGENT] Initializing fresh edge playout agent instance..."
+    echo "[MCRFLOW AGENT] Initializing fresh edge playout agent instance..."
     
     # Generate cryptographically secure token (32 random bytes as hex string)
     RANDOM_HEX=$(openssl rand -hex 32)
@@ -27,13 +27,13 @@ EOF
     
     echo ""
     echo "================================================================================"
-    echo "  OMNISTREAM EDGE PLAYOUT AGENT - CRYPTOGRAPHIC PAIRING REQUIRED"
+    echo "  MCRFLOW EDGE PLAYOUT AGENT - CRYPTOGRAPHIC PAIRING REQUIRED"
     echo "================================================================================"
     echo "  Agent ID:         ${AGENT_ID}"
     echo "  Listen Port:      :9095 (gRPC / mTLS)"
     echo "  Persistent Token: ${AGENT_TOKEN}"
     echo ""
-    echo "  👉 Copy and paste the token above into OmniStream Web UI:"
+    echo "  👉 Copy and paste the token above into MCRFlow Web UI:"
     echo "     Settings > Edge Agents > Pair New Agent"
     echo "================================================================================"
     echo ""
@@ -43,7 +43,7 @@ else
     
     echo ""
     echo "================================================================================"
-    echo "  OMNISTREAM EDGE PLAYOUT AGENT - EXISTING PAIRING RESTORED"
+    echo "  MCRFLOW EDGE PLAYOUT AGENT - EXISTING PAIRING RESTORED"
     echo "================================================================================"
     echo "  Agent ID:         ${AGENT_ID}"
     echo "  Token Status:     Active (Preserved across container restart)"

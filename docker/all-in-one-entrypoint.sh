@@ -2,10 +2,10 @@
 set -e
 
 # Initialize local agent credentials if needed
-AUTH_DIR="/var/lib/playout-agent"
+AUTH_DIR="/var/lib/mcrflow-agent"
 AUTH_FILE="${AUTH_DIR}/agent_auth.json"
 
-mkdir -p "${AUTH_DIR}" /var/lib/omnistream-data /var/log
+mkdir -p "${AUTH_DIR}" /var/lib/mcrflow-data /var/log
 
 if [ ! -f "${AUTH_FILE}" ]; then
     RANDOM_HEX=$(openssl rand -hex 32)
@@ -22,7 +22,7 @@ EOF
 fi
 
 echo "================================================================================"
-echo "  OMNISTREAM PLAYOUT - ALL-IN-ONE CONTAINER BOOTED"
+echo "  MCRFLOW PLAYOUT - ALL-IN-ONE CONTAINER BOOTED"
 echo "  Web Management UI: http://localhost:8080"
 echo "  Control Plane gRPC: :9090"
 echo "  Embedded Agent:     :9095 (Auto-Paired locally)"

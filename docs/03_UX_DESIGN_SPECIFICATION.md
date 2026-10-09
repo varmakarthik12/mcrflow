@@ -1,5 +1,5 @@
 # UX Design Specification & Interaction Architecture
-## OmniStream Playout - Master Control Console
+## MCRFlow Playout - Master Control Console
 
 ---
 
@@ -26,7 +26,7 @@ Television playout consoles are operated in high-stress, low-light Master Contro
 ### 2.1 Screen 1: Master Operations Dashboard
 ```text
 +----------------------------------------------------------------------------------------------------+
-|  [OmniStream Logo]   Channels: 8 Active | Health: 99.98% | Time: 16:15:32 IST (UTC+5:30) | [🌐 Hindi▼]  |
+|  [MCRFlow Logo]   Channels: 8 Active | Health: 99.98% | Time: 16:15:32 IST (UTC+5:30) | [🌐 Hindi▼]  |
 +----------------------------------------------------------------------------------------------------+
 |  [Cluster CPU: 24%]  [GPU NVENC: 38%]  [Memory: 14.2 GB]  [Egress: 184 Mbps]  [Active Destinations: 24] |
 +----------------------------------------------------------------------------------------------------+
@@ -161,8 +161,21 @@ Television playout consoles are operated in high-stress, low-light Master Contro
 +----------------------------------------------------------------------------------------------------+
 |  ADVANCED SETTINGS & INFRASTRUCTURE                                                                |
 +----------------------------------------------------------------------------------------------------+
-|  [Edge Agents & Pairing]  [Storage Mounts]  [Bot & ChatOps]  [Service Mesh]  [i18n & Regional]     |
+|  [Resolutions & Presets]  [Edge Agents & Pairing]  [Storage Mounts]  [Bot & ChatOps]  [Service Mesh]|
 +----------------------------------------------------------------------------------------------------+
+|  SECTION: RESOLUTION PRESET & FFMPEG PROFILE MANAGEMENT                                            |
+|  +-----------------------------------------------------------------------------------------------+ |
+|  | Preset: 1080i50 PAL HD (Standard Indian Cable/DTH)  | 1920x1080 @ 25fps (50i TFF) [BUILT-IN]   | |
+|  | Interlace: TFF | DAR: 16:9 | Color: BT.709         | Bitrate: 6500 kbps CBR                   | |
+|  | -vf "yadif=0:-1:1,scale=1920:1080" -flags +ilme+ildct -top 1 -b:v 6500k       [Copy FFmpeg]   | |
+|  +-----------------------------------------------------------------------------------------------+ |
+|  | Preset: 576i50 PAL SD (Legacy Indian Cable 4:3)     | 720x576 @ 25fps (50i TFF)   [BUILT-IN]   | |
+|  | Preset: 576i50 PAL SD Anamorphic (16:9 Cable)       | 720x576 @ 25fps (50i TFF)   [BUILT-IN]   | |
+|  | Preset: 720p50 HD (Sports Cable)                    | 1280x720 @ 50fps            [BUILT-IN]   | |
+|  | Preset: 1080p50 Full HD (IPTV / OTT)                | 1920x1080 @ 50fps           [BUILT-IN]   | |
+|  | Preset: 4K UHD 2160p50 (UHD DTH Broadcast)          | 3840x2160 @ 50fps HEVC      [BUILT-IN]   | |
+|  | [+ Add Custom Resolution Preset Modal]                                                          | |
+|  +-----------------------------------------------------------------------------------------------+ |
 |  SECTION: EDGE AGENT MANAGEMENT & CRYPTO PAIRING                                                   |
 |  +-----------------------------------------------------------------------------------------------+ |
 |  | Agent Hostname: delhi-dc1-primary   | IP: 100.64.1.15 (Tailscale) | Status: [🟢 ONLINE]       | |
@@ -175,7 +188,7 @@ Television playout consoles are operated in high-stress, low-light Master Contro
 |  (Obtain this token from `docker logs <agent_container>`)            [Authenticate & Pair Agent]   |
 +----------------------------------------------------------------------------------------------------+
 |  SECTION: BOT & CHATOPS CONFIGURATION (MULTIPLE BOTS)                                              |
-|  Bot Platform: [Telegram Messenger ▼]   Bot Name: [@OmniPlayoutOpsBot]                             |
+|  Bot Platform: [Telegram Messenger ▼]   Bot Name: [@MCRFlowPlayoutOpsBot]                          |
 |  API Key:      [7123456789:AAHq0_k...xxxxxxxxxxxxxxxx]  [Test Bot Connection: 🟢 Connected]       |
 |  Allowed Chat IDs Whitelist: [98471238, -100192847192 (MCR Admins Group)]                          |
 |  Assigned Channels: [x] CH 01  [x] CH 02  [x] CH 03                                                |

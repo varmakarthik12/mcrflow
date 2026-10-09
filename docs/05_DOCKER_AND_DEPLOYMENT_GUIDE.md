@@ -5,16 +5,16 @@
 
 ## 1. Overview of Build Modes
 
-OmniStream Playout is engineered for modern microservices and container orchestration. It provides two purpose-built Docker image targets:
+MCRFlow Playout is engineered for modern microservices and container orchestration. It provides two purpose-built Docker image targets, alongside cross-platform standalone binaries:
 
-1. **`omnistream-all-in-one:latest` (Single-Box Turnkey Node)**
+1. **`mcrflow-all-in-one:latest` (Single-Box Turnkey Node)**
    - **Target**: Regional broadcast studios, cable headends, testing labs, or single-node deployments.
-   - **Contents**: React Web Console, Go Control Plane backend, embedded Go Local Playout Agent, FFmpeg 7.x broadcast media suite, embedded SQLite database.
+   - **Contents**: React Web Console, Go Control Plane backend (`mcrflow-control`), embedded Go Local Playout Agent (`mcrflow-agent`), FFmpeg 7.x/8.x broadcast media suite, embedded SQLite database.
    - **Startup**: Uses Supervisor to orchestrate the control plane and embedded agent locally.
 
-2. **`omnistream-edge-agent:latest` (Headless Edge Worker Node)**
+2. **`mcrflow-agent-only:latest` (Headless Edge Worker Node)**
    - **Target**: Distributed playout farms, cloud worker clusters, and remote transmitters.
-   - **Contents**: Ultra-lean Go daemon binary (`playout-agent`), hardware-accelerated FFmpeg / GStreamer pipelines (NVIDIA NVENC, Intel QuickSync, VAAPI), OpenSSL.
+   - **Contents**: Ultra-lean Go daemon binary (`mcrflow-agent`), hardware-accelerated FFmpeg / GStreamer pipelines (NVIDIA NVENC, Intel QuickSync, VAAPI), OpenSSL.
    - **Footprint**: < 120MB base image, headless (no web server, no database).
 
 ---
@@ -26,10 +26,10 @@ sequenceDiagram
     autonumber
     participant Admin as Systems Administrator
     participant Edge as Edge Agent Container
-    participant Disk as Persistent Volume (/var/lib/playout-agent)
-    participant CP as OmniStream Web UI / Control Plane
+    participant Disk as Persistent Volume (/var/lib/mcrflow-agent)
+    participant CP as MCRFlow Web UI / Control Plane
 
-    Admin->>Edge: docker run -v agent-data:/var/lib/playout-agent ...
+    Admin->>Edge: docker run -v agent-data:/var/lib/mcrflow-agent ...
     Edge->>Disk: Check if agent_auth.json exists
     alt First Boot (Fresh Install)
         Edge->>Edge: crypto/rand generates 256-bit entropy token
@@ -49,20 +49,20 @@ sequenceDiagram
 ```
 
 ### 2.1 First-Boot Token Generation
-When `omnistream-edge-agent` boots for the first time:
-1. The container entrypoint checks `/var/lib/playout-agent/agent_auth.json`.
+When `mcrflow-agent-only` boots for the first time:
+1. The container entrypoint checks `/var/lib/mcrflow-agent/agent_auth.json`.
 2. If absent, it invokes `openssl rand -hex 32` (or Go's `crypto/rand`), yielding a 256-bit cryptographically secure token prefixed with `agt_sec_`.
 3. The file is saved with strict `0600` permissions.
 4. The token is emitted to `stdout` in an ASCII banner:
    ```text
    ================================================================================
-     OMNISTREAM EDGE PLAYOUT AGENT - CRYPTOGRAPHIC PAIRING REQUIRED
+     MCRFLOW EDGE PLAYOUT AGENT - CRYPTOGRAPHIC PAIRING REQUIRED
    ================================================================================
      Agent ID:         delhi-edge-primary-01
      Listen Port:      :9095 (gRPC / mTLS)
      Persistent Token: agt_sec_8f43a9b2c011e749a1d2e8b409c2513f87a6b4c3d2e1f0a9b8c7d6e5f4a3b2c1
 
-     👉 Copy and paste the token above into OmniStream Web UI:
+     👉 Copy and paste the token above into MCRFlow Web UI:
         Settings > Edge Agents > Pair New Agent
    ================================================================================
    ```
@@ -70,7 +70,7 @@ When `omnistream-edge-agent` boots for the first time:
 ### 2.2 Container Restarts & Persistence
 - **No Token Drift**: Container restarts, node reboots, or container upgrades (`docker stop && docker rm && docker run`) read the persistent volume.
 - The existing token is maintained without reset, ensuring zero pairing disruption.
-- **Revocation**: The token can only be reset via an explicit authenticated command from the Control Plane UI (`Reset Agent Token`) or by manually deleting `/var/lib/playout-agent/agent_auth.json`.
+- **Revocation**: The token can only be reset via an explicit authenticated command from the Control Plane UI (`Reset Agent Token`) or by manually deleting `/var/lib/mcrflow-agent/agent_auth.json`.
 
 ---
 
@@ -80,10 +80,10 @@ To configure a broadcast channel with 1+1 active-passive auto-failover:
 
 1. **Deploy Control Plane Node (Master Server)**:
    ```bash
-   docker run -d --name omnistream-cp \
+   docker run -d --name mcrflow-cp \
      -p 8080:8080 -p 9090:9090 \
-     -v omnistream-data:/var/lib/omnistream-data \
-     omnistream-all-in-one:latest
+     -v mcrflow-data:/var/lib/mcrflow-data \
+     mcrflow-all-in-one:latest
    ```
 
 2. **Deploy Primary Edge Agent (Site A - Delhi Data Center)**:
@@ -91,9 +91,9 @@ To configure a broadcast channel with 1+1 active-passive auto-failover:
    docker run -d --name agent-delhi-primary \
      --gpus all \
      -p 9095:9095 -p 5000-5010:5000-5010/udp \
-     -v agent-delhi-auth:/var/lib/playout-agent \
+     -v agent-delhi-auth:/var/lib/mcrflow-agent \
      -v /nas/movies:/media/storage:ro \
-     omnistream-edge-agent:latest
+     mcrflow-agent-only:latest
    ```
 
 3. **Deploy Fallback Edge Agent (Site B - Mumbai Data Center)**:
@@ -101,9 +101,9 @@ To configure a broadcast channel with 1+1 active-passive auto-failover:
    docker run -d --name agent-mumbai-fallback \
      --gpus all \
      -p 9095:9095 -p 5000-5010:5000-5010/udp \
-     -v agent-mumbai-auth:/var/lib/playout-agent \
+     -v agent-mumbai-auth:/var/lib/mcrflow-agent \
      -v /nas/movies:/media/storage:ro \
-     omnistream-edge-agent:latest
+     mcrflow-agent-only:latest
    ```
 
 4. **Pair Agents in Management Console**:
@@ -134,30 +134,51 @@ Network storage can be mounted to the container in two ways:
 
 For multi-site setups where edge playout nodes reside behind carrier-grade NAT (CGNAT) or cellular 5G modems without static public IPs:
 
-1. **Tailscale Sidecar Pattern**:
-   ```yaml
-   services:
-     tailscale:
-       image: tailscale/tailscale:latest
-       container_name: ts-edge-delhi
-       hostname: edge-delhi-playout
-       environment:
-         - TS_AUTHKEY=tskey-auth-k123456789-xxxxxxxx
-         - TS_STATE_DIR=/var/lib/tailscale
-       volumes:
-         - ts-state:/var/lib/tailscale
-         - /dev/net/tun:/dev/net/tun
-       cap_add:
-         - NET_ADMIN
-       restart: unless-stopped
+```yaml
+services:
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: ts-edge-delhi
+    hostname: edge-delhi-playout
+    environment:
+      - TS_AUTHKEY=tskey-auth-k123456789-xxxxxxxx
+      - TS_STATE_DIR=/var/lib/tailscale
+    volumes:
+      - ts-state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    restart: unless-stopped
 
-     edge-agent:
-       image: omnistream-edge-agent:latest
-       network_mode: service:tailscale
-       depends_on:
-         - tailscale
-       volumes:
-         - agent-auth:/var/lib/playout-agent
-         - /nas/movies:/media/storage:ro
-   ```
-2. The agent is immediately reachable on its secure Tailscale MagicDNS IP (e.g., `100.64.1.15:9095`) via WireGuard encryption without any open router ports.
+  edge-agent:
+    image: mcrflow-agent-only:latest
+    network_mode: service:tailscale
+    depends_on:
+      - tailscale
+    volumes:
+      - agent-auth:/var/lib/mcrflow-agent
+      - /nas/movies:/media/storage:ro
+```
+The agent is immediately reachable on its secure Tailscale MagicDNS IP (e.g., `100.64.1.15:9095`) via WireGuard encryption without any open router ports.
+
+---
+
+## 6. Non-Docker Standalone Binaries (GoReleaser)
+
+For broadcast environments where containerization is not permitted or desired:
+- **Build Spec**: Defined in `.goreleaser.yaml`.
+- **Binaries Published**:
+  - `mcrflow-control`: Control Plane & UI Server
+  - `mcrflow-agent`: Standalone Edge Playout Daemon
+- **Supported Operating Systems & Architectures**:
+  - Linux (`amd64`, `arm64`)
+  - Windows (`amd64`)
+  - macOS (`darwin/amd64`, `darwin/arm64`)
+- **Direct Invocation Example (Windows / Linux)**:
+  ```bash
+  # Start Edge Agent Daemon
+  ./mcrflow-agent -port 9095 -auth-dir /var/lib/mcrflow-agent
+
+  # Start Control Plane
+  ./mcrflow-control -port 8080
+  ```

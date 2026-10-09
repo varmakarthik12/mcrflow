@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OmniStream Playout - Master Control Console</title>
+  <title>MCRFlow Playout - Master Control Console</title>
   <!-- Tailwind CSS -->
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
@@ -100,7 +100,7 @@
         </div>
         <div>
           <span class="text-base font-bold tracking-tight text-white flex items-center gap-1.5">
-            OmniStream <span class="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 font-semibold uppercase tracking-wider border border-indigo-500/30">MCR</span>
+            MCRFlow <span class="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 font-semibold uppercase tracking-wider border border-indigo-500/30">MCR</span>
           </span>
           <p class="text-[10px] text-gray-400 -mt-0.5" id="brand-tagline">Cloud-Native Broadcast Playout & Automation</p>
         </div>
@@ -540,13 +540,30 @@
                 <input type="number" value="101" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
               </div>
               <div>
-                <label class="block text-[11px] text-gray-400 mb-1">Output Resolution</label>
-                <select class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
-                  <option selected>1080p50 (PAL / India Standard)</option>
-                  <option>1080p59.94 (NTSC)</option>
-                  <option>720p50 (Sport Egress)</option>
-                  <option>4K UHD 2160p50</option>
+                <div class="flex items-center justify-between mb-1">
+                  <label class="block text-[11px] text-gray-400">Output Resolution & Profile</label>
+                  <button type="button" onclick="goToResolutionsTab()" class="text-[10px] text-indigo-400 hover:text-indigo-300 underline font-medium">⚙️ Manage Presets</button>
+                </div>
+                <select id="channel-resolution-select" onchange="updateResolutionSummary(this.value)" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono">
+                  <optgroup label="🇮🇳 Indian Cable & DTH Standards">
+                    <option value="res-in-1080i50" selected>1080i50 PAL HD (Standard Indian Cable / DTH - 1920x1080 50i TFF)</option>
+                    <option value="res-in-720p50">720p50 HD (Sports & Fast Motion Cable - 1280x720 50p)</option>
+                    <option value="res-in-576i50-43">576i50 PAL SD (Legacy Indian Cable 4:3 - 720x576 50i)</option>
+                    <option value="res-in-576i50-169">576i50 PAL SD Anamorphic (16:9 Digital Cable - 720x576 50i)</option>
+                  </optgroup>
+                  <optgroup label="🌐 Global & OTT / IPTV Standards">
+                    <option value="res-in-1080p50">1080p50 Full HD (Fiber IPTV / OTT - 1920x1080 50p)</option>
+                    <option value="res-global-1080p59">1080p59.94 Full HD (NTSC Standard - 1920x1080 59.94p)</option>
+                    <option value="res-in-4k50">4K UHD 2160p50 (UHD DTH Broadcast - 3840x2160 50p)</option>
+                  </optgroup>
+                  <optgroup label="⚙️ Custom FFmpeg Video Profiles">
+                    <option value="res-custom-01">Custom 1080i50 Deinterlaced (Yadif + EBU R128 Loudness)</option>
+                  </optgroup>
                 </select>
+                <div id="resolution-summary-badge" class="mt-1 text-[10px] text-emerald-400/90 font-mono flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span id="resolution-summary-text">PAL 50i Interlaced TFF | -vf "yadif=0:-1:1,scale=1920:1080" | CBR 6500 kbps</span>
+                </div>
               </div>
               <div>
                 <label class="block text-[11px] text-gray-400 mb-1">Video Codec & GPU</label>
@@ -1044,7 +1061,7 @@
               <div class="bg-red-700/95 text-white py-1 px-4 text-xs font-bold flex items-center overflow-hidden border-t border-red-500">
                 <span class="bg-black text-amber-400 px-2 py-0.5 text-[10px] rounded uppercase mr-3 shrink-0 font-black">BREAKING</span>
                 <div class="overflow-hidden whitespace-nowrap flex-1">
-                  <span class="anim-ticker">🔥 SPECIAL FESTIVE BROADCAST: TATA MOTORS PRESENTS BLOCKBUSTER MOVIE MARATHON ALL WEEKEND ON OMNISTREAM TV 🔥</span>
+                  <span class="anim-ticker">🔥 SPECIAL FESTIVE BROADCAST: TATA MOTORS PRESENTS BLOCKBUSTER MOVIE MARATHON ALL WEEKEND ON MCRFLOW TV 🔥</span>
                 </div>
               </div>
             </div>
@@ -1217,6 +1234,10 @@
       <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 min-h-0">
         <!-- Sub-Navigation (3 Columns) -->
         <div class="lg:col-span-3 bg-[#111827] border border-[#1F2937] rounded-lg p-2 space-y-1">
+          <button onclick="switchSettingsTab('resolutions')" id="set-tab-resolutions" class="w-full text-left px-3 py-2 rounded text-xs font-semibold text-gray-300 hover:bg-[#1E293B] flex items-center justify-between">
+            <span>Resolutions & FFmpeg Presets</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono">Indian Cable</span>
+          </button>
           <button onclick="switchSettingsTab('agents')" id="set-tab-agents" class="w-full text-left px-3 py-2 rounded text-xs font-semibold bg-indigo-600 text-white flex items-center justify-between">
             <span>Edge Agents & Token Pairing</span>
             <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
@@ -1241,6 +1262,209 @@
 
         <!-- Sub-Content Area (9 Columns) -->
         <div class="lg:col-span-9 bg-[#111827] border border-[#1F2937] rounded-lg p-4 overflow-y-auto">
+
+          <!-- TAB 0: RESOLUTIONS & FFMPEG ENCODING PRESETS -->
+          <div id="set-content-resolutions" class="space-y-4 hidden">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                  <span>Broadcast Resolutions & FFmpeg Video Profiles</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold border border-emerald-500/30">Indian Cable Standard (PAL 50Hz)</span>
+                </h3>
+                <p class="text-xs text-gray-400">Manage transcode rasters, interlaced field order (TFF/BFF), aspect ratio DAR, audio normalization, and custom FFmpeg video filter chains</p>
+              </div>
+              <button onclick="openCustomResolutionModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white flex items-center gap-1.5 shadow">
+                <span>+ Add Custom Resolution Preset</span>
+              </button>
+            </div>
+
+            <!-- Indian Cable Presets Banner / Note -->
+            <div class="p-3 bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-transparent border border-amber-500/20 rounded-lg flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="text-lg">🇮🇳</span>
+                <div>
+                  <div class="text-xs font-semibold text-amber-300">Indian MSO & DTH Cable Operations Notice</div>
+                  <div class="text-[11px] text-gray-300">Standard Indian transmission mandates 50Hz field/frame rates (PAL 1080i50 / 576i50 25fps interlaced TFF). All presets below are pre-tuned for TRAI and DVB-C/S2 compliance.</div>
+                </div>
+              </div>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono">TRAI Compliant</span>
+            </div>
+
+            <!-- Presets Grid -->
+            <div class="space-y-3">
+              <!-- Preset 1: 1080i50 PAL HD -->
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                    <span class="text-sm font-bold text-white">1080i50 PAL HD</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">Standard Indian Cable / DTH</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold">BUILT-IN</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 font-mono">1920x1080 @ 25fps (50i TFF)</span>
+                    <button onclick="copyPresetFfmpeg('res-in-1080i50')" class="px-2 py-1 text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-mono">Copy -vf</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-400 bg-[#111827] p-2 rounded border border-gray-800">
+                  <div>Scan: <strong class="text-white">Interlaced (TFF)</strong></div>
+                  <div>Aspect: <strong class="text-white">16:9 Wide</strong></div>
+                  <div>Color: <strong class="text-white">BT.709 HD</strong></div>
+                  <div>Bitrate: <strong class="text-sky-400">6500 kbps CBR</strong></div>
+                </div>
+                <div class="text-[11px] font-mono text-gray-400 bg-[#0B0F17] p-2 rounded border border-gray-800 flex items-center justify-between overflow-x-auto">
+                  <span class="text-amber-400/90 whitespace-nowrap">-vf "yadif=0:-1:1,scale=1920:1080" -b:v 6500k -minrate 6500k -maxrate 6500k -bufsize 13000k -flags +ilme+ildct -top 1 -c:a aac -b:a 192k</span>
+                </div>
+              </div>
+
+              <!-- Preset 2: 720p50 HD -->
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                    <span class="text-sm font-bold text-white">720p50 HD</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">Sports & Fast Motion Cable</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold">BUILT-IN</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 font-mono">1280x720 @ 50fps (Progressive)</span>
+                    <button onclick="copyPresetFfmpeg('res-in-720p50')" class="px-2 py-1 text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-mono">Copy -vf</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-400 bg-[#111827] p-2 rounded border border-gray-800">
+                  <div>Scan: <strong class="text-white">Progressive</strong></div>
+                  <div>Aspect: <strong class="text-white">16:9 Wide</strong></div>
+                  <div>Color: <strong class="text-white">BT.709 HD</strong></div>
+                  <div>Bitrate: <strong class="text-sky-400">5000 kbps CBR</strong></div>
+                </div>
+                <div class="text-[11px] font-mono text-gray-400 bg-[#0B0F17] p-2 rounded border border-gray-800 flex items-center justify-between overflow-x-auto">
+                  <span class="text-amber-400/90 whitespace-nowrap">-vf "scale=1280:720" -r 50 -b:v 5000k -minrate 5000k -maxrate 5000k -bufsize 10000k -c:a aac -b:a 192k</span>
+                </div>
+              </div>
+
+              <!-- Preset 3: 576i50 PAL SD (Legacy 4:3) -->
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                    <span class="text-sm font-bold text-white">576i50 PAL SD (4:3)</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">Legacy Indian Cable 4:3 (DVB-C)</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold">BUILT-IN</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 font-mono">720x576 @ 25fps (50i TFF)</span>
+                    <button onclick="copyPresetFfmpeg('res-in-576i50-43')" class="px-2 py-1 text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-mono">Copy -vf</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-400 bg-[#111827] p-2 rounded border border-gray-800">
+                  <div>Scan: <strong class="text-white">Interlaced (TFF)</strong></div>
+                  <div>Aspect: <strong class="text-white">4:3 Standard</strong></div>
+                  <div>Color: <strong class="text-white">BT.601 PAL</strong></div>
+                  <div>Bitrate: <strong class="text-sky-400">2500 kbps CBR</strong></div>
+                </div>
+                <div class="text-[11px] font-mono text-gray-400 bg-[#0B0F17] p-2 rounded border border-gray-800 flex items-center justify-between overflow-x-auto">
+                  <span class="text-amber-400/90 whitespace-nowrap">-vf "scale=720:576,setdar=4/3" -flags +ilme+ildct -top 1 -b:v 2500k -minrate 2500k -maxrate 2500k -bufsize 5000k -c:a mp2 -b:a 128k</span>
+                </div>
+              </div>
+
+              <!-- Preset 4: 576i50 PAL SD Anamorphic 16:9 -->
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                    <span class="text-sm font-bold text-white">576i50 PAL SD Anamorphic (16:9)</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">Digital Cable SD (16:9 Anamorphic)</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold">BUILT-IN</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 font-mono">720x576 @ 25fps (50i TFF)</span>
+                    <button onclick="copyPresetFfmpeg('res-in-576i50-169')" class="px-2 py-1 text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-mono">Copy -vf</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-400 bg-[#111827] p-2 rounded border border-gray-800">
+                  <div>Scan: <strong class="text-white">Interlaced (TFF)</strong></div>
+                  <div>Aspect: <strong class="text-white">16:9 Anamorphic</strong></div>
+                  <div>Color: <strong class="text-white">BT.601 PAL</strong></div>
+                  <div>Bitrate: <strong class="text-sky-400">3200 kbps CBR</strong></div>
+                </div>
+                <div class="text-[11px] font-mono text-gray-400 bg-[#0B0F17] p-2 rounded border border-gray-800 flex items-center justify-between overflow-x-auto">
+                  <span class="text-amber-400/90 whitespace-nowrap">-vf "scale=720:576,setdar=16/9" -flags +ilme+ildct -top 1 -b:v 3200k -minrate 3200k -maxrate 3200k -bufsize 6400k -c:a aac -b:a 160k</span>
+                </div>
+              </div>
+
+              <!-- Preset 5: 1080p50 Full HD -->
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                    <span class="text-sm font-bold text-white">1080p50 Full HD</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">Fiber IPTV / OTT Playout</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold">BUILT-IN</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 font-mono">1920x1080 @ 50fps (Progressive)</span>
+                    <button onclick="copyPresetFfmpeg('res-in-1080p50')" class="px-2 py-1 text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-mono">Copy -vf</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-400 bg-[#111827] p-2 rounded border border-gray-800">
+                  <div>Scan: <strong class="text-white">Progressive</strong></div>
+                  <div>Aspect: <strong class="text-white">16:9 Wide</strong></div>
+                  <div>Color: <strong class="text-white">BT.709 HD</strong></div>
+                  <div>Bitrate: <strong class="text-sky-400">8500 kbps CBR</strong></div>
+                </div>
+                <div class="text-[11px] font-mono text-gray-400 bg-[#0B0F17] p-2 rounded border border-gray-800 flex items-center justify-between overflow-x-auto">
+                  <span class="text-amber-400/90 whitespace-nowrap">-vf "scale=1920:1080" -r 50 -b:v 8500k -minrate 8500k -maxrate 8500k -bufsize 17000k -c:a aac -b:a 256k</span>
+                </div>
+              </div>
+
+              <!-- Preset 6: 4K UHD 2160p50 -->
+              <div class="bg-[#1A2234] border border-[#2D3A54] rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                    <span class="text-sm font-bold text-white">4K UHD 2160p50</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-medium">UHD DTH Broadcast</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold">BUILT-IN</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 font-mono">3840x2160 @ 50fps (HEVC Main10)</span>
+                    <button onclick="copyPresetFfmpeg('res-in-4k50')" class="px-2 py-1 text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 rounded border border-gray-700 font-mono">Copy -vf</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-400 bg-[#111827] p-2 rounded border border-gray-800">
+                  <div>Scan: <strong class="text-white">Progressive</strong></div>
+                  <div>Aspect: <strong class="text-white">16:9 Wide</strong></div>
+                  <div>Color: <strong class="text-white">BT.2020 UHD</strong></div>
+                  <div>Bitrate: <strong class="text-sky-400">24000 kbps CBR</strong></div>
+                </div>
+                <div class="text-[11px] font-mono text-gray-400 bg-[#0B0F17] p-2 rounded border border-gray-800 flex items-center justify-between overflow-x-auto">
+                  <span class="text-amber-400/90 whitespace-nowrap">-vf "scale=3840:2160" -r 50 -c:v libx265 -tag:v hvc1 -b:v 24000k -colorspace bt2020nc -c:a aac -b:a 384k</span>
+                </div>
+              </div>
+
+              <!-- Preset 7: Custom User Profile -->
+              <div class="bg-[#1A2234] border border-indigo-500/40 rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                    <span class="text-sm font-bold text-white">Custom 1080i50 Deinterlaced (Yadif + Loudness)</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/30 font-medium">User Custom Profile</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-400 font-mono">1920x1080 @ 50fps</span>
+                    <button onclick="openCustomResolutionModal()" class="px-2 py-1 text-[11px] bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium">Edit Profile</button>
+                    <button class="px-2 py-1 text-[11px] bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 rounded border border-rose-500/30">Delete</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-gray-400 bg-[#111827] p-2 rounded border border-gray-800">
+                  <div>Filter: <strong class="text-emerald-400">yadif=1,scale=1920:1080</strong></div>
+                  <div>Audio Filter: <strong class="text-white">loudnorm=I=-24:LRA=7:TP=-2</strong></div>
+                  <div>Color: <strong class="text-white">BT.709 HD</strong></div>
+                  <div>Bitrate: <strong class="text-sky-400">7000 kbps CBR</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <!-- TAB 1: EDGE AGENTS & CRYPTOGRAPHIC PAIRING -->
           <div id="set-content-agents" class="space-y-4">
@@ -1440,7 +1664,7 @@
               </div>
               <div>
                 <label class="block text-[11px] text-gray-400 mb-1">Control Plane MagicDNS FQDN</label>
-                <input type="text" value="omnistream-control.tail99a8.ts.net" readonly class="w-full bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-sky-400 font-mono">
+                <input type="text" value="mcrflow-control.tail99a8.ts.net" readonly class="w-full bg-[#111827] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-sky-400 font-mono">
               </div>
             </div>
           </div>
@@ -1694,7 +1918,7 @@
         <div class="bg-indigo-950/40 border border-indigo-500/30 p-3 rounded-lg text-indigo-300 space-y-1">
           <div class="font-bold">Cryptographic Token Pairing Instructions:</div>
           <p class="text-[11px] text-gray-300">
-            When deployed in Agent-Only mode, the container creates a persistent token in <code>/var/lib/playout-agent/agent_auth.json</code> and outputs it to container logs:
+            When deployed in Agent-Only mode, the container creates a persistent token in <code>/var/lib/mcrflow-agent/agent_auth.json</code> and outputs it to container logs:
           </p>
           <pre class="bg-black/60 p-2 rounded text-[10px] font-mono text-emerald-400 overflow-x-auto">docker logs edge-agent | grep agt_sec_</pre>
         </div>
@@ -1717,6 +1941,115 @@
       <div class="px-5 py-3 bg-[#1A2234] border-t border-[#2D3A54] flex justify-end gap-2">
         <button onclick="closePairModal()" class="px-3 py-1.5 bg-gray-800 text-gray-300 rounded text-xs">Cancel</button>
         <button onclick="confirmPairing()" class="px-4 py-1.5 bg-indigo-600 text-white rounded text-xs font-semibold shadow">Authenticate & Pair Node</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ==================================================================== -->
+  <!-- MODAL: ADD / EDIT CUSTOM RESOLUTION & FFMPEG PROFILE -->
+  <!-- ==================================================================== -->
+  <div id="custom-resolution-modal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="px-5 py-3.5 bg-[#1A2234] border-b border-[#2D3A54] flex items-center justify-between">
+        <div>
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <span>Custom Resolution & FFmpeg Stream Profile</span>
+            <span class="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono">Custom Preset</span>
+          </h3>
+          <p class="text-[11px] text-gray-400">Configure raster width, height, interlace scan mode, DAR, and custom FFmpeg video filters</p>
+        </div>
+        <button onclick="closeCustomResolutionModal()" class="text-gray-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4 overflow-y-auto text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Preset Profile Name</label>
+            <input type="text" id="cr-name" value="Custom 1080i50 PAL Deinterlaced" oninput="updateCustomFfmpegPreview()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white">
+          </div>
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Region Tag / Category</label>
+            <select id="cr-region" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white">
+              <option value="IN_CABLE" selected>🇮🇳 Indian Cable TV / DTH (PAL 50Hz)</option>
+              <option value="GLOBAL">🌐 Global OTT / IPTV (59.94 / 60Hz)</option>
+              <option value="INTERNAL">📡 Internal Studio Distribution</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Width (px)</label>
+            <input type="number" id="cr-width" value="1920" oninput="updateCustomFfmpegPreview()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+          </div>
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Height (px)</label>
+            <input type="number" id="cr-height" value="1080" oninput="updateCustomFfmpegPreview()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+          </div>
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Frame Rate (FPS)</label>
+            <input type="number" id="cr-fps" value="25" step="0.01" oninput="updateCustomFfmpegPreview()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Scan Mode / Interlacing</label>
+            <select id="cr-interlace" onchange="updateCustomFfmpegPreview()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white">
+              <option value="tff" selected>Interlaced (TFF - Top Field First)</option>
+              <option value="bff">Interlaced (BFF - Bottom Field First)</option>
+              <option value="progressive">Progressive (Non-Interlaced)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Display Aspect Ratio (DAR)</label>
+            <select id="cr-aspect" onchange="updateCustomFfmpegPreview()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white">
+              <option value="16:9" selected>16:9 (Widescreen HD)</option>
+              <option value="4:3">4:3 (Legacy Standard Def)</option>
+              <option value="2.39:1">2.39:1 (Cinemascope Scope)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Color Matrix Space</label>
+            <select id="cr-colorspace" onchange="updateCustomFfmpegPreview()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+              <option value="bt709" selected>BT.709 (HD / Full HD)</option>
+              <option value="bt601">BT.601 (SD PAL 576i)</option>
+              <option value="bt2020">BT.2020 (4K UHD Wide Color)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Video CBR Bitrate</label>
+            <input type="text" id="cr-vbitrate" value="6500k" oninput="updateCustomFfmpegPreview()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+          </div>
+          <div>
+            <label class="block text-[11px] text-gray-400 mb-1">Audio Bitrate</label>
+            <input type="text" id="cr-abitrate" value="192k" oninput="updateCustomFfmpegPreview()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[11px] text-gray-400 mb-1">Custom FFmpeg Video Filters (<code>-vf</code> string)</label>
+          <input type="text" id="cr-vf" value="yadif=0:-1:1,scale=1920:1080" oninput="updateCustomFfmpegPreview()" class="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-amber-400 font-mono">
+          <p class="text-[10px] text-gray-500 mt-0.5">Supports any libavfilter chain (e.g. <code>yadif=0:-1:1</code> for deinterlacing, <code>eq=brightness=0.02</code>, <code>delogo</code>, <code>drawtext</code>).</p>
+        </div>
+
+        <!-- Real-Time Generated Command Preview -->
+        <div class="space-y-1 bg-[#0B0F17] p-3 rounded-lg border border-gray-800">
+          <div class="flex items-center justify-between text-[11px] text-gray-400">
+            <span class="font-bold text-indigo-400">⚡ Live Generated FFmpeg Command Line:</span>
+            <span class="text-[10px] text-emerald-400 font-mono">Auto-Compiled</span>
+          </div>
+          <pre id="cr-ffmpeg-preview" class="text-[10px] font-mono text-emerald-300 whitespace-pre-wrap break-all select-all">ffmpeg -i &lt;input&gt; -vf "yadif=0:-1:1,scale=1920:1080" -c:v libx264 -b:v 6500k -minrate 6500k -maxrate 6500k -bufsize 13000k -flags +ilme+ildct -top 1 -c:a aac -b:a 192k -ar 48000 -f mpegts ...</pre>
+        </div>
+      </div>
+
+      <div class="px-5 py-3 bg-[#1A2234] border-t border-[#2D3A54] flex justify-end gap-2">
+        <button onclick="closeCustomResolutionModal()" class="px-3.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs font-semibold">Cancel</button>
+        <button onclick="saveCustomResolutionPreset()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold shadow">Save & Register Preset</button>
       </div>
     </div>
   </div>
@@ -1759,7 +2092,7 @@
 
     // Settings Subtabs
     function switchSettingsTab(tabName) {
-      const tabs = ['agents', 'storage', 'bots', 'mesh', 'i18n'];
+      const tabs = ['resolutions', 'agents', 'storage', 'bots', 'mesh', 'i18n'];
       tabs.forEach(t => {
         const btn = document.getElementById(`set-tab-${t}`);
         const content = document.getElementById(`set-content-${t}`);
@@ -1777,6 +2110,85 @@
           else content.classList.add('hidden');
         }
       });
+    }
+
+    function goToResolutionsTab() {
+      switchScreen(5);
+      switchSettingsTab('resolutions');
+    }
+
+    function updateResolutionSummary(val) {
+      const summaryEl = document.getElementById('resolution-summary-text');
+      if (!summaryEl) return;
+      if (val === 'res-in-1080i50') {
+        summaryEl.textContent = 'PAL 50i Interlaced TFF | -vf "yadif=0:-1:1,scale=1920:1080" | CBR 6500 kbps';
+      } else if (val === 'res-in-720p50') {
+        summaryEl.textContent = 'Progressive 50fps | -vf "scale=1280:720" | CBR 5000 kbps';
+      } else if (val === 'res-in-576i50-43') {
+        summaryEl.textContent = 'PAL 576i SD 4:3 | -vf "scale=720:576,setdar=4/3" | CBR 2500 kbps';
+      } else if (val === 'res-in-576i50-169') {
+        summaryEl.textContent = 'PAL 576i Anamorphic 16:9 | -vf "scale=720:576,setdar=16/9" | CBR 3200 kbps';
+      } else if (val === 'res-in-1080p50') {
+        summaryEl.textContent = 'Progressive 50fps FHD | -vf "scale=1920:1080" | CBR 8500 kbps';
+      } else if (val === 'res-global-1080p59') {
+        summaryEl.textContent = 'NTSC 59.94p FHD | -vf "scale=1920:1080" | CBR 8500 kbps';
+      } else if (val === 'res-in-4k50') {
+        summaryEl.textContent = '4K UHD 50fps HEVC Main10 | -vf "scale=3840:2160" | CBR 24000 kbps';
+      } else {
+        summaryEl.textContent = 'Custom Profile | -vf "yadif=1,scale=1920:1080" | CBR 7000 kbps';
+      }
+    }
+
+    function openCustomResolutionModal() {
+      document.getElementById('custom-resolution-modal').classList.remove('hidden');
+      updateCustomFfmpegPreview();
+    }
+
+    function closeCustomResolutionModal() {
+      document.getElementById('custom-resolution-modal').classList.add('hidden');
+    }
+
+    function updateCustomFfmpegPreview() {
+      const w = document.getElementById('cr-width').value || 1920;
+      const h = document.getElementById('cr-height').value || 1080;
+      const fps = document.getElementById('cr-fps').value || 25;
+      const interlace = document.getElementById('cr-interlace').value;
+      const vbitrate = document.getElementById('cr-vbitrate').value || '6500k';
+      const abitrate = document.getElementById('cr-abitrate').value || '192k';
+      const vf = document.getElementById('cr-vf').value || `scale=${w}:${h}`;
+
+      let interlaceFlags = '';
+      if (interlace === 'tff') interlaceFlags = ' -flags +ilme+ildct -top 1';
+      else if (interlace === 'bff') interlaceFlags = ' -flags +ilme+ildct -top 0';
+
+      const cmd = `ffmpeg -i <input> -vf "${vf}" -c:v libx264 -b:v ${vbitrate} -minrate ${vbitrate} -maxrate ${vbitrate} -bufsize 13000k${interlaceFlags} -c:a aac -b:a ${abitrate} -ar 48000 -f mpegts udp://239.255.0.1:5000?pkt_size=1316`;
+      const el = document.getElementById('cr-ffmpeg-preview');
+      if (el) el.textContent = cmd;
+    }
+
+    function saveCustomResolutionPreset() {
+      const name = document.getElementById('cr-name').value;
+      const select = document.getElementById('channel-resolution-select');
+      if (select) {
+        const opt = document.createElement('option');
+        opt.value = 'res-custom-' + Date.now();
+        opt.textContent = name;
+        opt.selected = true;
+        select.appendChild(opt);
+        updateResolutionSummary(opt.value);
+      }
+      alert(`Custom Resolution Profile "${name}" created and registered in MCRFlow!`);
+      closeCustomResolutionModal();
+    }
+
+    function copyPresetFfmpeg(presetId) {
+      let cmd = `-vf "yadif=0:-1:1,scale=1920:1080" -b:v 6500k -flags +ilme+ildct -top 1`;
+      if (presetId === 'res-in-720p50') cmd = `-vf "scale=1280:720" -r 50 -b:v 5000k`;
+      else if (presetId === 'res-in-576i50-43') cmd = `-vf "scale=720:576,setdar=4/3" -flags +ilme+ildct -top 1 -b:v 2500k`;
+      else if (presetId === 'res-in-576i50-169') cmd = `-vf "scale=720:576,setdar=16/9" -flags +ilme+ildct -top 1 -b:v 3200k`;
+      else if (presetId === 'res-in-4k50') cmd = `-vf "scale=3840:2160" -r 50 -c:v libx265 -tag:v hvc1 -b:v 24000k`;
+      navigator.clipboard.writeText(cmd);
+      alert(`Copied FFmpeg args for ${presetId}:\n${cmd}`);
     }
 
     // Ad Studio Subtabs

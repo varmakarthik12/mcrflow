@@ -564,3 +564,58 @@ message NlpScheduleCommandResponse {
   ScheduleItem conflicting_item = 5;
   string user_prompt_message = 6;
 }
+
+// ============================================================================
+// Resolution Preset & Video Encoding Customization Service
+// ============================================================================
+
+service ResolutionService {
+  rpc ListResolutions(ListResolutionsRequest) returns (ListResolutionsResponse);
+  rpc GetResolution(GetResolutionRequest) returns (ResolutionPreset);
+  rpc CreateResolution(CreateResolutionRequest) returns (ResolutionPreset);
+  rpc UpdateResolution(UpdateResolutionRequest) returns (ResolutionPreset);
+  rpc DeleteResolution(DeleteResolutionRequest) returns (DeleteResolutionResponse);
+}
+
+message ResolutionPreset {
+  string id = 1;
+  string name = 2;
+  int32 width = 3;
+  int32 height = 4;
+  double fps = 5;
+  bool is_interlaced = 6;
+  string interlace_mode = 7; // tff, bff, progressive
+  string aspect_ratio = 8;   // 16:9, 4:3
+  string default_video_bitrate = 9;
+  string default_audio_bitrate = 10;
+  string color_space = 11;   // bt709, bt601
+  string custom_ffmpeg_filters = 12;
+  bool is_built_in = 13;
+  string region_tag = 14;    // IN_CABLE, GLOBAL
+}
+
+message ListResolutionsRequest {}
+message ListResolutionsResponse {
+  repeated ResolutionPreset presets = 1;
+}
+
+message GetResolutionRequest {
+  string id = 1;
+}
+
+message CreateResolutionRequest {
+  ResolutionPreset preset = 1;
+}
+
+message UpdateResolutionRequest {
+  ResolutionPreset preset = 1;
+}
+
+message DeleteResolutionRequest {
+  string id = 1;
+}
+
+message DeleteResolutionResponse {
+  bool success = 1;
+}
+

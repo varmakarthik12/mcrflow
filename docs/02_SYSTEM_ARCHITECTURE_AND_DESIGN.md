@@ -94,7 +94,7 @@ flowchart TD
 ## 3. Distributed Edge Agent & High Availability Redundancy
 
 ### 3.1 1+1 Hot Standby & Zero-Interruption Failover
-In professional broadcast, a channel cannot go black. OmniStream implements two redundancy topologies:
+In professional broadcast, a channel cannot go black. MCRFlow implements two redundancy topologies:
 
 1. **Active-Passive Hot Standby (Zero-Disruption Edge Takeover)**:
    - Primary Agent and Fallback Agent run synchronized playlist clocks.
@@ -121,25 +121,25 @@ In professional broadcast, a channel cannot go black. OmniStream implements two 
 
 ### 4.1 Token Generation on Agent Initialization
 To guarantee tamper-proof security without requiring manual pre-shared password entry in codebases:
-1. When the Go Edge Agent boots, it checks for the existence of its auth credentials file at `/var/lib/playout-agent/agent_auth.json`.
+1. When the Go Edge Agent boots, it checks for the existence of its auth credentials file at `/var/lib/mcrflow-agent/agent_auth.json`.
 2. **First Boot (Token Creation)**:
    - The agent securely generates 32 cryptographically random bytes via `crypto/rand`.
    - Encoded as a hex-prefixed security token: `agt_sec_` + 64 hex characters (256-bit entropy).
-   - Writes the token and agent UUID to `/var/lib/playout-agent/agent_auth.json` with strict POSIX file permissions (`0600`).
+   - Writes the token and agent UUID to `/var/lib/mcrflow-agent/agent_auth.json` with strict POSIX file permissions (`0600`).
    - The agent prints an unmistakable pairing banner to `stdout` (visible via `docker logs <agent_container>`):
      ```text
      ================================================================================
-     [OMNISTREAM AGENT INITIALIZED - PAIRING REQUIRED]
+     [MCRFLOW AGENT INITIALIZED - PAIRING REQUIRED]
      Agent ID:    agent-delhi-dc1-01
      Listen Port: :9095 (gRPC)
      Persistent Pairing Token:
      agt_sec_8f43a9b2c011e749a1d2e8b409c2513f87a6b4c3d2e1f0a9b8c7d6e5f4a3b2c1
      
-     Copy this token into OmniStream Settings > Edge Agents to authorize this node.
+     Copy this token into MCRFlow Settings > Edge Agents to authorize this node.
      ================================================================================
      ```
 3. **Subsequent Boots & Restarts**:
-   - The agent detects the existing token file on persistent volume `/var/lib/playout-agent`.
+   - The agent detects the existing token file on persistent volume `/var/lib/mcrflow-agent`.
    - Reuses the existing token without resetting it.
    - Normal reboots or container restarts do NOT regenerate the token, maintaining active pairings uninterrupted.
 4. **Token Revocation & Reset**:
@@ -230,13 +230,13 @@ sequenceDiagram
 
 The deployment architecture provides two specialized container distribution images:
 
-### Mode 1: All-in-One Container (`omnistream-all-in-one:latest`)
+### Mode 1: All-in-One Container (`mcrflow-all-in-one:latest`)
 - **Target Audience**: Single-box TV stations, regional cable headends, testing labs, or compact deployments.
 - **Contains**:
   - Embedded React UI static assets served by Go HTTP server.
-  - Go Control Plane service.
-  - Built-in Local Edge Playout Agent.
-  - Complete FFmpeg 7.x broadcast toolchain with GPU drivers.
+  - Go Control Plane service (`mcrflow-control`).
+  - Built-in Local Edge Playout Agent (`mcrflow-agent`).
+  - Complete FFmpeg 7.x/8.x broadcast toolchain with GPU drivers.
   - Embedded SQLite database.
 - **Port Mapping**:
   - `:8080` (Web UI & REST API Gateway).
@@ -244,13 +244,20 @@ The deployment architecture provides two specialized container distribution imag
   - `:5000-5010/udp` (Direct UDP Multicast/Unicast egress).
   - `:1935` (RTMP egress).
 
-### Mode 2: Agent-Only Container (`omnistream-edge-agent:latest`)
+### Mode 2: Agent-Only Container (`mcrflow-agent-only:latest`)
 - **Target Audience**: Distributed playout farms, cloud worker clusters, and multi-datacenter redundant edge nodes.
 - **Contains**:
-  - Headless Go Playout Agent binary (`/usr/local/bin/playout-agent`).
+  - Headless Go Playout Agent binary (`/usr/local/bin/mcrflow-agent`).
   - FFmpeg & GStreamer broadcast runtime with NVIDIA NVENC / Intel QSV / VAAPI hardware acceleration.
   - No web UI or control database (ultra-lean footprint < 120MB base).
 - **Persistent Volume Requirement**:
-  - Mount `/var/lib/playout-agent` to preserve the cryptographic pairing token `agent_auth.json` across container recreations.
+  - Mount `/var/lib/mcrflow-agent` to preserve the cryptographic pairing token `agent_auth.json` across container recreations.
 - **Service Mesh & Intranet**:
   - Out-of-the-box support for Tailscale VPN sidecar or embedded Tailscale WireGuard client (`tailscale.com/tsnet`), enabling instant encrypted peer-to-peer communication with the Control Plane without port forwarding or static public IPs.
+
+### Mode 3: Non-Docker Standalone Binaries (GoReleaser)
+- **Target Audience**: Bare-metal broadcast playout servers, Windows Broadcast workstations, macOS M-series control rooms, or minimal Linux systems where Docker is not permitted.
+- **Artifacts Published**:
+  - `mcrflow-control` (Control Plane / All-in-One server): Linux (`amd64`, `arm64`), Windows (`amd64`), macOS (`darwin/amd64`, `darwin/arm64`).
+  - `mcrflow-agent` (Headless Edge Playout Daemon): Linux (`amd64`, `arm64`), Windows (`amd64`), macOS (`darwin/amd64`, `darwin/arm64`).
+- **Release Automation**: Integrated via `.goreleaser.yaml` and GitHub Actions release pipeline (`.github/workflows/release.yml`). Includes SHA-256 checksums, ZIP/tar.gz packaging, and binary self-hosting.
