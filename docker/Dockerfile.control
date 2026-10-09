@@ -2,8 +2,11 @@
 # MCRFlow Master Control Plane (Control Plane + Web Management UI + REST API)
 # ==============================================================================
 
+ARG GO_IMAGE=public.ecr.aws/docker/library/golang:1.23-alpine
+ARG RUNTIME_IMAGE=public.ecr.aws/docker/library/alpine:3.20
+
 # Stage 1: Build Go binary with embedded React assets
-FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
+FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS builder
 
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64
@@ -21,7 +24,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -ldflags="-s -w" -o /bin/mcrflow-control ./cmd/mcrflow-control
 
 # Stage 2: Runtime environment
-FROM alpine:3.20 AS runtime
+FROM ${RUNTIME_IMAGE} AS runtime
 
 RUN apk add --no-cache \
     ca-certificates \
