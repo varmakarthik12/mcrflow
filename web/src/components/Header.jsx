@@ -62,7 +62,7 @@ export function Header({
   return (
     <>
       {/* Top Header */}
-      <header className="h-14 bg-[#0F172A]/95 backdrop-blur-md border-b border-[#1E293B] px-3 sm:px-4 flex items-center justify-between shrink-0 z-30 select-none shadow-sm">
+      <header className="sticky top-0 z-40 h-14 bg-[#0F172A]/95 backdrop-blur-md border-b border-[#1E293B] px-2.5 sm:px-4 flex items-center justify-between shrink-0 select-none shadow-sm">
         <div className="flex items-center gap-2.5 sm:gap-3">
           {/* Brand Logo */}
           <div className="flex items-center gap-2">

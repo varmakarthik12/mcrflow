@@ -255,7 +255,7 @@ export function App() {
   // 1. Initial auth check loading screen
   if (authChecking) {
     return (
-      <div className="h-full w-full flex items-center justify-center bg-[#0B0F17] text-gray-400 font-mono text-xs">
+      <div className="min-h-screen min-h-[100dvh] w-full flex items-center justify-center bg-[#0B0F17] text-gray-400 font-mono text-xs p-4">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
           <span>Initializing MCRFlow Security Guard...</span>
@@ -267,7 +267,7 @@ export function App() {
   // 2. If initial setup is required (0 users in DB)
   if (isSetupRequired) {
     return (
-      <div className="h-full w-full bg-[#0B0F17] flex items-center justify-center relative">
+      <div className="min-h-screen min-h-[100dvh] w-full bg-[#0B0F17] flex items-center justify-center relative p-4">
         <SetupModal
           isOpen={true}
           canCancel={false}
@@ -287,7 +287,7 @@ export function App() {
   // 3. If not authenticated, lock down all screens and show Login Modal
   if (!currentUser) {
     return (
-      <div className="h-full w-full bg-[#0B0F17] flex items-center justify-center relative">
+      <div className="min-h-screen min-h-[100dvh] w-full bg-[#0B0F17] flex items-center justify-center relative p-4">
         <LoginModal
           isOpen={true}
           canClose={false}
@@ -305,7 +305,7 @@ export function App() {
 
   // 4. Authenticated: Render Master Control Playout Workspace
   return (
-    <div className="h-full w-full flex flex-col bg-[#0B0F17] overflow-hidden">
+    <div className="min-h-screen min-h-[100dvh] w-full flex flex-col bg-[#0B0F17]">
       {/* Top Header */}
       <Header
         activeScreen={activeScreen}
@@ -319,7 +319,7 @@ export function App() {
       />
 
       {/* Main Screen Views */}
-      <main className="flex-1 overflow-y-auto min-h-0 relative pb-16 md:pb-0">
+      <main className="flex-1 w-full flex flex-col relative pb-20 md:pb-6">
         {activeScreen === 1 && (
           <DashboardScreen
             channels={channels}

@@ -341,7 +341,7 @@ export function ScheduleScreen({
   };
 
   return (
-    <div className="h-full flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto max-w-full">
+    <div className="w-full flex-1 flex flex-col p-3 sm:p-4 md:p-6 space-y-4 max-w-full">
       {/* Top Scheduling Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
@@ -508,7 +508,7 @@ export function ScheduleScreen({
       {/* Enhanced Add Media / Schedule Modal with Intuitive File Picker & TMDb Typeahead */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-2xl max-h-[88dvh] flex flex-col shadow-2xl overflow-hidden">
             {/* Modal Header */}
             <div className="px-5 py-3.5 bg-[#1A2234] border-b border-[#2D3A54] flex items-center justify-between shrink-0">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -527,7 +527,7 @@ export function ScheduleScreen({
               </button>
             </div>
 
-            <div className="p-5 space-y-4 overflow-y-auto text-xs">
+            <div className="p-5 space-y-4 overflow-y-auto overscroll-contain text-xs">
               {/* SECTION 1: Intuitive Local Media Library File Picker with Type-Ahead Filter */}
               <div className="space-y-2 bg-[#161F30] p-3.5 rounded-lg border border-[#23314B]">
                 <div className="flex items-center justify-between">

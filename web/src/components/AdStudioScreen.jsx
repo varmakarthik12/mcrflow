@@ -378,7 +378,7 @@ export function AdStudioScreen({
 
   return (
     <div
-      className="h-full flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto max-w-full select-none"
+      className="w-full flex-1 flex flex-col p-3 sm:p-4 md:p-6 space-y-4 max-w-full select-none"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
@@ -462,7 +462,7 @@ export function AdStudioScreen({
       </div>
 
       {/* Main Studio Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 w-full">
         {/* Left: 16:9 Interactive WYSIWYG Canvas (8 cols) */}
         <div className="lg:col-span-8 bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 flex flex-col space-y-3">
           <div className="flex items-center justify-between">
@@ -626,7 +626,7 @@ export function AdStudioScreen({
         </div>
 
         {/* Right: Selected Element Properties & SCTE-35 Breaks (4 cols) */}
-        <div className="lg:col-span-4 space-y-4 text-xs overflow-y-auto">
+        <div className="lg:col-span-4 space-y-4 text-xs">
           {/* Template Info Card */}
           <div className="bg-[#111827] border border-[#1F2937] rounded-lg p-3 space-y-2">
             <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
@@ -719,7 +719,7 @@ export function AdStudioScreen({
               {/* Exact Position & Dimensions */}
               <div className="pt-2 border-t border-gray-800 space-y-2">
                 <div className="text-[11px] font-bold text-gray-300">Layout Coordinates (1920x1080)</div>
-                <div className="grid grid-cols-4 gap-2 font-mono">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
                   <div>
                     <label className="text-[9px] text-gray-500 block">X</label>
                     <input

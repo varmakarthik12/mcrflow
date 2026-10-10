@@ -449,7 +449,7 @@ export function ChannelScreen({
 
   return (
     <div
-      className="h-full flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto max-w-full select-none"
+      className="w-full flex-1 flex flex-col p-3 sm:p-4 md:p-6 space-y-4 max-w-full"
       onMouseMove={handleCanvasMouseMove}
       onMouseUp={handleCanvasMouseUp}
     >
@@ -547,9 +547,9 @@ export function ChannelScreen({
       </div>
 
       {/* Main Grid: Parameters Left, Confidence Monitor & Overlay Studio Right */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 w-full">
         {/* Left: Channel Parameters, Media Source & Destinations (6 cols) */}
-        <div className="lg:col-span-6 bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4 overflow-y-auto text-xs">
+        <div className="lg:col-span-6 bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4 text-xs">
           {/* Quick Media Source Picker */}
           <div className="p-3 bg-[#161F30] rounded-lg border border-[#23314B] space-y-2">
             <div className="flex items-center justify-between">
@@ -1193,7 +1193,7 @@ export function ChannelScreen({
       {/* QUICK MEDIA PICKER MODAL */}
       {isMediaPickerOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden text-xs">
+          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-xl max-h-[88dvh] flex flex-col shadow-2xl overflow-hidden text-xs">
             <div className="px-5 py-3.5 bg-[#1A2234] border-b border-[#2D3A54] flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <FolderOpen className="w-4 h-4 text-indigo-400" />
@@ -1204,7 +1204,7 @@ export function ChannelScreen({
               </button>
             </div>
 
-            <div className="p-4 space-y-3 overflow-y-auto">
+            <div className="p-4 space-y-3 overflow-y-auto overscroll-contain">
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
                 <input

@@ -35,7 +35,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess, onShowToast, canCl
 
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-      <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+      <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md max-h-[88dvh] overflow-y-auto overscroll-contain shadow-2xl animate-in fade-in zoom-in duration-150">
         <div className="px-5 py-4 bg-[#1A2234] border-b border-[#2D3A54] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow">

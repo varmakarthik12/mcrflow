@@ -281,7 +281,7 @@ export function SettingsScreen({
   };
 
   return (
-    <div className="h-full flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto max-w-full">
+    <div className="w-full flex-1 flex flex-col p-3 sm:p-4 md:p-6 space-y-4 max-w-full">
       {/* Subtab Navigation Bar */}
       <div className="flex items-center gap-1 bg-[#111827] border border-[#1F2937] p-1.5 rounded-lg shrink-0 overflow-x-auto">
         {[
@@ -311,7 +311,7 @@ export function SettingsScreen({
 
       {/* Subtab 1: Resolutions & FFmpeg Profiles */}
       {activeTab === "resolutions" && (
-        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4 overflow-y-auto">
+        <div className="w-full bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-white">Broadcast Resolutions & FFmpeg Stream Profiles</h3>
@@ -358,7 +358,7 @@ export function SettingsScreen({
 
       {/* Subtab 2: User Management & RBAC */}
       {activeTab === "users" && (
-        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4 overflow-y-auto">
+        <div className="w-full bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-white">System Operators & Cryptographic RBAC</h3>
@@ -419,7 +419,7 @@ export function SettingsScreen({
 
       {/* Subtab 3: Edge Playout Agents */}
       {activeTab === "agents" && (
-        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4 overflow-y-auto">
+        <div className="w-full bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-white">Distributed Edge Playout Agents</h3>
@@ -526,7 +526,7 @@ export function SettingsScreen({
 
       {/* Subtab 5: ChatOps Bots & Automation */}
       {activeTab === "bots" && (
-        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-4 space-y-4 overflow-y-auto">
+        <div className="w-full bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4">
           <div>
             <h3 className="text-sm font-bold text-white">ChatOps Bots & Natural Language Automation</h3>
             <p className="text-[11px] text-gray-400">
@@ -572,7 +572,7 @@ export function SettingsScreen({
       {/* MODAL: Custom Resolution */}
       {isResModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-lg shadow-2xl p-5 space-y-4 text-xs">
+          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-lg max-h-[88dvh] overflow-y-auto overscroll-contain shadow-2xl p-5 space-y-4 text-xs">
             <div className="flex items-center justify-between border-b border-gray-800 pb-2">
               <h3 className="text-sm font-bold text-white">Add Custom Resolution Profile</h3>
               <button onClick={() => setIsResModalOpen(false)} className="text-gray-400 hover:text-white">✕</button>
@@ -635,7 +635,7 @@ export function SettingsScreen({
       {/* MODAL: Create User */}
       {isUserModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md shadow-2xl p-5 space-y-3.5 text-xs">
+          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md max-h-[88dvh] overflow-y-auto overscroll-contain shadow-2xl p-5 space-y-3.5 text-xs">
             <div className="flex items-center justify-between border-b border-gray-800 pb-2">
               <h3 className="text-sm font-bold text-white">Add System Operator / User</h3>
               <button onClick={() => setIsUserModalOpen(false)} className="text-gray-400 hover:text-white">✕</button>
@@ -703,7 +703,7 @@ export function SettingsScreen({
       {/* MODAL: Pair Edge Agent */}
       {isPairModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md shadow-2xl p-5 space-y-3.5 text-xs">
+          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md max-h-[88dvh] overflow-y-auto overscroll-contain shadow-2xl p-5 space-y-3.5 text-xs">
             <div className="flex items-center justify-between border-b border-gray-800 pb-2">
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                 <Radio className="w-4 h-4 text-indigo-400" />
@@ -816,7 +816,7 @@ export function SettingsScreen({
       {/* MODAL: Edit Edge Agent */}
       {isEditAgentModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md shadow-2xl p-5 space-y-3.5 text-xs">
+          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-md max-h-[88dvh] overflow-y-auto overscroll-contain shadow-2xl p-5 space-y-3.5 text-xs">
             <div className="flex items-center justify-between border-b border-gray-800 pb-2">
               <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
                 <Pencil className="w-4 h-4 text-indigo-400" />

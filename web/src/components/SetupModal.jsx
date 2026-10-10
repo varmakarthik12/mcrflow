@@ -48,7 +48,7 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast, canCa
 
   return (
     <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-      <div className="bg-[#111827] border border-indigo-500/50 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div className="bg-[#111827] border border-indigo-500/50 rounded-xl w-full max-w-lg max-h-[88dvh] overflow-y-auto overscroll-contain shadow-2xl animate-in fade-in zoom-in duration-200">
         <div className="px-5 py-4 bg-gradient-to-r from-indigo-900/60 to-[#1A2234] border-b border-indigo-500/30 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center shadow-md">

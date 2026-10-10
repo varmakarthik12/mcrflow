@@ -49,7 +49,7 @@ export function DashboardScreen({
   };
 
   return (
-    <div className="h-full flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto max-w-full">
+    <div className="w-full flex-1 flex flex-col p-3 sm:p-4 md:p-6 space-y-4 max-w-full">
       {/* Top Operational KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 shrink-0">
         <div className="bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
@@ -119,7 +119,7 @@ export function DashboardScreen({
       </div>
 
       {/* Channels Playout Matrix */}
-      <div className="flex-1 flex flex-col space-y-2 min-h-0">
+      <div className="w-full flex flex-col space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse"></span>

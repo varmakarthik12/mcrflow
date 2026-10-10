@@ -6,7 +6,7 @@ export function ConfirmModal({ isOpen, title, message, onConfirm, onCancel, conf
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-sm shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+      <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-sm max-h-[88dvh] overflow-y-auto overscroll-contain shadow-2xl animate-in fade-in zoom-in duration-150">
         <div className="px-5 py-3.5 bg-[#1A2234] border-b border-[#2D3A54] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className={`w-4 h-4 ${isDanger ? 'text-rose-400' : 'text-amber-400'}`} />
