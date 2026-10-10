@@ -281,7 +281,7 @@ export function SettingsScreen({
   };
 
   return (
-    <div className="h-full flex flex-col p-4 space-y-4 overflow-y-auto">
+    <div className="h-full flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto max-w-full">
       {/* Subtab Navigation Bar */}
       <div className="flex items-center gap-1 bg-[#111827] border border-[#1F2937] p-1.5 rounded-lg shrink-0 overflow-x-auto">
         {[
@@ -311,8 +311,8 @@ export function SettingsScreen({
 
       {/* Subtab 1: Resolutions & FFmpeg Profiles */}
       {activeTab === "resolutions" && (
-        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-4 space-y-4 overflow-y-auto">
-          <div className="flex items-center justify-between">
+        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4 overflow-y-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-white">Broadcast Resolutions & FFmpeg Stream Profiles</h3>
               <p className="text-[11px] text-gray-400">
@@ -321,7 +321,7 @@ export function SettingsScreen({
             </div>
             <button
               onClick={() => setIsResModalOpen(true)}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1 shadow"
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1 shadow self-start sm:self-auto transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>+ Add Custom Resolution</span>
@@ -358,8 +358,8 @@ export function SettingsScreen({
 
       {/* Subtab 2: User Management & RBAC */}
       {activeTab === "users" && (
-        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-4 space-y-4 overflow-y-auto">
-          <div className="flex items-center justify-between">
+        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4 overflow-y-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-white">System Operators & Cryptographic RBAC</h3>
               <p className="text-[11px] text-gray-400">
@@ -368,7 +368,7 @@ export function SettingsScreen({
             </div>
             <button
               onClick={() => setIsUserModalOpen(true)}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1 shadow"
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1 shadow self-start sm:self-auto transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>+ Add User</span>
@@ -377,7 +377,7 @@ export function SettingsScreen({
 
           <div className="divide-y divide-[#1F2937] border border-[#1F2937] rounded-lg overflow-hidden">
             {users.map((u) => (
-              <div key={u.id} className="p-3 bg-[#161F30] flex items-center justify-between text-xs">
+              <div key={u.id} className="p-3 bg-[#161F30] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-bold text-xs">
                     {(u.display_name || u.username).slice(0, 2).toUpperCase()}
@@ -391,7 +391,7 @@ export function SettingsScreen({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
                   <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold uppercase ${
                     u.role === 'admin'
                       ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
@@ -419,8 +419,8 @@ export function SettingsScreen({
 
       {/* Subtab 3: Edge Playout Agents */}
       {activeTab === "agents" && (
-        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-4 space-y-4 overflow-y-auto">
-          <div className="flex items-center justify-between">
+        <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4 overflow-y-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-white">Distributed Edge Playout Agents</h3>
               <p className="text-[11px] text-gray-400">
@@ -429,7 +429,7 @@ export function SettingsScreen({
             </div>
             <button
               onClick={() => setIsPairModalOpen(true)}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1 shadow"
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1 shadow self-start sm:self-auto transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>+ Pair Edge Node</span>

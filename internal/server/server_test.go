@@ -31,18 +31,20 @@ func setupTestServer(t *testing.T) (*database.DB, *server.Server, string) {
 		t.Fatalf("failed to initialize server: %v", err)
 	}
 
-	// Login as admin to get token
-	loginBody, _ := json.Marshal(models.UserCredentials{
-		Username: "admin",
-		Password: "admin123",
+	// Perform initial setup to create root admin
+	setupBody, _ := json.Marshal(map[string]string{
+		"username":  "admin",
+		"password":  "admin123",
+		"full_name": "Master Control Administrator",
+		"email":     "admin@mcrflow.tv",
 	})
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(loginBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/setup", bytes.NewReader(setupBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.Router().ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("failed to login: %d, body: %s", w.Code, w.Body.String())
+		t.Fatalf("failed to complete initial setup: %d, body: %s", w.Code, w.Body.String())
 	}
 
 	var res struct {
@@ -51,6 +53,82 @@ func setupTestServer(t *testing.T) (*database.DB, *server.Server, string) {
 	_ = json.NewDecoder(w.Body).Decode(&res)
 
 	return db, srv, res.Token
+}
+
+func TestInitialSetupAndSecurityGate(t *testing.T) {
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "setup_sec_test.db")
+	db, err := database.Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open database: %v", err)
+	}
+	defer db.Close()
+
+	srv, err := server.NewServer(server.Config{
+		Port:     3081,
+		DataDir:  tempDir,
+		MediaDir: filepath.Join(tempDir, "media"),
+	}, db)
+	if err != nil {
+		t.Fatalf("failed to initialize server: %v", err)
+	}
+
+	// 1. When DB is empty, setup-status returns needs_setup: true
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/setup-status", nil)
+	w := httptest.NewRecorder()
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 from setup-status, got %d", w.Code)
+	}
+	var statusRes struct {
+		NeedsSetup bool `json:"needs_setup"`
+		UserCount  int  `json:"user_count"`
+	}
+	_ = json.NewDecoder(w.Body).Decode(&statusRes)
+	if !statusRes.NeedsSetup || statusRes.UserCount != 0 {
+		t.Fatalf("expected needs_setup: true, user_count: 0, got %+v", statusRes)
+	}
+
+	// 2. Unauthenticated access to /api/v1/channels is rejected with 401
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/channels", nil)
+	w = httptest.NewRecorder()
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthenticated channels access, got %d", w.Code)
+	}
+
+	// 3. Initial setup successfully creates first root admin
+	setupBody, _ := json.Marshal(map[string]string{
+		"username":  "root_admin",
+		"password":  "secure_pass_123",
+		"full_name": "Chief Engineer",
+		"email":     "chief@mcrflow.tv",
+	})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/setup", bytes.NewReader(setupBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for initial setup, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// 4. Repeated setup call MUST be rejected with 403 Forbidden
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/setup", bytes.NewReader(setupBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for repeated setup call, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// 5. Now setup-status returns needs_setup: false
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/auth/setup-status", nil)
+	w = httptest.NewRecorder()
+	srv.Router().ServeHTTP(w, req)
+	_ = json.NewDecoder(w.Body).Decode(&statusRes)
+	if statusRes.NeedsSetup || statusRes.UserCount != 1 {
+		t.Fatalf("expected needs_setup: false, user_count: 1, got %+v", statusRes)
+	}
 }
 
 func TestServerHealthAndAuth(t *testing.T) {

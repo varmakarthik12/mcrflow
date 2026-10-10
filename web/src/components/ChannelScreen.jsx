@@ -30,6 +30,17 @@ export function ChannelScreen({
   const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0] || {};
   const logoFileInputRef = useRef(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isCallSignManual, setIsCallSignManual] = useState(false);
+
+  const toCallSignSlug = (name) => {
+    if (!name) return "";
+    return name
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 16);
+  };
 
   const [formData, setFormData] = useState({
     name: "",
@@ -63,9 +74,10 @@ export function ChannelScreen({
         || activeChannel.destinations?.find((d) => d.protocol === "RTMP" || d.protocol === "rtmp" || d.type === "rtmp")?.url
         || "";
 
+      const rawCallSign = activeChannel.call_sign || "";
       setFormData({
         name: activeChannel.name || "",
-        call_sign: activeChannel.call_sign || "",
+        call_sign: rawCallSign || toCallSignSlug(activeChannel.name || ""),
         lcn: activeChannel.lcn || 101,
         resolution_id: activeChannel.resolution_id || "res-in-1080i50",
         video_codec: activeChannel.video_codec || "libx264",
@@ -78,11 +90,36 @@ export function ChannelScreen({
         srt_url: srt,
         rtmp_url: rtmp
       });
+      setIsCallSignManual(!!rawCallSign && rawCallSign !== toCallSignSlug(activeChannel.name || ""));
     }
   }, [activeChannel]);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleNameChange = (val) => {
+    setFormData((prev) => {
+      const prevAutoSlug = toCallSignSlug(prev.name);
+      const shouldAutoSlug = !isCallSignManual || !prev.call_sign || prev.call_sign === prevAutoSlug;
+      return {
+        ...prev,
+        name: val,
+        call_sign: shouldAutoSlug ? toCallSignSlug(val) : prev.call_sign
+      };
+    });
+  };
+
+  const handleCallSignChange = (val) => {
+    setIsCallSignManual(true);
+    setFormData((prev) => ({ ...prev, call_sign: val }));
+  };
+
+  const handleRegenerateCallSign = () => {
+    const slug = toCallSignSlug(formData.name) || "CHANNEL";
+    setFormData((prev) => ({ ...prev, call_sign: slug }));
+    setIsCallSignManual(false);
+    onShowToast(`Auto-generated DVB Call Sign slug: ${slug}`, "info");
   };
 
   const handleLogoUpload = async (e) => {
@@ -108,10 +145,12 @@ export function ChannelScreen({
   };
 
   const handleSave = () => {
+    const autoSlug = toCallSignSlug(formData.name) || `CH-${activeChannel.id || '01'}`;
+    const effectiveCallSign = formData.call_sign.trim() || autoSlug;
     const updatedChannel = {
       ...activeChannel,
-      name: formData.name,
-      call_sign: formData.call_sign,
+      name: formData.name.trim() || activeChannel.name,
+      call_sign: effectiveCallSign,
       lcn: parseInt(formData.lcn, 10) || 101,
       resolution_id: formData.resolution_id,
       video_codec: formData.video_codec,
@@ -154,46 +193,48 @@ export function ChannelScreen({
   };
 
   return (
-    <div className="h-full flex flex-col p-4 space-y-4 overflow-y-auto">
+    <div className="h-full flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto max-w-full">
       {/* Top Bar with Channel Switcher and CRUD */}
-      <div className="flex items-center justify-between shrink-0 bg-[#111827] border border-[#1F2937] p-3 rounded-lg">
-        <div className="flex items-center gap-3">
-          <Tv className="w-5 h-5 text-indigo-400" />
-          <div>
-            <h2 className="text-sm font-bold text-white">
-              {t('channel.management_title') || "Channel Master Configuration"}
-            </h2>
-            <p className="text-[11px] text-gray-400">
-              Active Channel: <span className="text-sky-300 font-semibold">{activeChannel.name || "Default Channel"}</span>
-            </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2">
+            <Tv className="w-5 h-5 text-indigo-400 shrink-0" />
+            <div>
+              <h2 className="text-sm font-bold text-white">
+                {t('channel.management_title') || "Channel Master Configuration"}
+              </h2>
+              <p className="text-[11px] text-gray-400">
+                Active: <span className="text-sky-300 font-semibold">{activeChannel.name || "Default Channel"}</span>
+              </p>
+            </div>
           </div>
-          <div className="h-6 w-px bg-gray-700"></div>
+          <div className="hidden sm:block h-6 w-px bg-gray-700"></div>
 
           {/* Channel Selector */}
           <select
             value={activeChannel.id || ""}
             onChange={(e) => onSwitchChannel(e.target.value)}
-            className="bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-medium focus:outline-none focus:border-indigo-500"
+            className="w-full sm:w-auto bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-medium focus:outline-none focus:border-indigo-500"
           >
             {channels.map((ch) => (
               <option key={ch.id} value={ch.id}>
-                CH {String(ch.lcn || 1).padStart(2, '0')}: {ch.name} ({ch.call_sign})
+                CH {String(ch.lcn || 1).padStart(2, '0')}: {ch.name} ({ch.call_sign || toCallSignSlug(ch.name)})
               </option>
             ))}
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
             onClick={onCreateChannel}
-            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold rounded flex items-center gap-1 border border-gray-700"
+            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold rounded flex items-center gap-1 border border-gray-700 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>New Channel</span>
           </button>
           <button
             onClick={handleSave}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded flex items-center gap-1 shadow"
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded flex items-center gap-1 shadow transition-colors"
           >
             <Save className="w-3.5 h-3.5" />
             <span>Save Channel</span>
@@ -201,7 +242,7 @@ export function ChannelScreen({
           {channels.length > 1 && (
             <button
               onClick={() => onDeleteChannel(activeChannel.id)}
-              className="px-2.5 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 text-xs font-semibold rounded border border-rose-500/30 flex items-center gap-1"
+              className="px-2.5 py-1.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 text-xs font-semibold rounded border border-rose-500/30 flex items-center gap-1 transition-colors"
             >
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -212,24 +253,39 @@ export function ChannelScreen({
       {/* Main Grid: Form Left, Confidence Monitor Right */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
         {/* Left Form: Parameters & Destinations (7 cols) */}
-        <div className="lg:col-span-7 bg-[#111827] border border-[#1F2937] rounded-lg p-4 space-y-4 overflow-y-auto text-xs">
-          <div className="grid grid-cols-3 gap-3">
+        <div className="lg:col-span-7 bg-[#111827] border border-[#1F2937] rounded-lg p-3 sm:p-4 space-y-4 overflow-y-auto text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             <div>
               <label className="block text-[11px] text-gray-400 mb-1 font-medium">Channel Name</label>
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => handleInputChange("name", e.target.value)}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white"
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="e.g. DD National HD"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
             <div>
-              <label className="block text-[11px] text-gray-400 mb-1 font-medium">DVB Call Sign</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] text-gray-400 font-medium flex items-center gap-1">
+                  <span>DVB Call Sign</span>
+                  <span className="text-[9px] text-sky-400 font-mono">(slug)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleRegenerateCallSign}
+                  title="Sync slug with Channel Name"
+                  className="text-[10px] text-indigo-400 hover:text-indigo-300 font-mono flex items-center gap-0.5"
+                >
+                  ⚡ Sync
+                </button>
+              </div>
               <input
                 type="text"
                 value={formData.call_sign}
-                onChange={(e) => handleInputChange("call_sign", e.target.value)}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                onChange={(e) => handleCallSignChange(e.target.value)}
+                placeholder="Auto-slug from title"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono uppercase focus:border-indigo-500 focus:outline-none"
               />
             </div>
             <div>
@@ -243,13 +299,13 @@ export function ChannelScreen({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] text-gray-400 mb-1 font-medium">Broadcast Resolution Preset</label>
               <select
                 value={formData.resolution_id}
                 onChange={(e) => handleInputChange("resolution_id", e.target.value)}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-medium"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-medium focus:outline-none focus:border-indigo-500"
               >
                 {resolutions.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -263,7 +319,7 @@ export function ChannelScreen({
               <select
                 value={formData.video_codec}
                 onChange={(e) => handleInputChange("video_codec", e.target.value)}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
               >
                 <option value="libx264">libx264 (Software H.264 CPU)</option>
                 <option value="h264_nvenc">h264_nvenc (NVIDIA NVENC Hardware)</option>
@@ -277,16 +333,16 @@ export function ChannelScreen({
             <h3 className="text-xs font-bold text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
               <span>On-Air Branding & Station Bug</span>
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] text-gray-400 mb-1">Station Logo / Bug File</label>
-                <div className="flex items-center gap-2">
+                <label className="block text-[11px] text-gray-400 mb-1 font-medium">Station Logo / Bug File</label>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <input
                     type="text"
                     value={formData.logo_path}
                     onChange={(e) => handleInputChange("logo_path", e.target.value)}
                     placeholder="media/logos/channel_logo.png"
-                    className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                    className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono break-all focus:outline-none focus:border-indigo-500"
                   />
                   <input
                     type="file"
@@ -299,7 +355,7 @@ export function ChannelScreen({
                     type="button"
                     onClick={() => logoFileInputRef.current?.click()}
                     disabled={isUploadingLogo}
-                    className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-xs text-white rounded font-semibold shrink-0"
+                    className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-xs text-white rounded font-semibold shrink-0 transition-colors"
                   >
                     {isUploadingLogo ? "Uploading..." : "Upload"}
                   </button>
@@ -307,7 +363,7 @@ export function ChannelScreen({
               </div>
 
               <div>
-                <label className="block text-[11px] text-gray-400 mb-1">Bug Screen Position</label>
+                <label className="block text-[11px] text-gray-400 mb-1 font-medium">Bug Screen Position</label>
                 <select
                   value={formData.logo_position}
                   onChange={(e) => handleInputChange("logo_position", e.target.value)}
@@ -330,43 +386,44 @@ export function ChannelScreen({
             </h3>
 
             <div>
-              <label className="block text-[11px] text-gray-400 mb-1">UDP TS Multicast URL (DVB/Cable Mux)</label>
+              <label className="block text-[11px] text-gray-400 mb-1 font-medium">UDP TS Multicast URL (DVB/Cable Mux)</label>
               <input
                 type="text"
                 value={formData.udp_url}
                 onChange={(e) => handleInputChange("udp_url", e.target.value)}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono break-all focus:outline-none focus:border-indigo-500"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] text-gray-400 mb-1">SRT Caller URL (Remote Transmitter Egress)</label>
+              <label className="block text-[11px] text-gray-400 mb-1 font-medium">SRT Caller URL (Remote Transmitter Egress)</label>
               <input
                 type="text"
                 value={formData.srt_url}
                 onChange={(e) => handleInputChange("srt_url", e.target.value)}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono break-all focus:outline-none focus:border-indigo-500"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] text-gray-400 mb-1">RTMP Push Endpoint (OTT CDN)</label>
+              <label className="block text-[11px] text-gray-400 mb-1 font-medium">RTMP Push Endpoint (OTT CDN)</label>
               <input
                 type="text"
                 value={formData.rtmp_url}
                 placeholder="rtmp://live.cdn.tv/app/streamkey"
                 onChange={(e) => handleInputChange("rtmp_url", e.target.value)}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono break-all focus:outline-none focus:border-indigo-500"
               />
             </div>
           </div>
 
           {/* WebTokens */}
-          <div className="pt-2 border-t border-gray-800 grid grid-cols-2 gap-3">
+          <div className="pt-2 border-t border-gray-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[11px] text-gray-400 font-medium">HLS Stream WebToken</label>
                 <button
+                  type="button"
                   onClick={() => generateToken("hls_web_token")}
                   className="text-[10px] text-sky-400 hover:text-sky-300 font-mono"
                 >
@@ -378,13 +435,14 @@ export function ChannelScreen({
                 value={formData.hls_web_token}
                 onChange={(e) => handleInputChange("hls_web_token", e.target.value)}
                 placeholder="Optional security token"
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="text-[11px] text-gray-400 font-medium">EPG XML WebToken</label>
                 <button
+                  type="button"
                   onClick={() => generateToken("epg_web_token")}
                   className="text-[10px] text-sky-400 hover:text-sky-300 font-mono"
                 >
@@ -396,7 +454,7 @@ export function ChannelScreen({
                 value={formData.epg_web_token}
                 onChange={(e) => handleInputChange("epg_web_token", e.target.value)}
                 placeholder="Optional query token"
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
               />
             </div>
           </div>
@@ -404,16 +462,17 @@ export function ChannelScreen({
           {/* Resolved HLS URL */}
           <div className="pt-2 border-t border-gray-800">
             <label className="block text-[11px] text-gray-400 mb-1 font-medium">Direct Live HLS Playback URL</label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <input
                 type="text"
                 readOnly
                 value={resolvedHlsUrl}
-                className="w-full bg-[#0B0F17] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-emerald-300 font-mono select-all"
+                className="w-full bg-[#0B0F17] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-emerald-300 font-mono select-all break-all"
               />
               <button
+                type="button"
                 onClick={handleCopyHls}
-                className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded text-xs font-semibold flex items-center gap-1 shrink-0"
+                className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded text-xs font-semibold flex items-center justify-center gap-1 shrink-0 transition-colors"
               >
                 {copiedHls ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>Copy</span>

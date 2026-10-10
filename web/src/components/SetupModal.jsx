@@ -2,19 +2,19 @@ import React, { useState } from 'react';
 import { ShieldCheck, X } from 'lucide-react';
 import { api, setAuthToken } from '../api';
 
-export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
-  const [username, setUsername] = useState("admin");
-  const [displayName, setDisplayName] = useState("Chief Broadcast Engineer");
-  const [email, setEmail] = useState("chief@mcrflow.tv");
-  const [password, setPassword] = useState("admin123");
-  const [confirmPassword, setConfirmPassword] = useState("admin123");
+export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast, canCancel = false }) {
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username || !password) {
+    if (!username.trim() || !password) {
       onShowToast("Username and password are required", "error");
       return;
     }
@@ -26,10 +26,10 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
     setLoading(true);
     try {
       const res = await api.setupRootAdmin({
-        username,
-        full_name: displayName,
-        display_name: displayName,
-        email,
+        username: username.trim(),
+        full_name: displayName.trim() || username.trim(),
+        display_name: displayName.trim() || username.trim(),
+        email: email.trim(),
         password
       });
 
@@ -37,7 +37,7 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
         setAuthToken(res.token);
         onShowToast(`Root Administrator "${username}" initialized!`, "success");
         onSetupSuccess(res.user);
-        onClose();
+        if (onClose) onClose();
       }
     } catch (err) {
       onShowToast("Setup failed: " + err.message, "error");
@@ -47,7 +47,7 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
       <div className="bg-[#111827] border border-indigo-500/50 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="px-5 py-4 bg-gradient-to-r from-indigo-900/60 to-[#1A2234] border-b border-indigo-500/30 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -59,7 +59,9 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
               <p className="text-[11px] text-indigo-300">Create the primary Root Administrator account</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+          {canCancel && (
+            <button onClick={onClose} className="text-gray-400 hover:text-white">✕</button>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
@@ -68,7 +70,7 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
               <span>🛡️ Broadcast Cluster Initialization</span>
             </div>
             <p className="text-[11px] text-gray-300">
-              No administrators are registered. In compliance with security standards, create the root administrator account.
+              No users are registered in database. In compliance with broadcast security standards, initialize the permanent Root Administrator account.
             </p>
           </div>
 
@@ -80,7 +82,9 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                  placeholder="e.g. admin"
+                  autoFocus
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-indigo-500 focus:outline-none"
                 />
               </div>
               <div>
@@ -89,7 +93,8 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white"
+                  placeholder="e.g. Chief Broadcast Engineer"
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -100,7 +105,8 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white"
+                placeholder="e.g. chief@mcrflow.tv"
+                className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
               />
             </div>
 
@@ -111,7 +117,8 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                  placeholder="Minimum 8 characters"
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-indigo-500 focus:outline-none"
                 />
               </div>
               <div>
@@ -120,7 +127,8 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
+                  placeholder="Re-enter password"
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono focus:border-indigo-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -129,17 +137,19 @@ export function SetupModal({ isOpen, onClose, onSetupSuccess, onShowToast }) {
           <div className="px-5 py-3 bg-[#1A2234] -mx-5 -mb-5 border-t border-[#2D3A54] flex justify-between items-center">
             <span className="text-[10px] text-gray-400 font-mono">Role: admin (Permanent Root)</span>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-3.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs font-semibold"
-              >
-                Cancel
-              </button>
+              {canCancel && (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+              )}
               <button
                 type="submit"
                 disabled={loading}
-                className="px-4 py-1.5 bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white rounded text-xs font-semibold shadow-lg"
+                className="px-4 py-1.5 bg-gradient-to-r from-indigo-600 to-sky-500 hover:from-indigo-500 hover:to-sky-400 text-white rounded text-xs font-semibold shadow-lg disabled:opacity-50"
               >
                 {loading ? "Initializing..." : "Initialize & Launch MCRFlow"}
               </button>

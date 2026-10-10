@@ -339,36 +339,38 @@ export function ScheduleScreen({
   };
 
   return (
-    <div className="h-full flex flex-col p-4 space-y-4 overflow-y-auto">
+    <div className="h-full flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto max-w-full">
       {/* Top Scheduling Bar */}
-      <div className="flex items-center justify-between shrink-0 bg-[#111827] border border-[#1F2937] p-3 rounded-lg">
-        <div className="flex items-center gap-3">
-          <Calendar className="w-5 h-5 text-indigo-400" />
-          <div>
-            <h2 className="text-sm font-bold text-white">
-              {t('sched.title') || "24/7 Playout Schedule & EPG Master"}
-            </h2>
-            <p className="text-[11px] text-gray-400">
-              {t('sched.subtitle') || "Manage linear playlists, TMDb metadata, audio PID tracks & conflict resolution"}
-            </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-indigo-400 shrink-0" />
+            <div>
+              <h2 className="text-sm font-bold text-white">
+                {t('sched.title') || "24/7 Playout Schedule & EPG Master"}
+              </h2>
+              <p className="text-[11px] text-gray-400">
+                {t('sched.subtitle') || "Linear playlists, TMDb metadata & conflict resolution"}
+              </p>
+            </div>
           </div>
-          <div className="h-6 w-px bg-gray-700"></div>
+          <div className="hidden sm:block h-6 w-px bg-gray-700"></div>
 
           {/* Channel selector */}
           <select
             value={activeChannelId}
             onChange={(e) => onSwitchChannel(e.target.value)}
-            className="bg-[#1F2937] border border-gray-700 text-xs text-white rounded px-2.5 py-1.5 font-medium"
+            className="w-full sm:w-auto bg-[#1F2937] border border-gray-700 text-xs text-white rounded px-2.5 py-1.5 font-medium focus:outline-none focus:border-indigo-500"
           >
             {channels.map((ch) => (
               <option key={ch.id} value={ch.id}>
-                Channel: CH {String(ch.lcn || 1).padStart(2, '0')} - {ch.name}
+                CH {String(ch.lcn || 1).padStart(2, '0')}: {ch.name}
               </option>
             ))}
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
           <button
             onClick={() => {
               setIsModalOpen(true);
@@ -378,14 +380,14 @@ export function ScheduleScreen({
             className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white shadow-sm flex items-center gap-1.5 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>+ Add Media / Schedule Movie</span>
+            <span>+ Add Media</span>
           </button>
           <button
             onClick={handleExportXmltv}
             className="px-3 py-1.5 bg-[#1F2937] hover:bg-[#374151] text-xs font-medium rounded text-gray-200 border border-gray-700 flex items-center gap-1.5 transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export XMLTV / DVB-EIT</span>
+            <span>Export XMLTV</span>
           </button>
         </div>
       </div>
@@ -447,7 +449,7 @@ export function ScheduleScreen({
               return (
                 <div
                   key={item.id}
-                  className="bg-[#1F2937] hover:bg-[#253045] border border-gray-700/80 rounded-lg p-3 flex items-center justify-between gap-4 transition-all"
+                  className="bg-[#1F2937] hover:bg-[#253045] border border-gray-700/80 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Poster thumbnail or film icon */}

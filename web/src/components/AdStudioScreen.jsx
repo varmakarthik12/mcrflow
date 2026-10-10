@@ -26,11 +26,11 @@ export function AdStudioScreen({
   };
 
   return (
-    <div className="h-full flex flex-col p-4 space-y-4 overflow-y-auto">
+    <div className="h-full flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto max-w-full">
       {/* Top Header */}
-      <div className="flex items-center justify-between shrink-0 bg-[#111827] border border-[#1F2937] p-3 rounded-lg">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
         <div className="flex items-center gap-3">
-          <Sparkles className="w-5 h-5 text-indigo-400" />
+          <Sparkles className="w-5 h-5 text-indigo-400 shrink-0" />
           <div>
             <h2 className="text-sm font-bold text-white">
               {t('ad.title') || "WYSIWYG Ad & CG Graphics Studio"}
@@ -41,7 +41,7 @@ export function AdStudioScreen({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 self-end sm:self-auto">
           {/* Safe Guides Toggle */}
           <label className="flex items-center gap-2 cursor-pointer text-xs text-gray-300">
             <input
@@ -50,15 +50,16 @@ export function AdStudioScreen({
               onChange={(e) => setShowSafeGuides(e.target.checked)}
               className="rounded bg-gray-800 border-gray-700 text-indigo-600 focus:ring-0"
             />
-            <span>EBU Safe Area Guides (90%/80%)</span>
+            <span className="hidden sm:inline">EBU Safe Area Guides (90%/80%)</span>
+            <span className="sm:hidden">Safe Guides</span>
           </label>
 
           <button
             onClick={handlePlayAnimation}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1.5 shadow"
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1.5 shadow transition-colors"
           >
             <Play className="w-3.5 h-3.5" />
-            <span>Play Preview Animation</span>
+            <span>Play Animation</span>
           </button>
         </div>
       </div>

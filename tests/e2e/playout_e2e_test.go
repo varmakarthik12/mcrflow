@@ -73,7 +73,25 @@ func TestEndToEndPlayoutWorkflow(t *testing.T) {
 		t.Fatalf("expected 401 Unauthorized before login, got %v", resp.StatusCode)
 	}
 
-	// 3. Login with Seeded Admin Credentials
+	// 3. Initial Setup of Root Admin
+	setupPayload := map[string]string{
+		"username":  "admin",
+		"password":  "admin123",
+		"full_name": "Master Control Administrator",
+		"email":     "admin@mcrflow.tv",
+	}
+	resp, err = authRequest("POST", ts.URL+"/api/v1/auth/setup", "", setupPayload)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("initial root admin setup failed: %v, code: %d", err, resp.StatusCode)
+	}
+
+	// Verify repeated setup is strictly rejected with 403 Forbidden
+	respRepeat, err := authRequest("POST", ts.URL+"/api/v1/auth/setup", "", setupPayload)
+	if err != nil || respRepeat.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for repeated setup, got %v", respRepeat.StatusCode)
+	}
+
+	// Login with Root Admin Credentials
 	loginPayload := models.UserCredentials{
 		Username: "admin",
 		Password: "admin123",

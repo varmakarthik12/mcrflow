@@ -289,7 +289,7 @@ func (s *Server) setupRoutes() {
 // -------------------------------------------------------------
 
 func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
-	users, err := s.userSvc.ListUsers()
+	users, err := s.repo.ListUsers()
 	if err != nil || len(users) == 0 {
 		jsonResp(w, http.StatusOK, map[string]interface{}{
 			"needs_setup":    true,
@@ -306,6 +306,17 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	// Strict safety gate: verify zero existing users in database
+	users, err := s.repo.ListUsers()
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to query user registry: "+err.Error())
+		return
+	}
+	if len(users) > 0 {
+		jsonErr(w, http.StatusForbidden, "Forbidden: Initial root setup has already been completed. User creation requires authenticated administrator privileges.")
+		return
+	}
+
 	var body struct {
 		Username    string `json:"username"`
 		Password    string `json:"password"`
@@ -318,7 +329,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if body.Username == "" || body.Password == "" {
+	if strings.TrimSpace(body.Username) == "" || strings.TrimSpace(body.Password) == "" {
 		jsonErr(w, http.StatusBadRequest, "username and password are required")
 		return
 	}
@@ -329,12 +340,6 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	if fullName == "" {
 		fullName = body.Username
-	}
-
-	existing, _ := s.userSvc.ListUsers()
-	if len(existing) > 0 {
-		jsonErr(w, http.StatusConflict, "setup already completed")
-		return
 	}
 
 	u := models.User{
@@ -497,6 +502,12 @@ func (s *Server) handleGetChannel(w http.ResponseWriter, r *http.Request) {
 func normalizeChannel(ch *models.Channel) {
 	if ch.LogoPosition == "" {
 		ch.LogoPosition = "top-right"
+	}
+	if ch.HlsWebToken == "" {
+		ch.HlsWebToken = fmt.Sprintf("live_sec_%s_tok_%d", strings.ReplaceAll(ch.ID, "-", ""), time.Now().Unix())
+	}
+	if ch.EpgWebToken == "" {
+		ch.EpgWebToken = fmt.Sprintf("epg_sec_%s_xml_%d", strings.ReplaceAll(ch.ID, "-", ""), time.Now().Unix())
 	}
 	for i := range ch.Destinations {
 		dst := &ch.Destinations[i]
@@ -1583,8 +1594,8 @@ func (s *Server) handleAgentHeartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if agent.PairingToken != "" && agent.PairingToken != payload.PairingToken {
-		jsonErr(w, http.StatusUnauthorized, "invalid pairing token")
+	if payload.PairingToken == "" || agent.PairingToken == "" || agent.PairingToken != payload.PairingToken {
+		jsonErr(w, http.StatusUnauthorized, "invalid or missing pairing token")
 		return
 	}
 

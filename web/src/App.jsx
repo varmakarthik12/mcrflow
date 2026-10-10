@@ -18,8 +18,8 @@ export function App() {
 
   // Auth & User State
   const [currentUser, setCurrentUser] = useState(null);
-  const [isSetupOpen, setIsSetupOpen] = useState(false);
-  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isSetupRequired, setIsSetupRequired] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
 
   // Broadcast Entities State
   const [channels, setChannels] = useState([]);
@@ -53,13 +53,17 @@ export function App() {
   // Initial Auth Lifecycle
   useEffect(() => {
     const initAuth = async () => {
+      setAuthChecking(true);
       try {
         const setupRes = await api.getSetupStatus();
         if (setupRes && (setupRes.needs_setup ?? setupRes.setup_required)) {
-          setIsSetupOpen(true);
+          setIsSetupRequired(true);
+          setCurrentUser(null);
+          setAuthChecking(false);
           return;
         }
 
+        setIsSetupRequired(false);
         const token = getAuthToken();
         if (token) {
           try {
@@ -67,37 +71,18 @@ export function App() {
             if (me) {
               setCurrentUser(me);
               loadAllData();
+              setAuthChecking(false);
               return;
             }
           } catch (e) {
             setAuthToken(null);
           }
         }
-
-        // Try logging in with default demo operator or open modal
-        try {
-          const loginRes = await api.login({ username: "admin", password: "admin123" });
-          if (loginRes && loginRes.token) {
-            setAuthToken(loginRes.token);
-            setCurrentUser(loginRes.user);
-            loadAllData();
-            return;
-          }
-        } catch (e) {
-          try {
-            const fallbackRes = await api.login({ username: "admin", password: "SuperAdminPass2026!" });
-            if (fallbackRes && fallbackRes.token) {
-              setAuthToken(fallbackRes.token);
-              setCurrentUser(fallbackRes.user);
-              loadAllData();
-              return;
-            }
-          } catch (e2) {
-            setIsLoginOpen(true);
-          }
-        }
+        setCurrentUser(null);
       } catch (err) {
         showToast("Initialization error: " + err.message, "error");
+      } finally {
+        setAuthChecking(false);
       }
     };
 
@@ -239,10 +224,68 @@ export function App() {
   const handleLogout = () => {
     setAuthToken(null);
     setCurrentUser(null);
-    showToast("Signed out", "info");
-    setIsLoginOpen(true);
+    setChannels([]);
+    setScheduleItems([]);
+    setResolutions([]);
+    setAdTemplates([]);
+    setAgents([]);
+    setBots([]);
+    setUsers([]);
+    showToast("Signed out of Master Control", "info");
   };
 
+  // 1. Initial auth check loading screen
+  if (authChecking) {
+    return (
+      <div className="h-full w-full flex items-center justify-center bg-[#0B0F17] text-gray-400 font-mono text-xs">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+          <span>Initializing MCRFlow Security Guard...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. If initial setup is required (0 users in DB)
+  if (isSetupRequired) {
+    return (
+      <div className="h-full w-full bg-[#0B0F17] flex items-center justify-center relative">
+        <SetupModal
+          isOpen={true}
+          canCancel={false}
+          onClose={() => {}}
+          onSetupSuccess={(user) => {
+            setIsSetupRequired(false);
+            setCurrentUser(user);
+            loadAllData();
+          }}
+          onShowToast={showToast}
+        />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </div>
+    );
+  }
+
+  // 3. If not authenticated, lock down all screens and show Login Modal
+  if (!currentUser) {
+    return (
+      <div className="h-full w-full bg-[#0B0F17] flex items-center justify-center relative">
+        <LoginModal
+          isOpen={true}
+          canClose={false}
+          onClose={() => {}}
+          onLoginSuccess={(user) => {
+            setCurrentUser(user);
+            loadAllData();
+          }}
+          onShowToast={showToast}
+        />
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      </div>
+    );
+  }
+
+  // 4. Authenticated: Render Master Control Playout Workspace
   return (
     <div className="h-full w-full flex flex-col bg-[#0B0F17] overflow-hidden">
       {/* Top Header */}
@@ -250,7 +293,7 @@ export function App() {
         activeScreen={activeScreen}
         onSelectScreen={setActiveScreen}
         currentUser={currentUser}
-        onOpenLogin={() => setIsLoginOpen(true)}
+        onOpenLogin={() => {}}
         onLogout={handleLogout}
         currentLanguage={currentLanguage}
         onChangeLanguage={setCurrentLanguage}
@@ -258,7 +301,7 @@ export function App() {
       />
 
       {/* Main Screen Views */}
-      <main className="flex-1 overflow-hidden relative">
+      <main className="flex-1 overflow-y-auto min-h-0 relative pb-16 md:pb-0">
         {activeScreen === 1 && (
           <DashboardScreen
             channels={channels}
@@ -323,27 +366,6 @@ export function App() {
           />
         )}
       </main>
-
-      {/* Modals */}
-      <SetupModal
-        isOpen={isSetupOpen}
-        onClose={() => setIsSetupOpen(false)}
-        onSetupSuccess={(user) => {
-          setCurrentUser(user);
-          loadAllData();
-        }}
-        onShowToast={showToast}
-      />
-
-      <LoginModal
-        isOpen={isLoginOpen}
-        onClose={() => setIsLoginOpen(false)}
-        onLoginSuccess={(user) => {
-          setCurrentUser(user);
-          loadAllData();
-        }}
-        onShowToast={showToast}
-      />
 
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

@@ -20,6 +20,14 @@ func setupUserService(t *testing.T) (*database.DB, *user.Service) {
 	repo := database.NewRepository(db)
 	tokenSvc := auth.NewTokenService("test-user-secret")
 	svc := user.NewService(repo, tokenSvc)
+
+	if err := svc.CreateUser(&models.User{
+		Username: "admin",
+		Role:     models.RoleAdmin,
+	}, "admin123"); err != nil {
+		t.Fatalf("failed to create admin user: %v", err)
+	}
+
 	return db, svc
 }
 

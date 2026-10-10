@@ -68,13 +68,13 @@ func TestSeedData(t *testing.T) {
 		t.Errorf("expected parsed destinations on ch-01, got %d", len(ch.Destinations))
 	}
 
-	// 5. Verify Default Admin User
-	u, err := repo.GetUserByUsername("admin")
+	// 5. Verify User Table starts clean (0 users) for secure first-launch setup
+	users, err := repo.ListUsers()
 	if err != nil {
-		t.Fatalf("failed to get default admin user: %v", err)
+		t.Fatalf("failed to list users: %v", err)
 	}
-	if u.Role != models.RoleAdmin {
-		t.Errorf("expected user role admin, got %s", u.Role)
+	if len(users) != 0 {
+		t.Errorf("expected 0 seeded users, got %d", len(users))
 	}
 }
 
@@ -82,15 +82,19 @@ func TestUserCRUDAndLastAdminProtection(t *testing.T) {
 	db, repo := setupTestDB(t)
 	defer db.Close()
 
-	// Initial admin exists
-	initialAdmin, err := repo.GetUserByUsername("admin")
-	if err != nil {
-		t.Fatalf("failed to get admin: %v", err)
+	// Create initial admin
+	initialAdmin := &models.User{
+		Username: "admin",
+		FullName: "Initial Admin",
+		Email:    "admin@mcrflow.tv",
+		Role:     models.RoleAdmin,
+	}
+	if err := repo.CreateUser(initialAdmin, "admin123"); err != nil {
+		t.Fatalf("failed to create initial admin: %v", err)
 	}
 
 	// Attempting to delete the ONLY admin should fail
-	err = repo.DeleteUser(initialAdmin.ID)
-	if err != database.ErrCannotDeleteLastAdmin {
+	if err := repo.DeleteUser(initialAdmin.ID); err != database.ErrCannotDeleteLastAdmin {
 		t.Fatalf("expected ErrCannotDeleteLastAdmin, got: %v", err)
 	}
 

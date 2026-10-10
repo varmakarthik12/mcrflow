@@ -46,14 +46,44 @@ def run():
     print(f"GET /api/v1/auth/setup-status -> {status}: {body}")
     assert status == 200, f"Setup status failed: {status}"
     results["setup_status"] = {"status": status, "body": body}
+    needs_setup = body.get("needs_setup", False)
 
-    print("\n--- 2. Auth Login ---")
-    status, body, _ = http_req("/api/v1/auth/login", method="POST", body={"username": "admin", "password": "admin123"})
-    print(f"POST /api/v1/auth/login -> {status}: token present={('token' in body)}")
-    assert status == 200 and "token" in body, f"Login failed: {status} {body}"
-    token = body["token"]
-    user = body["user"]
-    results["login"] = {"status": status, "user": user}
+    # Verify unauthenticated API access is strictly blocked with 401 Unauthorized
+    unauth_status, _, _ = http_req("/api/v1/channels")
+    print(f"GET /api/v1/channels without token -> {unauth_status} (Expected 401 Unauthorized)")
+    assert unauth_status == 401, f"Expected 401 Unauthorized without token, got: {unauth_status}"
+
+    print("\n--- 2. Auth Setup / Login ---")
+    if needs_setup:
+        print("Database requires first-launch setup. Testing /api/v1/auth/setup...")
+        setup_payload = {
+            "username": "admin",
+            "password": "admin123",
+            "full_name": "Root Administrator",
+            "email": "admin@mcrflow.tv"
+        }
+        status, body, _ = http_req("/api/v1/auth/setup", method="POST", body=setup_payload)
+        print(f"POST /api/v1/auth/setup -> {status}: token present={('token' in body)}")
+        assert status == 200 and "token" in body, f"Setup failed: {status} {body}"
+        token = body["token"]
+        user = body["user"]
+
+        # Crucial security test: Assert repeated /api/v1/auth/setup is strictly rejected with 403 Forbidden!
+        repeat_status, repeat_body, _ = http_req("/api/v1/auth/setup", method="POST", body=setup_payload)
+        print(f"POST /api/v1/auth/setup (repeated attempt) -> {repeat_status} (Expected 403 Forbidden)")
+        assert repeat_status == 403, f"Repeated setup should be forbidden, got: {repeat_status}"
+    else:
+        status, body, _ = http_req("/api/v1/auth/login", method="POST", body={"username": "admin", "password": "admin123"})
+        print(f"POST /api/v1/auth/login -> {status}: token present={('token' in body)}")
+        assert status == 200 and "token" in body, f"Login failed: {status} {body}"
+        token = body["token"]
+        user = body["user"]
+
+        # Also verify /api/v1/auth/setup is strictly forbidden when users exist
+        setup_status, _, _ = http_req("/api/v1/auth/setup", method="POST", body={"username": "hacker", "password": "pwd"})
+        assert setup_status == 403, f"Setup should be forbidden when users exist, got: {setup_status}"
+
+    results["login"] = {"token_obtained": True, "user": user}
 
     print("\n--- 3. Channels CRUD & Status ---")
     # List channels

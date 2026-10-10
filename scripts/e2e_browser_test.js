@@ -18,9 +18,15 @@ function delay(ms) {
 
 async function clickNavTab(page, index) {
   return await page.evaluate((idx) => {
-    const btns = document.querySelectorAll('header nav button');
-    if (btns[idx]) {
-      btns[idx].click();
+    // Check visible desktop header nav first, then visible mobile bottom nav
+    const visibleBtns = Array.from(document.querySelectorAll('nav button')).filter(b => b.offsetParent !== null);
+    if (visibleBtns[idx]) {
+      visibleBtns[idx].click();
+      return true;
+    }
+    const allBtns = document.querySelectorAll('nav button');
+    if (allBtns[idx]) {
+      allBtns[idx].click();
       return true;
     }
     return false;
@@ -84,23 +90,40 @@ async function runE2ETests() {
     await page.goto(targetUrl, { waitUntil: 'networkidle2', timeout: 15000 });
     await delay(1200);
 
-    // Check if Login Modal is open
-    const hasLogin = await page.evaluate(() => {
+    // Check if Setup Modal is open (first-launch)
+    const isSetupVisible = await page.evaluate(() => {
       const btn = document.querySelector('button[type="submit"]');
-      if (btn && btn.textContent.includes('Sign In')) {
-        const userInp = document.querySelector('input[type="text"]');
-        const passInp = document.querySelector('input[type="password"]');
-        if (userInp) userInp.value = 'admin';
-        if (passInp) passInp.value = 'admin123';
-        btn.click();
-        return true;
-      }
-      return false;
+      return !!(btn && (btn.textContent.includes('Initialize') || btn.textContent.includes('Launch')));
     });
-    if (hasLogin) {
-      console.log('  -> Login modal detected. Signed in as admin/admin123.');
-      await delay(1500);
+    if (isSetupVisible) {
+      console.log('  -> Setup modal detected. Initializing root admin...');
+      await page.type('input[placeholder*="admin"]', 'admin');
+      await page.type('input[placeholder*="Chief Broadcast Engineer"]', 'System Administrator');
+      await page.type('input[placeholder*="chief@mcrflow.tv"]', 'admin@mcrflow.tv');
+      await page.type('input[placeholder*="Minimum 8 characters"]', 'admin123');
+      await page.type('input[placeholder*="Re-enter password"]', 'admin123');
+      await page.click('button[type="submit"]');
+      await delay(2500);
     }
+
+    // Check if Login Modal is open
+    const isLoginVisible = await page.evaluate(() => {
+      const btn = document.querySelector('button[type="submit"]');
+      return !!(btn && btn.textContent.includes('Sign In'));
+    });
+    if (isLoginVisible) {
+      console.log('  -> Login modal detected. Signing in as admin/admin123...');
+      const userInputs = await page.$$('input[type="text"]');
+      if (userInputs.length > 0) {
+        await userInputs[0].type('admin');
+      }
+      await page.type('input[type="password"]', 'admin123');
+      await page.click('button[type="submit"]');
+      await delay(2500);
+    }
+
+    // Wait for header to appear
+    await page.waitForSelector('header', { timeout: 10000 });
 
     // --------------------------------------------------------------------------
     // 2. Desktop: Dashboard (Screen 1)
@@ -122,15 +145,20 @@ async function runE2ETests() {
     await delay(1000);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, '02_desktop_channels.png') });
 
-    // Test editing channel fields (Save Channel)
-    await page.evaluate(() => {
+    // Test editing channel fields & auto-slug Call Sign creation
+    const slugVerified = await page.evaluate(() => {
       const inputs = Array.from(document.querySelectorAll('input'));
-      const nameInput = inputs.find((i) => i.value && i.value.includes('DD National'));
+      const nameInput = inputs.find((i) => i.placeholder && i.placeholder.includes('DD National HD'));
+      const slugInput = inputs.find((i) => i.placeholder && i.placeholder.includes('Auto-slug'));
       if (nameInput) {
-        nameInput.value = 'DD National HD Playout';
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+        nativeInputValueSetter.call(nameInput, 'DD Sports HD');
         nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+        return slugInput ? slugInput.value : '';
       }
+      return '';
     });
+    console.log(`  ✓ Auto-slug Call Sign generated from channel title: "${slugVerified}"`);
 
     // Test Station Logo position change
     await page.evaluate(() => {
@@ -389,8 +417,8 @@ async function runE2ETests() {
     await page.setViewport({ width: 375, height: 812, isMobile: true, hasTouch: true });
     await delay(1000);
 
-    const mobileNavsCount = await page.$$eval('header nav button', (btns) => btns.length);
-    console.log(`  -> Detected ${mobileNavsCount} header icon buttons on mobile.`);
+    const mobileNavsCount = await page.$$eval('nav button', (btns) => btns.filter(b => b.offsetParent !== null).length);
+    console.log(`  -> Detected ${mobileNavsCount} navigation buttons on mobile bottom bar.`);
 
     // Screen 1 Mobile
     await clickNavTab(page, 0);

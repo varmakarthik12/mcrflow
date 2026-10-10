@@ -49,9 +49,9 @@ export function DashboardScreen({
   };
 
   return (
-    <div className="h-full flex flex-col p-4 space-y-4 overflow-y-auto">
+    <div className="h-full flex flex-col p-3 sm:p-4 space-y-4 overflow-y-auto max-w-full">
       {/* Top Operational KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 shrink-0">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 shrink-0">
         <div className="bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
           <div className="text-[11px] text-gray-400 font-medium flex items-center justify-between">
             <span>{t('dash.active_channels') || "Active Broadcast Channels"}</span>
@@ -138,7 +138,7 @@ export function DashboardScreen({
         </div>
 
         {/* Dynamic Channel Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 flex-1 overflow-y-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1">
           {channels.map((ch, idx) => {
             const logoUrl = ch.logo_path
               ? (ch.logo_path.startsWith('/') || ch.logo_path.startsWith('http') ? ch.logo_path : `/${ch.logo_path}`)

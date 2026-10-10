@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	_ "modernc.org/sqlite"
 
 	"github.com/varmakarthik12/mcrflow/internal/models"
@@ -418,46 +417,8 @@ func (db *DB) Seed() error {
 		}
 	}
 
-	// 3. Seed Default Admin User
-	var count int
-	err := db.QueryRow(`SELECT COUNT(*) FROM users WHERE username = 'admin'`).Scan(&count)
-	if err == nil && count == 0 {
-		hashedPass, err := bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost)
-		if err != nil {
-			return fmt.Errorf("failed to hash default admin password: %w", err)
-		}
-		_, err = db.Exec(`
-			INSERT INTO users (id, username, password_hash, full_name, email, role, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			"usr-admin-01", "admin", string(hashedPass), "Master Control Administrator", "admin@mcrflow.tv", models.RoleAdmin, now, now,
-		)
-		if err != nil {
-			return fmt.Errorf("failed to seed admin user: %w", err)
-		}
-	}
-
-	// 4b. Seed Demo Operator and Scheduler Users
-	var opCount int
-	err = db.QueryRow(`SELECT COUNT(*) FROM users WHERE username = 'operator'`).Scan(&opCount)
-	if err == nil && opCount == 0 {
-		hashedPass, _ := bcrypt.GenerateFromPassword([]byte("operator123"), bcrypt.DefaultCost)
-		_, _ = db.Exec(`
-			INSERT INTO users (id, username, password_hash, full_name, email, role, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			"usr-operator-01", "operator", string(hashedPass), "Rajesh Kumar (MCR Desk)", "rajesh@mcrflow.tv", models.RoleOperator, now, now,
-		)
-	}
-
-	var schedCount int
-	err = db.QueryRow(`SELECT COUNT(*) FROM users WHERE username = 'scheduler'`).Scan(&schedCount)
-	if err == nil && schedCount == 0 {
-		hashedPass, _ := bcrypt.GenerateFromPassword([]byte("scheduler123"), bcrypt.DefaultCost)
-		_, _ = db.Exec(`
-			INSERT INTO users (id, username, password_hash, full_name, email, role, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			"usr-scheduler-01", "scheduler", string(hashedPass), "Rahul Sharma (Scheduler)", "rahul@mcrflow.tv", models.RoleContentScheduler, now, now,
-		)
-	}
+	// 3. User Table starts empty for first-launch initialization
+	// (Users are not seeded to ensure clean security posture and allow root admin setup)
 
 	// 5. Seed Edge Agents
 	agents := []models.EdgeAgent{
@@ -538,7 +499,7 @@ func (db *DB) Seed() error {
 	}
 	destBytes, _ := json.Marshal(destinations)
 
-	_, err = db.Exec(`
+	_, err := db.Exec(`
 		INSERT OR IGNORE INTO channels 
 		(id, name, call_sign, resolution_id, logo_path, logo_position, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,

@@ -113,17 +113,39 @@ func main() {
 
 	go runHeartbeatWorker(ctx, *controlURL, authCreds.AgentID, authCreds.PairingToken)
 
-	// 3. Start Agent local HTTP server
+	// 3. Start Agent local HTTP server with cryptographic token validation
+	requireAgentAuth := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			token := ""
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				token = strings.TrimPrefix(authHeader, "Bearer ")
+			}
+			if token == "" {
+				token = r.URL.Query().Get("token")
+			}
+			if token == "" || token != authCreds.PairingToken {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"error": "unauthorized: valid agent pairing token required",
+				})
+				return
+			}
+			next(w, r)
+		}
+	}
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/health", requireAgentAuth(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":   "online",
 			"agent_id": authCreds.AgentID,
 			"time":     time.Now().UTC(),
 		})
-	})
-	mux.HandleFunc("/status", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	mux.HandleFunc("/status", requireAgentAuth(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"agent_id":        authCreds.AgentID,
@@ -133,7 +155,7 @@ func main() {
 			"memory_percent":  32.0,
 			"active_channels": []string{"ch-01"},
 		})
-	})
+	}))
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%d", *port),

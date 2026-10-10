@@ -35,7 +35,7 @@ else
   SET_UI_ENV := CONTROL=$(CONTROL) MCRFLOW_CONTROL_URL=http://localhost:$(CONTROL)
 endif
 
-.PHONY: help build build-control build-agent test test-unit test-e2e dev-control dev-agent dev-ui dev run clean docker-build docker-compose-up docker-compose-down fmt vet tidy
+.PHONY: help build build-control build-agent test test-unit test-e2e dev-control dev-agent dev-ui dev-server dev run clean docker-build docker-compose-up docker-compose-down fmt vet tidy
 
 # Default target
 help:
@@ -114,6 +114,7 @@ dev-ui:
 # Default development runner
 run: dev-control
 dev: dev-control
+dev-server: dev-control
 
 # Docker container targets
 docker-build:
