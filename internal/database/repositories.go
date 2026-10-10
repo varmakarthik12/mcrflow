@@ -1183,3 +1183,26 @@ func (r *Repository) DeleteBot(id string) error {
 	}
 	return nil
 }
+
+// System Settings
+func (r *Repository) GetSetting(key string) (string, error) {
+	var val string
+	err := r.db.QueryRow(`SELECT value FROM system_settings WHERE key = ?`, key).Scan(&val)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNotFound
+		}
+		return "", err
+	}
+	return val, nil
+}
+
+func (r *Repository) SetSetting(key, val string) error {
+	_, err := r.db.Exec(`
+		INSERT INTO system_settings (key, value, updated_at)
+		VALUES (?, ?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+		key, val, time.Now().UTC(),
+	)
+	return err
+}

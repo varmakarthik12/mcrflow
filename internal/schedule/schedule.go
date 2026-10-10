@@ -118,10 +118,11 @@ func (s *Service) CreateItem(item *models.ScheduleItem, action string) error {
 	if item.StartTime.IsZero() {
 		return ErrStartTimeRequired
 	}
+	item.StartTime = item.StartTime.UTC()
 	if item.DurationSeconds <= 0 {
 		item.DurationSeconds = 3600 // default 1 hour
 	}
-	item.EndTime = item.StartTime.Add(time.Duration(item.DurationSeconds) * time.Second)
+	item.EndTime = item.StartTime.Add(time.Duration(item.DurationSeconds) * time.Second).UTC()
 
 	act := strings.ToUpper(strings.TrimSpace(action))
 
@@ -184,10 +185,11 @@ func (s *Service) UpdateItem(item *models.ScheduleItem, action string) error {
 	if item.StartTime.IsZero() {
 		return ErrStartTimeRequired
 	}
+	item.StartTime = item.StartTime.UTC()
 	if item.DurationSeconds <= 0 {
 		item.DurationSeconds = 3600
 	}
-	item.EndTime = item.StartTime.Add(time.Duration(item.DurationSeconds) * time.Second)
+	item.EndTime = item.StartTime.Add(time.Duration(item.DurationSeconds) * time.Second).UTC()
 
 	act := strings.ToUpper(strings.TrimSpace(action))
 
@@ -391,11 +393,12 @@ type ScheduleGap struct {
 
 // AutoFillRequest configures parameters to automatically bridge detected schedule gaps
 type AutoFillRequest struct {
-	ChannelID   string    `json:"channel_id"`
-	StartTime   time.Time `json:"start_time"`
-	EndTime     time.Time `json:"end_time"`
-	FillerTitle string    `json:"filler_title,omitempty"`
-	FillerMedia string    `json:"filler_media,omitempty"`
+	ChannelID       string    `json:"channel_id"`
+	StartTime       time.Time `json:"start_time"`
+	EndTime         time.Time `json:"end_time"`
+	FillerTitle     string    `json:"filler_title,omitempty"`
+	FillerMedia     string    `json:"filler_media,omitempty"`
+	FromCurrentTime bool      `json:"from_current_time"`
 }
 
 // DetectGaps finds unoccupied time slots within the window [start, end)
@@ -403,6 +406,8 @@ func (s *Service) DetectGaps(channelID string, start, end time.Time) ([]Schedule
 	if channelID == "" {
 		return nil, ErrChannelIDRequired
 	}
+	start = start.UTC()
+	end = end.UTC()
 	if end.Before(start) || end.Equal(start) {
 		return []ScheduleGap{}, nil
 	}
@@ -468,9 +473,19 @@ func (s *Service) AutoFillGaps(req AutoFillRequest) ([]models.ScheduleItem, erro
 	}
 	if req.StartTime.IsZero() {
 		req.StartTime = time.Now().UTC()
+	} else {
+		req.StartTime = req.StartTime.UTC()
+	}
+	if req.FromCurrentTime || req.StartTime.Before(time.Now().UTC()) {
+		now := time.Now().UTC()
+		if req.StartTime.Before(now) {
+			req.StartTime = now
+		}
 	}
 	if req.EndTime.IsZero() || req.EndTime.Before(req.StartTime) {
 		req.EndTime = req.StartTime.Add(24 * time.Hour)
+	} else {
+		req.EndTime = req.EndTime.UTC()
 	}
 
 	fillerTitle := strings.TrimSpace(req.FillerTitle)

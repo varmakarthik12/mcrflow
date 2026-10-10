@@ -11,6 +11,8 @@ import {
   UserCheck
 } from 'lucide-react';
 
+import { formatTimeInTimezone } from '../utils/timezone';
+
 export function Header({
   activeScreen,
   onSelectScreen,
@@ -19,25 +21,24 @@ export function Header({
   onLogout,
   currentLanguage,
   onChangeLanguage,
+  broadcastTimezone = "Asia/Kolkata",
   t
 }) {
   const [smpteTimecode, setSmpteTimecode] = useState("00:00:00:00");
 
-  // Live SMPTE 25fps PAL clock
+  // Live SMPTE 25fps PAL clock synchronized to configured broadcast timezone
   useEffect(() => {
     let frame = 0;
     const interval = setInterval(() => {
       const now = new Date();
       frame = (frame + 1) % 25;
-      const hh = String(now.getHours()).padStart(2, '0');
-      const mm = String(now.getMinutes()).padStart(2, '0');
-      const ss = String(now.getSeconds()).padStart(2, '0');
+      const timeStr = formatTimeInTimezone(now, broadcastTimezone, true);
       const ff = String(frame).padStart(2, '0');
-      setSmpteTimecode(`${hh}:${mm}:${ss}:${ff}`);
+      setSmpteTimecode(`${timeStr}:${ff}`);
     }, 40);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [broadcastTimezone]);
 
   const navItems = [
     { id: 1, label: t('nav.dashboard') || "Dashboard", icon: LayoutDashboard },
@@ -90,7 +91,9 @@ export function Header({
 
           {/* Live SMPTE PAL Timecode Display */}
           <div className="hidden xl:flex items-center gap-2 bg-[#0B0F17] border border-[#1E293B] px-2.5 py-1 rounded-md shadow-inner">
-            <span className="text-[10px] text-gray-400 font-bold font-mono tracking-wider">PAL 25FPS</span>
+            <span className="text-[10px] text-gray-400 font-bold font-mono tracking-wider">
+              {broadcastTimezone === "Asia/Kolkata" ? "IST PAL 25FPS" : `${broadcastTimezone.split('/').pop()} 25FPS`}
+            </span>
             <span className="text-xs font-mono font-bold text-sky-400 tracking-widest">{smpteTimecode}</span>
           </div>
         </div>

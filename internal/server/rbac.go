@@ -219,6 +219,25 @@ var EnterpriseRBACPolicy = []RouteRule{
 	},
 
 	// -------------------------------------------------------------
+	// 5b. System Settings & Timezone
+	// -------------------------------------------------------------
+	{
+		Method:       "GET",
+		PathPattern:  "/api/v1/settings/timezone",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
+	},
+	{
+		Method:       "PUT",
+		PathPattern:  "/api/v1/settings/timezone",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator},
+	},
+	{
+		Method:       "POST",
+		PathPattern:  "/api/v1/settings/timezone",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator},
+	},
+
+	// -------------------------------------------------------------
 	// 6. Resolution Presets
 	// -------------------------------------------------------------
 	{

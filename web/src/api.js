@@ -85,9 +85,19 @@ export const api = {
   updateScheduleItem: (id, data) => request(`/api/v1/schedule/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteScheduleItem: (id) => request(`/api/v1/schedule/${id}`, { method: "DELETE" }),
   checkScheduleConflicts: (data) => request("/api/v1/schedule/check-conflicts", { method: "POST", body: JSON.stringify(data) }),
-  getScheduleGaps: (channelId, start = "", end = "") => request(`/api/v1/schedule/gaps?channel_id=${encodeURIComponent(channelId)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
+  getScheduleGaps: (channelId, start = "", end = "", fromCurrent = false) => {
+    let url = `/api/v1/schedule/gaps?channel_id=${encodeURIComponent(channelId)}`;
+    if (start) url += `&start=${encodeURIComponent(start)}`;
+    if (end) url += `&end=${encodeURIComponent(end)}`;
+    if (fromCurrent) url += `&from_current=true`;
+    return request(url);
+  },
   autoFillGaps: (data) => request("/api/v1/schedule/auto-fill-gaps", { method: "POST", body: JSON.stringify(data) }),
   toggleChannelSlate: (channelId, enabled) => request(`/api/v1/channels/${channelId}/slate`, { method: "POST", body: JSON.stringify({ enabled }) }),
+
+  // System Settings & Broadcast Timezone
+  getTimezoneSetting: () => request("/api/v1/settings/timezone"),
+  updateTimezoneSetting: (timezone) => request("/api/v1/settings/timezone", { method: "PUT", body: JSON.stringify({ timezone }) }),
 
   // Resolutions
   getResolutions: () => request("/api/v1/resolutions"),

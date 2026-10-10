@@ -11,10 +11,12 @@ import { ToastContainer } from './components/Toast';
 import { ConfirmModal } from './components/ConfirmModal';
 import { api, getAuthToken, setAuthToken } from './api';
 import { translations } from './i18n/translations';
+import { getTimezone, setTimezone } from './utils/timezone';
 
 export function App() {
   const [activeScreen, setActiveScreen] = useState(1);
   const [currentLanguage, setCurrentLanguage] = useState("en");
+  const [broadcastTimezone, setBroadcastTimezone] = useState(getTimezone());
 
   // Auth & User State
   const [currentUser, setCurrentUser] = useState(null);
@@ -116,7 +118,23 @@ export function App() {
       loadAgents(),
       loadBots(),
       loadUsers(),
+      loadTimezone(),
     ]);
+  };
+
+  const loadTimezone = async () => {
+    try {
+      const res = await api.getTimezoneSetting();
+      if (res && res.timezone) {
+        setTimezone(res.timezone);
+        setBroadcastTimezone(res.timezone);
+      }
+    } catch (e) {}
+  };
+
+  const handleUpdateTimezone = (tz) => {
+    setTimezone(tz);
+    setBroadcastTimezone(tz);
   };
 
   // Channels
@@ -316,6 +334,7 @@ export function App() {
         onLogout={handleLogout}
         currentLanguage={currentLanguage}
         onChangeLanguage={setCurrentLanguage}
+        broadcastTimezone={broadcastTimezone}
         t={t}
       />
 
@@ -361,6 +380,7 @@ export function App() {
             onRefreshSchedule={loadSchedule}
             onShowToast={showToast}
             adTemplates={adTemplates}
+            broadcastTimezone={broadcastTimezone}
             t={t}
           />
         )}
@@ -387,6 +407,8 @@ export function App() {
             onRefreshBots={loadBots}
             onShowToast={showToast}
             currentUser={currentUser}
+            broadcastTimezone={broadcastTimezone}
+            onUpdateTimezone={handleUpdateTimezone}
           />
         )}
       </main>

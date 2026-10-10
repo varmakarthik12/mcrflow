@@ -184,6 +184,12 @@ func (db *DB) Migrate() error {
 		created_at DATETIME NOT NULL
 	);
 
+	CREATE TABLE IF NOT EXISTS system_settings (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL,
+		updated_at DATETIME NOT NULL
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_schedules_channel_start ON schedules(channel_id, start_time);
 	CREATE INDEX IF NOT EXISTS idx_schedules_channel_window ON schedules(channel_id, start_time, end_time);
 	CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
@@ -532,6 +538,12 @@ func (db *DB) Seed() error {
 	if err != nil {
 		return fmt.Errorf("failed to seed default channel: %w", err)
 	}
+
+	_, _ = db.Exec(`
+		INSERT OR IGNORE INTO system_settings (key, value, updated_at)
+		VALUES ('broadcast_timezone', 'Asia/Kolkata', ?)`,
+		now,
+	)
 
 	return nil
 }

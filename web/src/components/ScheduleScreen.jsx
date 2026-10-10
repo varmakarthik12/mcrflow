@@ -27,6 +27,12 @@ import {
   Tag
 } from 'lucide-react';
 import { api } from '../api';
+import {
+  formatTimeInTimezone,
+  formatDateInTimezone,
+  createIsoInTimezone,
+  DEFAULT_TIMEZONE
+} from '../utils/timezone';
 
 const PROMO_PRESETS = [
   { title: "Diwali Movie Festival Premiere", subtext: "Exclusive 4K Broadcast This Weekend" },
@@ -55,6 +61,7 @@ export function ScheduleScreen({
   onRefreshSchedule,
   onShowToast,
   adTemplates = [],
+  broadcastTimezone = DEFAULT_TIMEZONE,
   t
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -63,8 +70,8 @@ export function ScheduleScreen({
   const [fileFilterQuery, setFileFilterQuery] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
 
-  // Multi-Day Date Navigation State
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Multi-Day Date Navigation State (Synchronized with Broadcast Timezone)
+  const todayStr = formatDateInTimezone(new Date(), broadcastTimezone);
   const [selectedDate, setSelectedDate] = useState(todayStr);
 
   // Form State
@@ -93,6 +100,7 @@ export function ScheduleScreen({
 
   // Auto-Fill Gaps Modal State
   const [isGapModalOpen, setIsGapModalOpen] = useState(false);
+  const [gapScope, setGapScope] = useState("current"); // "current" (from current playout time forward) | "full" (entire broadcast day)
   const [detectedGaps, setDetectedGaps] = useState([]);
   const [isDetectingGaps, setIsDetectingGaps] = useState(false);
   const [isFillingGaps, setIsFillingGaps] = useState(false);
@@ -137,13 +145,10 @@ export function ScheduleScreen({
     const timer = setTimeout(async () => {
       try {
         setIsCheckingConflict(true);
-        const [year, month, day] = selectedDate.split('-').map(Number);
-        const sParts = startTime.split(':').map(Number);
         const dParts = duration.split(':').map(Number);
         const durSecs = (dParts[0] || 0) * 3600 + (dParts[1] || 0) * 60 + (dParts[2] || 0);
-        const startDate = new Date(Date.UTC(year, month - 1, day, sParts[0] || 0, sParts[1] || 0, sParts[2] || 0));
-        const startIso = startDate.toISOString();
-        const endIso = new Date(startDate.getTime() + durSecs * 1000).toISOString();
+        const startIso = createIsoInTimezone(selectedDate, startTime, broadcastTimezone);
+        const endIso = new Date(new Date(startIso).getTime() + durSecs * 1000).toISOString();
 
         const report = await api.checkScheduleConflicts({
           channel_id: activeChannelId,
@@ -165,15 +170,14 @@ export function ScheduleScreen({
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [isModalOpen, activeChannelId, selectedDate, startTime, duration]);
+  }, [isModalOpen, activeChannelId, selectedDate, startTime, duration, broadcastTimezone]);
 
   const checkLocalConflicts = () => {
     try {
-      const [year, month, day] = selectedDate.split('-').map(Number);
-      const sParts = startTime.split(':').map(Number);
       const dParts = duration.split(':').map(Number);
       const durSecs = (dParts[0] || 0) * 3600 + (dParts[1] || 0) * 60 + (dParts[2] || 0);
-      const sMs = Date.UTC(year, month - 1, day, sParts[0] || 0, sParts[1] || 0, sParts[2] || 0);
+      const startIso = createIsoInTimezone(selectedDate, startTime, broadcastTimezone);
+      const sMs = new Date(startIso).getTime();
       const eMs = sMs + durSecs * 1000;
 
       const collisions = scheduleItems.filter(it => {
@@ -285,13 +289,10 @@ export function ScheduleScreen({
   const handleSnapStartTime = () => {
     if (!conflictReport?.suggested_start) return;
     try {
-      const dt = new Date(conflictReport.suggested_start);
-      const hh = String(dt.getHours()).padStart(2, '0');
-      const mm = String(dt.getMinutes()).padStart(2, '0');
-      const ss = String(dt.getSeconds()).padStart(2, '0');
-      setStartTime(`${hh}:${mm}:${ss}`);
+      const timeStr = formatTimeInTimezone(conflictReport.suggested_start, broadcastTimezone, true);
+      setStartTime(timeStr);
       setSelectedConflictAction("ADJUST_START");
-      onShowToast(`Snapped start time to ${hh}:${mm}:${ss} (after colliding program)`, "success");
+      onShowToast(`Snapped start time to ${timeStr} (after colliding program)`, "success");
     } catch (e) {}
   };
 
@@ -324,11 +325,8 @@ export function ScheduleScreen({
     const durParts = duration.split(':').map(Number);
     const durSecs = (durParts[0] || 0) * 3600 + (durParts[1] || 0) * 60 + (durParts[2] || 0);
 
-    const [year, month, day] = selectedDate.split('-').map(Number);
-    const sParts = startTime.split(':').map(Number);
-    const startDate = new Date(Date.UTC(year, month - 1, day, sParts[0] || 0, sParts[1] || 0, sParts[2] || 0));
-    const startIso = startDate.toISOString();
-    const endIso = new Date(startDate.getTime() + durSecs * 1000).toISOString();
+    const startIso = createIsoInTimezone(selectedDate, startTime, broadcastTimezone);
+    const endIso = new Date(new Date(startIso).getTime() + durSecs * 1000).toISOString();
 
     const payload = {
       item: {
@@ -390,14 +388,20 @@ export function ScheduleScreen({
   };
 
   // Gap Detection & Auto-Fill
-  const handleOpenGapModal = async () => {
+  const handleOpenGapModal = async (scopeOverride) => {
+    const isToday = selectedDate === formatDateInTimezone(new Date(), broadcastTimezone);
+    const activeScope = scopeOverride !== undefined ? scopeOverride : (isToday ? "current" : "full");
+    setGapScope(activeScope);
     setIsGapModalOpen(true);
     setIsDetectingGaps(true);
     try {
-      const [y, m, d] = selectedDate.split('-').map(Number);
-      const startDay = new Date(Date.UTC(y, m - 1, d, 0, 0, 0)).toISOString();
-      const endDay = new Date(Date.UTC(y, m - 1, d, 23, 59, 59)).toISOString();
-      const gaps = await api.getScheduleGaps(activeChannelId, startDay, endDay);
+      const fromCurrent = isToday && activeScope === "current";
+      const startDay = fromCurrent
+        ? new Date().toISOString()
+        : createIsoInTimezone(selectedDate, "00:00:00", broadcastTimezone);
+      const endDay = createIsoInTimezone(selectedDate, "23:59:59", broadcastTimezone);
+
+      const gaps = await api.getScheduleGaps(activeChannelId, startDay, endDay, fromCurrent);
       setDetectedGaps(Array.isArray(gaps) ? gaps : []);
     } catch (e) {
       onShowToast("Failed to detect schedule gaps: " + e.message, "error");
@@ -409,16 +413,20 @@ export function ScheduleScreen({
   const handleAutoFillGaps = async () => {
     setIsFillingGaps(true);
     try {
-      const [y, m, d] = selectedDate.split('-').map(Number);
-      const startDay = new Date(Date.UTC(y, m - 1, d, 0, 0, 0)).toISOString();
-      const endDay = new Date(Date.UTC(y, m - 1, d, 23, 59, 59)).toISOString();
+      const isToday = selectedDate === formatDateInTimezone(new Date(), broadcastTimezone);
+      const fromCurrent = isToday && gapScope === "current";
+      const startDay = fromCurrent
+        ? new Date().toISOString()
+        : createIsoInTimezone(selectedDate, "00:00:00", broadcastTimezone);
+      const endDay = createIsoInTimezone(selectedDate, "23:59:59", broadcastTimezone);
 
       const res = await api.autoFillGaps({
         channel_id: activeChannelId,
         start_time: startDay,
         end_time: endDay,
         filler_title: fillerTitle,
-        filler_media: fillerMedia
+        filler_media: fillerMedia,
+        from_current_time: fromCurrent
       });
 
       onShowToast(`Auto-filled ${res.filled_count || detectedGaps.length} schedule gap(s) successfully!`, "success");
@@ -441,19 +449,19 @@ export function ScheduleScreen({
   });
   const upcomingNextItem = sortedItems.find((it) => new Date(it.start_time).getTime() > nowMs);
 
-  // Filter schedule items for selectedDate
+  // Filter schedule items for selectedDate in broadcast timezone
   const dayItems = sortedItems.filter((it) => {
     if (!it.start_time) return false;
-    const itDate = new Date(it.start_time).toISOString().slice(0, 10);
+    const itDate = formatDateInTimezone(it.start_time, broadcastTimezone);
     return itDate === selectedDate;
   });
 
-  // Multi-day quick date navigation pills
+  // Multi-day quick date navigation pills in broadcast timezone
   const datePills = [0, 1, 2, 3, 4, 5, 6].map((offset) => {
     const d = new Date();
     d.setDate(d.getDate() + offset);
-    const iso = d.toISOString().slice(0, 10);
-    const label = offset === 0 ? "Today" : offset === 1 ? "Tomorrow" : d.toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+    const iso = formatDateInTimezone(d, broadcastTimezone);
+    const label = offset === 0 ? "Today" : offset === 1 ? "Tomorrow" : d.toLocaleDateString('en-US', { timeZone: broadcastTimezone, weekday: 'short', month: 'numeric', day: 'numeric' });
     return { date: iso, label };
   });
 
@@ -544,7 +552,7 @@ export function ScheduleScreen({
             <span className="font-bold text-gray-400 uppercase tracking-wider text-[11px]">Up Next:</span>
             {upcomingNextItem ? (
               <span className="font-semibold text-amber-200 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/80">
-                {upcomingNextItem.program_title} (Starts {new Date(upcomingNextItem.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                {upcomingNextItem.program_title} (Starts {formatTimeInTimezone(upcomingNextItem.start_time, broadcastTimezone, false)})
               </span>
             ) : (
               <span className="text-gray-500 italic">No scheduled upcoming queue</span>
@@ -623,8 +631,8 @@ export function ScheduleScreen({
             </div>
           ) : (
             dayItems.map((item) => {
-              const startStr = item.start_time ? new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "16:00:00";
-              const endStr = item.end_time ? new Date(item.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "18:15:00";
+              const startStr = item.start_time ? formatTimeInTimezone(item.start_time, broadcastTimezone, true) : "16:00:00";
+              const endStr = item.end_time ? formatTimeInTimezone(item.end_time, broadcastTimezone, true) : "18:15:00";
               const durMinutes = Math.floor((item.duration_seconds || 3600) / 60);
 
               const isItemActiveNow = activeNowItem && activeNowItem.id === item.id;
@@ -1049,7 +1057,15 @@ export function ScheduleScreen({
             <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-[#151c2c]">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-white text-base">Timeline Gap Detection & Auto-Fill</h3>
+                <div>
+                  <h3 className="font-bold text-white text-base">Timeline Gap Detection & Auto-Fill</h3>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[11px] text-gray-400">{broadcastTimezone}</span>
+                    <span className="text-[11px] font-mono text-amber-400 bg-amber-950/60 px-1.5 py-0.2 rounded border border-amber-800/60">
+                      Live Clock: {formatTimeInTimezone(new Date(), broadcastTimezone, true)}
+                    </span>
+                  </div>
+                </div>
               </div>
               <button
                 onClick={() => setIsGapModalOpen(false)}
@@ -1060,6 +1076,46 @@ export function ScheduleScreen({
             </div>
 
             <div className="p-6 space-y-4">
+              {/* Scope Selector if selectedDate is today */}
+              {selectedDate === formatDateInTimezone(new Date(), broadcastTimezone) && (
+                <div className="p-3 bg-[#161f30] border border-gray-800 rounded-xl space-y-2">
+                  <span className="text-[11px] font-bold text-gray-300 uppercase tracking-wider block">
+                    Auto-Fill Starting Point
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenGapModal("current")}
+                      className={`p-2 rounded-lg text-left text-xs transition-all border ${
+                        gapScope === "current"
+                          ? "bg-amber-950/70 border-amber-500 text-amber-200 shadow-sm"
+                          : "bg-gray-800/60 border-gray-700/80 text-gray-400 hover:text-gray-200"
+                      }`}
+                    >
+                      <div className="font-bold">From Current Time (Live)</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">
+                        Fills forward from {formatTimeInTimezone(new Date(), broadcastTimezone, false)}
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenGapModal("full")}
+                      className={`p-2 rounded-lg text-left text-xs transition-all border ${
+                        gapScope === "full"
+                          ? "bg-amber-950/70 border-amber-500 text-amber-200 shadow-sm"
+                          : "bg-gray-800/60 border-gray-700/80 text-gray-400 hover:text-gray-200"
+                      }`}
+                    >
+                      <div className="font-bold">Entire Broadcast Day</div>
+                      <div className="text-[10px] text-gray-400 mt-0.5">
+                        00:00:00 to 23:59:59
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <p className="text-xs text-gray-300">
                 Scanning timeline for unprogrammed intervals on <strong>{selectedDate}</strong>:
               </p>
@@ -1078,8 +1134,8 @@ export function ScheduleScreen({
                 <div className="space-y-3">
                   <div className="max-h-48 overflow-y-auto bg-[#141b2b] border border-gray-800 rounded-xl divide-y divide-gray-800/60 p-2">
                     {detectedGaps.map((gap, idx) => {
-                      const sStr = new Date(gap.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      const eStr = new Date(gap.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      const sStr = formatTimeInTimezone(gap.start_time, broadcastTimezone, false);
+                      const eStr = formatTimeInTimezone(gap.end_time, broadcastTimezone, false);
                       const durMins = Math.floor(gap.duration_seconds / 60);
                       return (
                         <div key={idx} className="p-2 text-xs flex items-center justify-between text-gray-300">

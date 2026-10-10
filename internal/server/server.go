@@ -239,6 +239,11 @@ func (s *Server) setupRoutes() {
 		api.Get("/schedule/gaps", s.handleGetScheduleGaps)
 		api.Post("/schedule/auto-fill-gaps", s.handleAutoFillScheduleGaps)
 
+		// System Settings & Broadcast Timezone
+		api.Get("/settings/timezone", s.handleGetTimezoneSetting)
+		api.Put("/settings/timezone", s.handleSetTimezoneSetting)
+		api.Post("/settings/timezone", s.handleSetTimezoneSetting)
+
 		// Resolutions
 		api.Get("/resolutions", s.handleListResolutions)
 		api.Get("/resolutions/{id}", s.handleGetResolution)
@@ -991,6 +996,7 @@ func (s *Server) handleGetScheduleGaps(w http.ResponseWriter, r *http.Request) {
 
 	startStr := r.URL.Query().Get("start")
 	endStr := r.URL.Query().Get("end")
+	fromCurrent := r.URL.Query().Get("from_current") == "true"
 
 	now := time.Now().UTC()
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
@@ -1005,6 +1011,10 @@ func (s *Server) handleGetScheduleGaps(w http.ResponseWriter, r *http.Request) {
 		if t, err := time.Parse(time.RFC3339, endStr); err == nil {
 			end = t
 		}
+	}
+
+	if fromCurrent && start.Before(now) {
+		start = now
 	}
 
 	gaps, err := s.schedSvc.DetectGaps(channelID, start, end)
@@ -1048,6 +1058,68 @@ func (s *Server) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	jsonResp(w, http.StatusOK, map[string]string{"message": "schedule item deleted"})
+}
+
+// System Settings & Broadcast Timezone
+func (s *Server) handleGetTimezoneSetting(w http.ResponseWriter, r *http.Request) {
+	tz, err := s.repo.GetSetting("broadcast_timezone")
+	if err != nil || tz == "" {
+		tz = "Asia/Kolkata"
+	}
+
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		loc = time.FixedZone("IST", 5*3600+1800)
+	}
+	nowInTz := time.Now().In(loc)
+	_, offsetSecs := nowInTz.Zone()
+	offsetHours := offsetSecs / 3600
+	offsetMins := (offsetSecs % 3600) / 60
+	sign := "+"
+	if offsetSecs < 0 {
+		sign = "-"
+		offsetHours = -offsetHours
+		offsetMins = -offsetMins
+	}
+	offsetStr := fmt.Sprintf("%s%02d:%02d", sign, offsetHours, offsetMins)
+
+	jsonResp(w, http.StatusOK, map[string]interface{}{
+		"timezone":       tz,
+		"offset":         offsetStr,
+		"current_time":   nowInTz.Format(time.RFC3339),
+		"time_formatted": nowInTz.Format("15:04:05"),
+		"date_formatted": nowInTz.Format("2006-01-02"),
+		"supported_timezones": []map[string]string{
+			{"id": "Asia/Kolkata", "label": "India Standard Time (IST, UTC+05:30)", "offset": "+05:30"},
+			{"id": "UTC", "label": "Coordinated Universal Time (UTC, +00:00)", "offset": "+00:00"},
+			{"id": "Asia/Dubai", "label": "Gulf Standard Time (GST, UTC+04:00)", "offset": "+04:00"},
+			{"id": "Asia/Singapore", "label": "Singapore Standard Time (SGT, UTC+08:00)", "offset": "+08:00"},
+			{"id": "Asia/Tokyo", "label": "Japan Standard Time (JST, UTC+09:00)", "offset": "+09:00"},
+			{"id": "Europe/London", "label": "London (GMT / BST, UTC+00/+01)", "offset": "+00:00"},
+			{"id": "Europe/Paris", "label": "Central European Time (CET / CEST, UTC+01/+02)", "offset": "+01:00"},
+			{"id": "America/New_York", "label": "US Eastern Time (EST / EDT, UTC-05/-04)", "offset": "-05:00"},
+			{"id": "America/Los_Angeles", "label": "US Pacific Time (PST / PDT, UTC-08/-07)", "offset": "-08:00"},
+		},
+	})
+}
+
+func (s *Server) handleSetTimezoneSetting(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Timezone string `json:"timezone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	tz := strings.TrimSpace(body.Timezone)
+	if tz == "" {
+		tz = "Asia/Kolkata"
+	}
+	if err := s.repo.SetSetting("broadcast_timezone", tz); err != nil {
+		jsonErr(w, http.StatusInternalServerError, "failed to update timezone: "+err.Error())
+		return
+	}
+	s.handleGetTimezoneSetting(w, r)
 }
 
 // Resolutions

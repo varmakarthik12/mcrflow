@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sliders,
   Users,
@@ -18,9 +18,13 @@ import {
   WifiOff,
   CheckCircle2,
   AlertTriangle,
-  Loader2
+  Loader2,
+  Globe,
+  Clock,
+  Save
 } from 'lucide-react';
 import { api } from '../api';
+import { BROADCAST_TIMEZONES, DEFAULT_TIMEZONE, formatTimeInTimezone, formatDateInTimezone } from '../utils/timezone';
 
 export function SettingsScreen({
   resolutions = [],
@@ -32,9 +36,36 @@ export function SettingsScreen({
   bots = [],
   onRefreshBots,
   onShowToast,
-  currentUser
+  currentUser,
+  broadcastTimezone = "Asia/Kolkata",
+  onUpdateTimezone
 }) {
-  const [activeTab, setActiveTab] = useState("resolutions");
+  const [activeTab, setActiveTab] = useState("timezone");
+
+  // Broadcast Timezone State
+  const [selectedTimezone, setSelectedTimezone] = useState(broadcastTimezone || DEFAULT_TIMEZONE);
+  const [isSavingTz, setIsSavingTz] = useState(false);
+  const [liveClock, setLiveClock] = useState({ time: "00:00:00", date: "" });
+
+  useEffect(() => {
+    if (broadcastTimezone) {
+      setSelectedTimezone(broadcastTimezone);
+    }
+  }, [broadcastTimezone]);
+
+  // Live clock ticker in selected timezone
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setLiveClock({
+        time: formatTimeInTimezone(now, selectedTimezone, true),
+        date: formatDateInTimezone(now, selectedTimezone)
+      });
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [selectedTimezone]);
 
   // Custom Resolution Modal
   const [isResModalOpen, setIsResModalOpen] = useState(false);
@@ -274,6 +305,37 @@ export function SettingsScreen({
     }
   };
 
+  const handleSaveTimezone = async () => {
+    setIsSavingTz(true);
+    try {
+      await api.updateTimezoneSetting(selectedTimezone);
+      if (onUpdateTimezone) {
+        onUpdateTimezone(selectedTimezone);
+      }
+      onShowToast(`Broadcast reference timezone updated to ${selectedTimezone}`, "success");
+    } catch (err) {
+      onShowToast("Failed to update timezone: " + err.message, "error");
+    } finally {
+      setIsSavingTz(false);
+    }
+  };
+
+  const handleResetTimezoneToIndia = async () => {
+    setSelectedTimezone("Asia/Kolkata");
+    setIsSavingTz(true);
+    try {
+      await api.updateTimezoneSetting("Asia/Kolkata");
+      if (onUpdateTimezone) {
+        onUpdateTimezone("Asia/Kolkata");
+      }
+      onShowToast("Broadcast timezone restored to India Standard Time (Asia/Kolkata, UTC+05:30)", "success");
+    } catch (err) {
+      onShowToast("Failed to reset timezone: " + err.message, "error");
+    } finally {
+      setIsSavingTz(false);
+    }
+  };
+
   const copyPresetFfmpeg = (preset) => {
     const cmd = `-vf "scale=${preset.width}:${preset.height}" -b:v ${preset.video_bitrate_kbps || 6500}k`;
     navigator.clipboard.writeText(cmd);
@@ -285,6 +347,7 @@ export function SettingsScreen({
       {/* Subtab Navigation Bar */}
       <div className="flex items-center gap-1 bg-[#111827] border border-[#1F2937] p-1.5 rounded-lg shrink-0 overflow-x-auto">
         {[
+          { id: "timezone", label: "Broadcast Timezone & Clock (IST)", icon: Globe },
           { id: "resolutions", label: "Resolutions & FFmpeg", icon: Sliders },
           { id: "users", label: `User Management (${users.length})`, icon: Users },
           { id: "agents", label: `Edge Agents (${agents.length})`, icon: Radio },
@@ -308,6 +371,116 @@ export function SettingsScreen({
           );
         })}
       </div>
+
+      {/* Subtab 0: Broadcast Timezone & Master Clock Configuration */}
+      {activeTab === "timezone" && (
+        <div className="w-full bg-[#111827] border border-[#1F2937] rounded-xl p-4 sm:p-6 space-y-6 shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-800 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <Globe className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-base font-bold text-white tracking-wide">
+                  Broadcast Timezone & Master Reference Clock
+                </h3>
+                <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-indigo-950 border border-indigo-700 text-indigo-300">
+                  Default: India (IST)
+                </span>
+              </div>
+              <p className="text-xs text-gray-400 mt-1">
+                Configures the reference broadcast timezone for all 24/7 linear schedules, automated gap filling, TMDb dates, and EPG tables
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleResetTimezoneToIndia}
+                disabled={isSavingTz}
+                className="px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                title="Reset reference timezone to India Standard Time"
+              >
+                Reset to India (IST)
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveTimezone}
+                disabled={isSavingTz}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-indigo-900/30 transition-all disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {isSavingTz ? "Saving..." : "Save Timezone"}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Timezone Selection Card */}
+            <div className="p-4 bg-[#141b2b] border border-gray-800 rounded-xl space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-300 uppercase tracking-wide mb-1.5">
+                  Reference Broadcast Timezone
+                </label>
+                <select
+                  value={selectedTimezone}
+                  onChange={(e) => setSelectedTimezone(e.target.value)}
+                  className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white font-semibold focus:outline-none focus:border-indigo-500"
+                >
+                  {BROADCAST_TIMEZONES.map((tz) => (
+                    <option key={tz.id} value={tz.id}>
+                      {tz.label} ({tz.region})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  Current ID: <code className="text-indigo-400 font-mono">{selectedTimezone}</code>
+                </p>
+              </div>
+
+              <div className="p-3 bg-[#182030] border border-gray-800 rounded-lg text-xs text-gray-300 space-y-1.5">
+                <div className="font-bold text-white flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  Clock Synchronization Status
+                </div>
+                <div className="text-[11px] text-gray-400">
+                  Playout engine, automated gap bridge, and browser timeline are locked to this reference clock. All schedule items created will represent this wall-clock time.
+                </div>
+              </div>
+            </div>
+
+            {/* Live Master Clock Card */}
+            <div className="p-5 bg-gradient-to-br from-[#131a29] to-[#0d121c] border border-gray-800 rounded-xl flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
+                  <span className="font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-sky-400" />
+                    Live Master Broadcast Clock
+                  </span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-sky-950/80 border border-sky-800 text-sky-300">
+                    {selectedTimezone === 'Asia/Kolkata' ? 'IST +05:30' : selectedTimezone}
+                  </span>
+                </div>
+
+                <div className="text-4xl sm:text-5xl font-black font-mono text-white tracking-widest my-2 text-sky-400 drop-shadow">
+                  {liveClock.time}
+                </div>
+
+                <div className="text-sm font-semibold text-gray-300 font-mono mt-1">
+                  Date: {liveClock.date}
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-gray-800/80 text-[11px] text-gray-400 flex items-center justify-between">
+                <span>Standard: SMPTE PAL 25.00 FPS</span>
+                <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Master Playout Locked
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Subtab 1: Resolutions & FFmpeg Profiles */}
       {activeTab === "resolutions" && (
