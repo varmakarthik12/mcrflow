@@ -130,6 +130,17 @@ func (s *Server) setupRoutes() {
 		MaxAge:           300,
 	}))
 
+	// Enterprise Security Headers
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("X-XSS-Protection", "1; mode=block")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	// 1. Root-level Public EPG, HLS & Static Media feeds
 	r.Get("/epg/{channel_id}.xml", s.handleEPGXML)
 	r.Get("/hls/{channel_id}/master.m3u8", s.handleHLSMaster)
@@ -137,8 +148,9 @@ func (s *Server) setupRoutes() {
 	r.Get("/hls/{channel_id}/{segment_file}", s.handleHLSSegment)
 	r.Handle("/media/*", http.StripPrefix("/media", http.FileServer(http.Dir(s.cfg.MediaDir))))
 
-	// 2. Central API v1 Router (/api/v1/*)
+	// 2. Central API v1 Router (/api/v1/*) with Enterprise AuthN & AuthZ RBAC Middleware
 	r.Route("/api/v1", func(v1 chi.Router) {
+		v1.Use(EnterpriseAuthMiddleware(s.tokenSvc, s.repo))
 		// Public endpoints under /api/v1
 		v1.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			jsonResp(w, http.StatusOK, map[string]interface{}{
@@ -1066,9 +1078,18 @@ func (s *Server) handleUploadChannelLogo(w http.ResponseWriter, r *http.Request)
 	logosDir := filepath.Join(s.cfg.MediaDir, "logos")
 	_ = os.MkdirAll(logosDir, 0755)
 
+	allowedLogoExts := map[string]bool{
+		".png":  true,
+		".jpg":  true,
+		".jpeg": true,
+		".webp": true,
+		".svg":  true,
+	}
+
 	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if ext == "" {
-		ext = ".png"
+	if ext == "" || !allowedLogoExts[ext] {
+		jsonErr(w, http.StatusBadRequest, "invalid image file format: allowed types are .png, .jpg, .jpeg, .webp, .svg")
+		return
 	}
 	safeName := fmt.Sprintf("%s_logo%s", channelID, ext)
 	dstPath := filepath.Join(logosDir, safeName)
@@ -1123,9 +1144,18 @@ func (s *Server) handleUploadLogo(w http.ResponseWriter, r *http.Request) {
 	logosDir := filepath.Join(s.cfg.MediaDir, "logos")
 	_ = os.MkdirAll(logosDir, 0755)
 
+	allowedLogoExts := map[string]bool{
+		".png":  true,
+		".jpg":  true,
+		".jpeg": true,
+		".webp": true,
+		".svg":  true,
+	}
+
 	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if ext == "" {
-		ext = ".png"
+	if ext == "" || !allowedLogoExts[ext] {
+		jsonErr(w, http.StatusBadRequest, "invalid image file format: allowed types are .png, .jpg, .jpeg, .webp, .svg")
+		return
 	}
 	safeName := fmt.Sprintf("logo_%d%s", time.Now().Unix(), ext)
 	dstPath := filepath.Join(logosDir, safeName)

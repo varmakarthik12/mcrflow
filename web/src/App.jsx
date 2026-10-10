@@ -89,6 +89,24 @@ export function App() {
     initAuth();
   }, [showToast]);
 
+  // Reactive Session Guard on HTTP 401 Unauthorized
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setCurrentUser(null);
+      setChannels([]);
+      setScheduleItems([]);
+      setResolutions([]);
+      setAdTemplates([]);
+      setAgents([]);
+      setBots([]);
+      setUsers([]);
+      showToast("Session expired or unauthorized. Please sign in.", "warning");
+    };
+
+    window.addEventListener("mcrflow:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("mcrflow:unauthorized", handleUnauthorized);
+  }, [showToast]);
+
   // Load All Entities
   const loadAllData = async () => {
     await Promise.allSettled([

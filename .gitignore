@@ -12,3 +12,4 @@ tmp/
 node_modules/
 .gemini/
 qa_api_results.json
+media/

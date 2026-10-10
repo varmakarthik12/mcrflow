@@ -41,6 +41,12 @@ export async function request(path, options = {}) {
   }
 
   if (!res.ok) {
+    if (res.status === 401 && !path.includes("/auth/login")) {
+      setAuthToken(null);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("mcrflow:unauthorized"));
+      }
+    }
     const errorMsg = data?.error || res.statusText || "Request failed";
     const err = new Error(errorMsg);
     err.status = res.status;

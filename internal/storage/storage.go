@@ -53,21 +53,56 @@ func (m *Manager) SetMediaDir(dir string) {
 	_ = os.MkdirAll(filepath.Join(dir, "logos"), 0755)
 }
 
+// SafePath resolves and guarantees a user-provided subpath or filepath resides strictly within baseDir
+func SafePath(baseDir, userPath string) (string, error) {
+	// Normalize separators
+	normalized := strings.ReplaceAll(userPath, "\\", "/")
+	// Strip Windows volume name (e.g. C:, D:) if present
+	if idx := strings.Index(normalized, ":"); idx != -1 {
+		normalized = normalized[idx+1:]
+	}
+	cleanRel := filepath.Clean("/" + normalized)
+	cleanRel = strings.TrimPrefix(cleanRel, "/")
+	cleanRel = strings.TrimPrefix(cleanRel, "\\")
+
+	target := filepath.Join(baseDir, cleanRel)
+
+	absBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return "", err
+	}
+
+	rel, err := filepath.Rel(absBase, absTarget)
+	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
+		return "", ErrPathOutOfBounds
+	}
+	return absTarget, nil
+}
+
 // Browse lists directories and media files in the media library and relative subpath
 func (m *Manager) Browse(subPath string) ([]models.FileEntry, error) {
 	m.mu.RLock()
 	baseDir := m.mediaDir
 	m.mu.RUnlock()
 
-	cleanRel := filepath.Clean("/" + subPath)
-	cleanRel = strings.TrimPrefix(cleanRel, "/")
-	cleanRel = strings.TrimPrefix(cleanRel, "\\")
-
-	targetDir := filepath.Join(baseDir, cleanRel)
+	targetDir, err := SafePath(baseDir, subPath)
+	if err != nil {
+		return nil, err
+	}
 
 	// Ensure directory exists
 	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
 		_ = os.MkdirAll(targetDir, 0755)
+	}
+
+	cleanRel, _ := filepath.Rel(baseDir, targetDir)
+	cleanRel = filepath.ToSlash(cleanRel)
+	if cleanRel == "." {
+		cleanRel = ""
 	}
 
 	entries, err := os.ReadDir(targetDir)
@@ -120,20 +155,16 @@ func (m *Manager) Browse(subPath string) ([]models.FileEntry, error) {
 
 // ProbeFile reads metadata from media using ffprobe or fallback inspection
 func (m *Manager) ProbeFile(filePath string) (*models.MediaProbeResult, error) {
-	target := filePath
-	fileInfo, err := os.Stat(target)
+	m.mu.RLock()
+	baseDir := m.mediaDir
+	m.mu.RUnlock()
+
+	target, err := SafePath(baseDir, filePath)
 	if err != nil {
-		// Try resolving relative to mediaDir
-		m.mu.RLock()
-		cand := filepath.Join(m.mediaDir, filePath)
-		m.mu.RUnlock()
-		if fi, errCand := os.Stat(cand); errCand == nil {
-			target = cand
-			fileInfo = fi
-			err = nil
-		}
+		return nil, err
 	}
 
+	fileInfo, err := os.Stat(target)
 	if err != nil {
 		// Return simulated probe if file not found physically
 		return m.simulateProbe(filePath, 0)

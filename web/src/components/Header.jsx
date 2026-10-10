@@ -148,26 +148,32 @@ export function Header({
             </select>
           </div>
 
-          {/* Operator User Profile Badge */}
+          {/* Operator User Profile Badge & Prominent Logout */}
           {currentUser ? (
-            <div className="flex items-center gap-2 bg-[#1A2234] border border-[#2D3A54] px-2 sm:px-2.5 py-1 rounded-lg">
-              <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
-                {getInitials(currentUser)}
-              </div>
-              <div className="text-left hidden sm:block">
-                <div className="text-[11px] font-bold text-white leading-tight flex items-center gap-1.5">
-                  <span className="truncate max-w-[90px]">{currentUser.display_name || currentUser.username}</span>
-                  <span className={`text-[9px] px-1 py-0.2 rounded font-mono border uppercase font-semibold ${getRoleBadgeClass(currentUser.role)}`}>
-                    {currentUser.role}
-                  </span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 bg-[#1A2234] border border-[#2D3A54] px-2 sm:px-2.5 py-1 rounded-lg">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                  {getInitials(currentUser)}
+                </div>
+                <div className="text-left hidden sm:block">
+                  <div className="text-[11px] font-bold text-white leading-tight flex items-center gap-1.5">
+                    <span className="truncate max-w-[90px]">{currentUser.display_name || currentUser.username}</span>
+                    <span className={`text-[9px] px-1 py-0.2 rounded font-mono border uppercase font-semibold ${getRoleBadgeClass(currentUser.role)}`}>
+                      {currentUser.role}
+                    </span>
+                  </div>
                 </div>
               </div>
+
+              {/* Prominent Enterprise Sign Out Button */}
               <button
+                id="header-logout-btn"
                 onClick={onLogout}
-                title="Sign Out"
-                className="text-gray-400 hover:text-rose-400 p-0.5 rounded transition-colors ml-0.5"
+                title="Sign Out of Master Control"
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-rose-500/20 hover:bg-rose-600 border border-rose-500/40 hover:border-rose-500 text-rose-300 hover:text-white rounded-lg text-xs font-semibold shadow-sm transition-all duration-150 cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Sign Out</span>
               </button>
             </div>
           ) : (
