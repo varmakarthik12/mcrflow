@@ -245,6 +245,12 @@ func (r *Repository) CreateChannel(ch *models.Channel) error {
 	if ch.LogoPosition == "" {
 		ch.LogoPosition = "top-right"
 	}
+	if ch.LogoOpacity <= 0 {
+		ch.LogoOpacity = 0.90
+	}
+	if ch.LogoFit == "" {
+		ch.LogoFit = "contain"
+	}
 	for i := range ch.Destinations {
 		if ch.Destinations[i].Type == "" && ch.Destinations[i].Protocol != "" {
 			ch.Destinations[i].Type = strings.ToLower(strings.TrimPrefix(ch.Destinations[i].Protocol, "UDP_"))
@@ -260,6 +266,7 @@ func (r *Repository) CreateChannel(ch *models.Channel) error {
 		}
 	}
 	ch.PackDestinations()
+	ch.PackOverlays()
 	now := time.Now().UTC()
 	ch.CreatedAt = now
 	ch.UpdatedAt = now
@@ -271,10 +278,11 @@ func (r *Repository) CreateChannel(ch *models.Channel) error {
 
 	_, err := r.db.Exec(`
 		INSERT INTO channels 
-		(id, name, call_sign, resolution_id, logo_path, logo_position, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		ch.ID, ch.Name, ch.CallSign, ch.ResolutionID, ch.LogoPath, ch.LogoPosition, ch.AdTemplateID,
-		ch.PrimaryAgentID, ch.FallbackAgentID, ch.HlsWebToken, ch.EpgWebToken,
+		(id, name, call_sign, resolution_id, logo_path, logo_position, logo_x, logo_y, logo_width, logo_height, logo_opacity, logo_fit, overlays_json, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		ch.ID, ch.Name, ch.CallSign, ch.ResolutionID, ch.LogoPath, ch.LogoPosition,
+		ch.LogoX, ch.LogoY, ch.LogoWidth, ch.LogoHeight, ch.LogoOpacity, ch.LogoFit, ch.OverlaysJSON,
+		ch.AdTemplateID, ch.PrimaryAgentID, ch.FallbackAgentID, ch.HlsWebToken, ch.EpgWebToken,
 		ch.DestinationsJSON, isActiveInt, ch.CreatedAt, ch.UpdatedAt,
 	)
 	if err != nil {
@@ -285,13 +293,14 @@ func (r *Repository) CreateChannel(ch *models.Channel) error {
 
 func (r *Repository) GetChannelByID(id string) (*models.Channel, error) {
 	row := r.db.QueryRow(`
-		SELECT id, name, call_sign, resolution_id, logo_path, logo_position, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at
+		SELECT id, name, call_sign, resolution_id, logo_path, logo_position, logo_x, logo_y, logo_width, logo_height, logo_opacity, logo_fit, overlays_json, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at
 		FROM channels WHERE id = ?`, id)
 
 	ch := &models.Channel{}
 	var isActiveInt int
 	err := row.Scan(
 		&ch.ID, &ch.Name, &ch.CallSign, &ch.ResolutionID, &ch.LogoPath, &ch.LogoPosition,
+		&ch.LogoX, &ch.LogoY, &ch.LogoWidth, &ch.LogoHeight, &ch.LogoOpacity, &ch.LogoFit, &ch.OverlaysJSON,
 		&ch.AdTemplateID, &ch.PrimaryAgentID, &ch.FallbackAgentID,
 		&ch.HlsWebToken, &ch.EpgWebToken, &ch.DestinationsJSON,
 		&isActiveInt, &ch.CreatedAt, &ch.UpdatedAt,
@@ -304,6 +313,7 @@ func (r *Repository) GetChannelByID(id string) (*models.Channel, error) {
 	}
 	ch.IsActive = (isActiveInt == 1)
 	ch.ParseDestinations()
+	ch.ParseOverlays()
 	for i := range ch.Destinations {
 		if ch.Destinations[i].Protocol == "" {
 			ch.Destinations[i].Protocol = strings.ToUpper(ch.Destinations[i].Type)
@@ -323,7 +333,7 @@ func (r *Repository) GetChannelByID(id string) (*models.Channel, error) {
 
 func (r *Repository) ListChannels() ([]models.Channel, error) {
 	rows, err := r.db.Query(`
-		SELECT id, name, call_sign, resolution_id, logo_path, logo_position, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at
+		SELECT id, name, call_sign, resolution_id, logo_path, logo_position, logo_x, logo_y, logo_width, logo_height, logo_opacity, logo_fit, overlays_json, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at
 		FROM channels ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query channels: %w", err)
@@ -336,6 +346,7 @@ func (r *Repository) ListChannels() ([]models.Channel, error) {
 		var isActiveInt int
 		err := rows.Scan(
 			&ch.ID, &ch.Name, &ch.CallSign, &ch.ResolutionID, &ch.LogoPath, &ch.LogoPosition,
+			&ch.LogoX, &ch.LogoY, &ch.LogoWidth, &ch.LogoHeight, &ch.LogoOpacity, &ch.LogoFit, &ch.OverlaysJSON,
 			&ch.AdTemplateID, &ch.PrimaryAgentID, &ch.FallbackAgentID,
 			&ch.HlsWebToken, &ch.EpgWebToken, &ch.DestinationsJSON,
 			&isActiveInt, &ch.CreatedAt, &ch.UpdatedAt,
@@ -345,6 +356,7 @@ func (r *Repository) ListChannels() ([]models.Channel, error) {
 		}
 		ch.IsActive = (isActiveInt == 1)
 		ch.ParseDestinations()
+		ch.ParseOverlays()
 		for i := range ch.Destinations {
 			if ch.Destinations[i].Protocol == "" {
 				ch.Destinations[i].Protocol = strings.ToUpper(ch.Destinations[i].Type)
@@ -371,6 +383,12 @@ func (r *Repository) UpdateChannel(ch *models.Channel) error {
 	if ch.LogoPosition == "" {
 		ch.LogoPosition = "top-right"
 	}
+	if ch.LogoOpacity <= 0 {
+		ch.LogoOpacity = 0.90
+	}
+	if ch.LogoFit == "" {
+		ch.LogoFit = "contain"
+	}
 	for i := range ch.Destinations {
 		if ch.Destinations[i].Type == "" && ch.Destinations[i].Protocol != "" {
 			ch.Destinations[i].Type = strings.ToLower(strings.TrimPrefix(ch.Destinations[i].Protocol, "UDP_"))
@@ -386,6 +404,7 @@ func (r *Repository) UpdateChannel(ch *models.Channel) error {
 		}
 	}
 	ch.PackDestinations()
+	ch.PackOverlays()
 	ch.UpdatedAt = time.Now().UTC()
 	isActiveInt := 0
 	if ch.IsActive {
@@ -394,11 +413,15 @@ func (r *Repository) UpdateChannel(ch *models.Channel) error {
 
 	res, err := r.db.Exec(`
 		UPDATE channels 
-		SET name = ?, call_sign = ?, resolution_id = ?, logo_path = ?, logo_position = ?, ad_template_id = ?,
+		SET name = ?, call_sign = ?, resolution_id = ?, logo_path = ?, logo_position = ?,
+		    logo_x = ?, logo_y = ?, logo_width = ?, logo_height = ?, logo_opacity = ?, logo_fit = ?,
+		    overlays_json = ?, ad_template_id = ?,
 		    primary_agent_id = ?, fallback_agent_id = ?, hls_web_token = ?, epg_web_token = ?,
 		    destinations_json = ?, is_active = ?, updated_at = ?
 		WHERE id = ?`,
-		ch.Name, ch.CallSign, ch.ResolutionID, ch.LogoPath, ch.LogoPosition, ch.AdTemplateID,
+		ch.Name, ch.CallSign, ch.ResolutionID, ch.LogoPath, ch.LogoPosition,
+		ch.LogoX, ch.LogoY, ch.LogoWidth, ch.LogoHeight, ch.LogoOpacity, ch.LogoFit,
+		ch.OverlaysJSON, ch.AdTemplateID,
 		ch.PrimaryAgentID, ch.FallbackAgentID, ch.HlsWebToken, ch.EpgWebToken,
 		ch.DestinationsJSON, isActiveInt, ch.UpdatedAt, ch.ID,
 	)

@@ -43,6 +43,7 @@ export function ScheduleScreen({
   const [startTime, setStartTime] = useState("16:00:00");
   const [duration, setDuration] = useState("02:15:00");
   const [endTime, setEndTime] = useState("18:15:00");
+  const [selectedAdTemplateId, setSelectedAdTemplateId] = useState("");
 
   // TMDb Typeahead State
   const [tmdbQuery, setTmdbQuery] = useState("");
@@ -294,6 +295,7 @@ export function ScheduleScreen({
         start_time: startIso,
         duration_seconds: durSecs,
         end_time: endIso,
+        ad_template_id: selectedAdTemplateId || "",
         tmdb_id: tmdbResult?.id || tmdbResult?.tmdb_id || "",
         tmdb_poster: tmdbResult?.poster_path || tmdbResult?.poster_url || "",
         tmdb_overview: tmdbResult?.overview || "Broadcast linear program event.",
@@ -658,6 +660,26 @@ export function ScheduleScreen({
                     className="w-full bg-[#0B0F17] border border-gray-800 rounded px-2.5 py-1.5 text-xs text-emerald-400 font-mono"
                   />
                 </div>
+              </div>
+
+              {/* Ad / CG Template Override */}
+              <div>
+                <label className="block text-[11px] text-gray-400 mb-1 font-medium flex items-center justify-between">
+                  <span>Ad & CG Graphics Template</span>
+                  <span className="text-[10px] text-indigo-400 font-mono">Optional Template Override</span>
+                </label>
+                <select
+                  value={selectedAdTemplateId}
+                  onChange={(e) => setSelectedAdTemplateId(e.target.value)}
+                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">Channel Default Graphics & Overlays</option>
+                  {adTemplates.map((tmpl) => (
+                    <option key={tmpl.id} value={tmpl.id}>
+                      {tmpl.name} ({tmpl.template_type || "composite"})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* SECTION 4: Live Conflict Warning & Resolution Action Panel */}

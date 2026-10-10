@@ -52,6 +52,14 @@ type Channel struct {
 	ResolutionID     string              `json:"resolution_id"`
 	LogoPath         string              `json:"logo_path"`
 	LogoPosition     string              `json:"logo_position"` // top-right, top-left, bottom-right, bottom-left
+	LogoX            int                 `json:"logo_x"`
+	LogoY            int                 `json:"logo_y"`
+	LogoWidth        int                 `json:"logo_width"`
+	LogoHeight       int                 `json:"logo_height"`
+	LogoOpacity      float64             `json:"logo_opacity"`
+	LogoFit          string              `json:"logo_fit"` // contain, cover
+	OverlaysJSON     string              `json:"-"`
+	Overlays         []OverlayElement    `json:"overlays"`
 	AdTemplateID     string              `json:"ad_template_id"`
 	PrimaryAgentID   string              `json:"primary_agent_id"`
 	FallbackAgentID  string              `json:"fallback_agent_id"`
@@ -117,7 +125,7 @@ type ResolutionPreset struct {
 // OverlayElement represents an on-screen graphics bug, ticker, or banner
 type OverlayElement struct {
 	ID                 string  `json:"id"`
-	Type               string  `json:"type"` // logo_bug, lower_third, ticker, dve_squeeze
+	Type               string  `json:"type"` // logo_bug, lower_third, ticker, dve_squeeze, header_banner, footer_banner, now_playing, up_next, promo
 	X                  int     `json:"x"`
 	Y                  int     `json:"y"`
 	Width              int     `json:"width"`
@@ -125,10 +133,15 @@ type OverlayElement struct {
 	Opacity            float64 `json:"opacity"`
 	ImagePath          string  `json:"image_path"`
 	Text               string  `json:"text"`
-	EntranceAnimation  string  `json:"entrance_animation"` // fade_in, slide_in_left, zoom_in, bounce_in
+	SubText            string  `json:"sub_text,omitempty"`
+	BackgroundColor    string  `json:"background_color,omitempty"`
+	TextColor          string  `json:"text_color,omitempty"`
+	FontSize           int     `json:"font_size,omitempty"`
+	EntranceAnimation  string  `json:"entrance_animation"` // fade_in, slide_in_left, slide_in_bottom, scroll_left, zoom_in
 	ExitAnimation      string  `json:"exit_animation"`     // fade_out, slide_out, zoom_out
 	StartOffsetSeconds int     `json:"start_offset_seconds"`
 	DurationSeconds    int     `json:"duration_seconds"`
+	IsActive           bool    `json:"is_active"`
 }
 
 // CommercialBreak represents an ad insertion slot
@@ -271,6 +284,24 @@ func (c *Channel) PackDestinations() {
 		c.DestinationsJSON = string(bytes)
 	} else {
 		c.DestinationsJSON = "[]"
+	}
+}
+
+func (c *Channel) ParseOverlays() {
+	if c.OverlaysJSON != "" {
+		_ = json.Unmarshal([]byte(c.OverlaysJSON), &c.Overlays)
+	}
+	if c.Overlays == nil {
+		c.Overlays = []OverlayElement{}
+	}
+}
+
+func (c *Channel) PackOverlays() {
+	if c.Overlays != nil {
+		bytes, _ := json.Marshal(c.Overlays)
+		c.OverlaysJSON = string(bytes)
+	} else {
+		c.OverlaysJSON = "[]"
 	}
 }
 

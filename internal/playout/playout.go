@@ -22,6 +22,10 @@ type PlayoutConfig struct {
 	LogoOpacity       float64
 	LogoX             int
 	LogoY             int
+	LogoWidth         int
+	LogoHeight        int
+	LogoFit           string // contain, cover
+	Overlays          []models.OverlayElement
 	AudioTrackIndex   int
 	NormalizeLoudness bool
 	Destinations      []models.StreamDestination
@@ -31,6 +35,24 @@ type PlayoutConfig struct {
 	ChannelID         string
 	DataDir           string
 	MediaDir          string
+}
+
+func escapeDrawtext(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `'`, `\'`)
+	s = strings.ReplaceAll(s, `:`, `\:`)
+	s = strings.ReplaceAll(s, `%`, `\%`)
+	return s
+}
+
+func resolveFontfile() string {
+	if _, err := os.Stat("C:\\Windows\\Fonts\\arial.ttf"); err == nil {
+		return "fontfile='C\\:/Windows/Fonts/arial.ttf':"
+	}
+	if _, err := os.Stat("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"); err == nil {
+		return "fontfile='/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf':"
+	}
+	return ""
 }
 
 // BuildFFmpegArgs constructs command line arguments for FFmpeg broadcast pipeline
@@ -185,23 +207,32 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 		numOutputs = 1
 	}
 
+	// 1. Process Station Logo
 	if hasLogo {
 		opacity := cfg.LogoOpacity
 		if opacity <= 0 || opacity > 1.0 {
 			opacity = 0.90
 		}
 
-		// Calculate reasonable station bug dimensions relative to output canvas (max 10% width, 10% height)
-		maxBugW := int(float64(w) * 0.10)
-		if maxBugW < 80 {
-			maxBugW = 80
-		}
-		maxBugH := int(float64(h) * 0.10)
-		if maxBugH < 60 {
-			maxBugH = 60
+		maxBugW := cfg.LogoWidth
+		maxBugH := cfg.LogoHeight
+		if maxBugW <= 0 || maxBugH <= 0 {
+			maxBugW = int(float64(w) * 0.10)
+			if maxBugW < 80 {
+				maxBugW = 80
+			}
+			maxBugH = int(float64(h) * 0.10)
+			if maxBugH < 60 {
+				maxBugH = 60
+			}
 		}
 
-		filters = append(filters, fmt.Sprintf("[1:v]scale=w=%d:h=%d:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=%.2f[logo]", maxBugW, maxBugH, opacity))
+		scaleAspect := "decrease"
+		if cfg.LogoFit == "cover" {
+			scaleAspect = "increase"
+		}
+
+		filters = append(filters, fmt.Sprintf("[1:v]scale=w=%d:h=%d:force_original_aspect_ratio=%s,format=rgba,colorchannelmixer=aa=%.2f[logo]", maxBugW, maxBugH, scaleAspect, opacity))
 
 		// Determine overlay coordinates
 		var overlayPos string
@@ -222,25 +253,218 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 			}
 		}
 
-		if numOutputs > 1 {
-			splitLabels := ""
-			for i := 0; i < numOutputs; i++ {
-				splitLabels += fmt.Sprintf("[v_out_%d]", i)
-			}
-			filters = append(filters, fmt.Sprintf("%s[logo]overlay=%s[v_comp];[v_comp]split=%d%s", lastV, overlayPos, numOutputs, splitLabels))
-		} else {
-			filters = append(filters, fmt.Sprintf("%s[logo]overlay=%s[v_out]", lastV, overlayPos))
+		filters = append(filters, fmt.Sprintf("%s[logo]overlay=%s[v_logo]", lastV, overlayPos))
+		lastV = "[v_logo]"
+	}
+
+	// 2. Process Overlays (WYSIWYG layout studio & broadcast templates)
+	fontPrefix := resolveFontfile()
+	ovIdx := 0
+	for _, ov := range cfg.Overlays {
+		if !ov.IsActive && ov.ID != "" {
+			continue
 		}
+		if ov.Text == "" && ov.Type != "header_banner" && ov.Type != "footer_banner" {
+			continue
+		}
+
+		bgColor := ov.BackgroundColor
+		if bgColor == "" {
+			bgColor = "black@0.75"
+		}
+		textColor := ov.TextColor
+		if textColor == "" {
+			textColor = "white"
+		}
+		fontSize := ov.FontSize
+		if fontSize <= 0 {
+			fontSize = 24
+		}
+
+		var ovFilters []string
+		switch strings.ToLower(ov.Type) {
+		case "ticker":
+			tw := ov.Width
+			if tw <= 0 {
+				tw = w
+			}
+			th := ov.Height
+			if th <= 0 {
+				th = 60
+			}
+			tx := ov.X
+			ty := ov.Y
+			if ty <= 0 {
+				ty = h - th
+			}
+			ovFilters = append(ovFilters, fmt.Sprintf("drawbox=x=%d:y=%d:w=%d:h=%d:color=%s:t=fill", tx, ty, tw, th, bgColor))
+			xExpr := "'w-mod(t*140\\,w+tw)'"
+			if ov.EntranceAnimation == "fade_in" || ov.EntranceAnimation == "static" {
+				xExpr = fmt.Sprintf("%d", tx+20)
+			}
+			yExpr := fmt.Sprintf("%d", ty+(th-fontSize)/2)
+			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=%s:fontsize=%d:x=%s:y=%s", fontPrefix, escapeDrawtext(ov.Text), textColor, fontSize, xExpr, yExpr))
+
+		case "header_banner":
+			bw := ov.Width
+			if bw <= 0 {
+				bw = w
+			}
+			bh := ov.Height
+			if bh <= 0 {
+				bh = 60
+			}
+			bx := ov.X
+			by := ov.Y
+			ovFilters = append(ovFilters, fmt.Sprintf("drawbox=x=%d:y=%d:w=%d:h=%d:color=%s:t=fill", bx, by, bw, bh, bgColor))
+			if ov.Text != "" {
+				yExpr := fmt.Sprintf("%d", by+(bh-fontSize)/2)
+				ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=%s:fontsize=%d:x=%d:y=%s", fontPrefix, escapeDrawtext(ov.Text), textColor, fontSize, bx+30, yExpr))
+			}
+
+		case "footer_banner":
+			bw := ov.Width
+			if bw <= 0 {
+				bw = w
+			}
+			bh := ov.Height
+			if bh <= 0 {
+				bh = 70
+			}
+			bx := ov.X
+			by := ov.Y
+			if by <= 0 {
+				by = h - bh
+			}
+			ovFilters = append(ovFilters, fmt.Sprintf("drawbox=x=%d:y=%d:w=%d:h=%d:color=%s:t=fill", bx, by, bw, bh, bgColor))
+			if ov.Text != "" {
+				yExpr := fmt.Sprintf("%d", by+(bh-fontSize)/2)
+				ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=%s:fontsize=%d:x=%d:y=%s", fontPrefix, escapeDrawtext(ov.Text), textColor, fontSize, bx+40, yExpr))
+			}
+
+		case "now_playing":
+			cw := ov.Width
+			if cw <= 0 {
+				cw = 360
+			}
+			ch := ov.Height
+			if ch <= 0 {
+				ch = 85
+			}
+			cx := ov.X
+			if cx <= 0 {
+				cx = 40
+			}
+			cy := ov.Y
+			if cy <= 0 {
+				cy = 40
+			}
+			ovFilters = append(ovFilters, fmt.Sprintf("drawbox=x=%d:y=%d:w=%d:h=%d:color=%s:t=fill", cx, cy, cw, ch, bgColor))
+			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='NOW PLAYING':fontcolor=yellow:fontsize=15:x=%d:y=%d", fontPrefix, cx+15, cy+12))
+			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=%s:fontsize=%d:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.Text), textColor, fontSize, cx+15, cy+38))
+
+		case "up_next":
+			cw := ov.Width
+			if cw <= 0 {
+				cw = 360
+			}
+			ch := ov.Height
+			if ch <= 0 {
+				ch = 85
+			}
+			cx := ov.X
+			if cx <= 0 {
+				cx = w - cw - 40
+			}
+			cy := ov.Y
+			if cy <= 0 {
+				cy = 40
+			}
+			ovFilters = append(ovFilters, fmt.Sprintf("drawbox=x=%d:y=%d:w=%d:h=%d:color=%s:t=fill", cx, cy, cw, ch, bgColor))
+			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='UP NEXT':fontcolor=orange:fontsize=15:x=%d:y=%d", fontPrefix, cx+15, cy+12))
+			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=%s:fontsize=%d:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.Text), textColor, fontSize, cx+15, cy+38))
+
+		case "promo":
+			cw := ov.Width
+			if cw <= 0 {
+				cw = 360
+			}
+			ch := ov.Height
+			if ch <= 0 {
+				ch = 95
+			}
+			cx := ov.X
+			if cx <= 0 {
+				cx = w - cw - 40
+			}
+			cy := ov.Y
+			if cy <= 0 {
+				cy = h - ch - 120
+			}
+			ovFilters = append(ovFilters, fmt.Sprintf("drawbox=x=%d:y=%d:w=%d:h=%d:color=%s:t=fill", cx, cy, cw, ch, bgColor))
+			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='SPECIAL PROMO':fontcolor=gold:fontsize=15:x=%d:y=%d", fontPrefix, cx+15, cy+12))
+			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=%s:fontsize=%d:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.Text), textColor, fontSize, cx+15, cy+38))
+			if ov.SubText != "" {
+				ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=lightgray:fontsize=14:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.SubText), cx+15, cy+68))
+			}
+
+		case "lower_third":
+			cw := ov.Width
+			if cw <= 0 {
+				cw = 650
+			}
+			ch := ov.Height
+			if ch <= 0 {
+				ch = 90
+			}
+			cx := ov.X
+			if cx <= 0 {
+				cx = 80
+			}
+			cy := ov.Y
+			if cy <= 0 {
+				cy = h - ch - 120
+			}
+			ovFilters = append(ovFilters, fmt.Sprintf("drawbox=x=%d:y=%d:w=%d:h=%d:color=%s:t=fill", cx, cy, cw, ch, bgColor))
+			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=%s:fontsize=%d:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.Text), textColor, fontSize, cx+25, cy+16))
+			if ov.SubText != "" {
+				ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=lightgray:fontsize=18:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.SubText), cx+25, cy+52))
+			}
+
+		default:
+			cw := ov.Width
+			if cw <= 0 {
+				cw = 300
+			}
+			ch := ov.Height
+			if ch <= 0 {
+				ch = 80
+			}
+			cx := ov.X
+			cy := ov.Y
+			ovFilters = append(ovFilters, fmt.Sprintf("drawbox=x=%d:y=%d:w=%d:h=%d:color=%s:t=fill", cx, cy, cw, ch, bgColor))
+			if ov.Text != "" {
+				ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=%s:fontsize=%d:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.Text), textColor, fontSize, cx+15, cy+20))
+			}
+		}
+
+		if len(ovFilters) > 0 {
+			nextV := fmt.Sprintf("[v_ov_%d]", ovIdx)
+			filters = append(filters, fmt.Sprintf("%s%s%s", lastV, strings.Join(ovFilters, ","), nextV))
+			lastV = nextV
+			ovIdx++
+		}
+	}
+
+	// 3. Split to output targets
+	if numOutputs > 1 {
+		splitLabels := ""
+		for i := 0; i < numOutputs; i++ {
+			splitLabels += fmt.Sprintf("[v_out_%d]", i)
+		}
+		filters = append(filters, fmt.Sprintf("%ssplit=%d%s", lastV, numOutputs, splitLabels))
 	} else {
-		if numOutputs > 1 {
-			splitLabels := ""
-			for i := 0; i < numOutputs; i++ {
-				splitLabels += fmt.Sprintf("[v_out_%d]", i)
-			}
-			filters = append(filters, fmt.Sprintf("%snull[v_comp];[v_comp]split=%d%s", lastV, numOutputs, splitLabels))
-		} else {
-			filters = append(filters, fmt.Sprintf("%snull[v_out]", lastV))
-		}
+		filters = append(filters, fmt.Sprintf("%snull[v_out]", lastV))
 	}
 
 	args = append(args, "-filter_complex", strings.Join(filters, ";"))
@@ -307,6 +531,11 @@ type ScheduleProvider interface {
 	GetNextProgram(channelID string, at time.Time) (*models.ScheduleItem, error)
 }
 
+// AdTemplateProvider retrieves ad templates for on-air overlay compositing
+type AdTemplateProvider interface {
+	GetTemplateByID(id string) (*models.AdTemplate, error)
+}
+
 // PlayoutChannelState manages execution of playout for a channel
 type PlayoutChannelState struct {
 	ChannelID             string
@@ -320,11 +549,12 @@ type PlayoutChannelState struct {
 
 // Engine supervises active channel playout processes
 type Engine struct {
-	mu               sync.RWMutex
-	channels         map[string]*PlayoutChannelState
-	scheduleProvider ScheduleProvider
-	mediaDir         string
-	dataDir          string
+	mu                 sync.RWMutex
+	channels           map[string]*PlayoutChannelState
+	scheduleProvider   ScheduleProvider
+	adTemplateProvider AdTemplateProvider
+	mediaDir           string
+	dataDir            string
 }
 
 // NewEngine creates a new playout engine
@@ -349,6 +579,13 @@ func (e *Engine) SetScheduleProvider(sp ScheduleProvider) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.scheduleProvider = sp
+}
+
+// SetAdTemplateProvider injects ad template provider for visual overlays
+func (e *Engine) SetAdTemplateProvider(atp AdTemplateProvider) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.adTemplateProvider = atp
 }
 
 // StartChannel begins playout for a channel
@@ -435,12 +672,50 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 	hlsDir := filepath.Join(e.dataDir, "hls", ch.ID)
 	_ = os.MkdirAll(hlsDir, 0755)
 
+	// Combine overlays: channel overlays + ad template overlays
+	var effectiveOverlays []models.OverlayElement
+	ch.ParseOverlays()
+	effectiveOverlays = append(effectiveOverlays, ch.Overlays...)
+
+	adTmplID := ch.AdTemplateID
+	if e.scheduleProvider != nil {
+		if sched, _ := e.scheduleProvider.GetActiveProgram(ch.ID, now); sched != nil && sched.AdTemplateID != "" {
+			adTmplID = sched.AdTemplateID
+		}
+	}
+
+	if adTmplID != "" && e.adTemplateProvider != nil {
+		if tmpl, err := e.adTemplateProvider.GetTemplateByID(adTmplID); err == nil && tmpl != nil {
+			tmpl.ParseJSON()
+			for _, elem := range tmpl.OverlayElements {
+				if elem.IsActive {
+					effectiveOverlays = append(effectiveOverlays, elem)
+				}
+			}
+		}
+	}
+
+	logoOpacity := ch.LogoOpacity
+	if logoOpacity <= 0 || logoOpacity > 1.0 {
+		logoOpacity = 0.90
+	}
+	logoFit := ch.LogoFit
+	if logoFit == "" {
+		logoFit = "contain"
+	}
+
 	cfg := PlayoutConfig{
 		InputMedia:        resolvedMedia,
 		Resolution:        res,
 		LogoPath:          resolvedLogo,
 		LogoPosition:      logoPos,
-		LogoOpacity:       0.90,
+		LogoX:             ch.LogoX,
+		LogoY:             ch.LogoY,
+		LogoWidth:         ch.LogoWidth,
+		LogoHeight:        ch.LogoHeight,
+		LogoOpacity:       logoOpacity,
+		LogoFit:           logoFit,
+		Overlays:          effectiveOverlays,
 		AudioTrackIndex:   0,
 		NormalizeLoudness: true,
 		Destinations:      ch.Destinations,

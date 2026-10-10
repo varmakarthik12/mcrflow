@@ -86,6 +86,7 @@ func NewServer(cfg Config, db *database.DB) (*Server, error) {
 	botSvc := bot.NewService(schedSvc, channelSvc, tmdbClient)
 	playoutEng := playout.NewEngine(cfg.MediaDir, cfg.DataDir)
 	playoutEng.SetScheduleProvider(schedSvc)
+	playoutEng.SetAdTemplateProvider(adTmplSvc)
 	hlsMgr := hls.NewManager(repo, cfg.DataDir)
 
 	s := &Server{
@@ -664,13 +665,43 @@ func (s *Server) handleGetFFmpegCommand(w http.ResponseWriter, r *http.Request) 
 	if logoPos == "" {
 		logoPos = "top-right"
 	}
+	logoOpacity := ch.LogoOpacity
+	if logoOpacity <= 0 || logoOpacity > 1.0 {
+		logoOpacity = 0.90
+	}
+	logoFit := ch.LogoFit
+	if logoFit == "" {
+		logoFit = "contain"
+	}
+
+	var effectiveOverlays []models.OverlayElement
+	ch.ParseOverlays()
+	effectiveOverlays = append(effectiveOverlays, ch.Overlays...)
+
+	adTmplID := ch.AdTemplateID
+	if adTmplID != "" && s.adTmplSvc != nil {
+		if tmpl, err := s.adTmplSvc.GetTemplateByID(adTmplID); err == nil && tmpl != nil {
+			tmpl.ParseJSON()
+			for _, elem := range tmpl.OverlayElements {
+				if elem.IsActive {
+					effectiveOverlays = append(effectiveOverlays, elem)
+				}
+			}
+		}
+	}
 
 	cfg := playout.PlayoutConfig{
 		InputMedia:        filepath.Join(s.cfg.MediaDir, "sample_movie.mp4"),
 		Resolution:        *res,
 		LogoPath:          ch.LogoPath,
 		LogoPosition:      logoPos,
-		LogoOpacity:       0.9,
+		LogoX:             ch.LogoX,
+		LogoY:             ch.LogoY,
+		LogoWidth:         ch.LogoWidth,
+		LogoHeight:        ch.LogoHeight,
+		LogoOpacity:       logoOpacity,
+		LogoFit:           logoFit,
+		Overlays:          effectiveOverlays,
 		AudioTrackIndex:   0,
 		NormalizeLoudness: true,
 		Destinations:      ch.Destinations,

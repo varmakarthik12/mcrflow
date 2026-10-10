@@ -147,7 +147,9 @@ export function DashboardScreen({
             return (
               <div
                 key={ch.id}
-                className="bg-[#111827] border border-[#1F2937] hover:border-indigo-500/50 rounded-lg p-3 flex flex-col space-y-3 transition-all shadow-md group"
+                onClick={() => onSelectChannel && onSelectChannel(ch.id)}
+                className="bg-[#111827] border border-[#1F2937] hover:border-indigo-500 hover:shadow-indigo-500/10 rounded-lg p-3 flex flex-col space-y-3 transition-all shadow-md group cursor-pointer"
+                title={`Open Master Control for ${ch.name}`}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">

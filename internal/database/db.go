@@ -149,6 +149,13 @@ func (db *DB) Migrate() error {
 		resolution_id TEXT NOT NULL,
 		logo_path TEXT NOT NULL DEFAULT '',
 		logo_position TEXT NOT NULL DEFAULT 'top-right',
+		logo_x INTEGER NOT NULL DEFAULT 0,
+		logo_y INTEGER NOT NULL DEFAULT 0,
+		logo_width INTEGER NOT NULL DEFAULT 0,
+		logo_height INTEGER NOT NULL DEFAULT 0,
+		logo_opacity REAL NOT NULL DEFAULT 0.90,
+		logo_fit TEXT NOT NULL DEFAULT 'contain',
+		overlays_json TEXT NOT NULL DEFAULT '[]',
 		ad_template_id TEXT NOT NULL DEFAULT '',
 		primary_agent_id TEXT NOT NULL DEFAULT '',
 		fallback_agent_id TEXT NOT NULL DEFAULT '',
@@ -189,8 +196,15 @@ func (db *DB) Migrate() error {
 		return err
 	}
 
-	// Migrations: ensure logo_position exists on channels
+	// Migrations: ensure logo positioning, sizing, and overlays exist on channels
 	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN logo_position TEXT NOT NULL DEFAULT 'top-right'`)
+	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN logo_x INTEGER NOT NULL DEFAULT 0`)
+	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN logo_y INTEGER NOT NULL DEFAULT 0`)
+	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN logo_width INTEGER NOT NULL DEFAULT 0`)
+	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN logo_height INTEGER NOT NULL DEFAULT 0`)
+	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN logo_opacity REAL NOT NULL DEFAULT 0.90`)
+	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN logo_fit TEXT NOT NULL DEFAULT 'contain'`)
+	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN overlays_json TEXT NOT NULL DEFAULT '[]'`)
 	_, _ = db.Exec(`DROP TABLE IF EXISTS storage_mounts`)
 	return nil
 }

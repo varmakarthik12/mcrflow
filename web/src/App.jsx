@@ -343,6 +343,8 @@ export function App() {
             onCreateChannel={handleCreateChannel}
             onDeleteChannel={handleDeleteChannel}
             resolutions={resolutions}
+            adTemplates={adTemplates}
+            onBackToDashboard={() => setActiveScreen(1)}
             onShowToast={showToast}
             t={t}
           />
@@ -364,6 +366,7 @@ export function App() {
         {activeScreen === 4 && (
           <AdStudioScreen
             adTemplates={adTemplates}
+            onRefreshTemplates={loadAdTemplates}
             onShowToast={showToast}
             t={t}
           />
