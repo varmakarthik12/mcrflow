@@ -153,6 +153,7 @@ func (s *Server) setupRoutes() {
 	r.Handle("/media/*", http.StripPrefix("/media", http.FileServer(http.Dir(s.cfg.MediaDir))))
 	r.Handle("/data/logos/*", http.StripPrefix("/data/logos", http.FileServer(http.Dir(filepath.Join(s.cfg.DataDir, "logos")))))
 	r.Handle("/media/logos/*", http.StripPrefix("/media/logos", http.FileServer(http.Dir(filepath.Join(s.cfg.DataDir, "logos")))))
+	r.Handle("/logos/*", http.StripPrefix("/logos", http.FileServer(http.Dir(filepath.Join(s.cfg.DataDir, "logos")))))
 
 	// 2. Central API v1 Router (/api/v1/*) with Enterprise AuthN & AuthZ RBAC Middleware
 	r.Route("/api/v1", func(v1 chi.Router) {

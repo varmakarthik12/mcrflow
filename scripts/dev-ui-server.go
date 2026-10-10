@@ -52,8 +52,8 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Reverse proxy API, HLS, EPG, and Media static assets to the Control Plane
-		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/hls/") || strings.HasPrefix(r.URL.Path, "/epg/") || strings.HasPrefix(r.URL.Path, "/media/") || r.URL.Path == "/api" || r.URL.Path == "/hls" || r.URL.Path == "/epg" || r.URL.Path == "/media" {
+		// Reverse proxy API, HLS, EPG, Media, Data, and Logo static assets to the Control Plane
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/hls/") || strings.HasPrefix(r.URL.Path, "/epg/") || strings.HasPrefix(r.URL.Path, "/media/") || strings.HasPrefix(r.URL.Path, "/data/") || strings.HasPrefix(r.URL.Path, "/logos/") || r.URL.Path == "/api" || r.URL.Path == "/hls" || r.URL.Path == "/epg" || r.URL.Path == "/media" || r.URL.Path == "/data" || r.URL.Path == "/logos" {
 			log.Printf("[PROXY] %s %s -> %s%s", r.Method, r.URL.Path, backendURL, r.URL.Path)
 			r.Host = target.Host
 			proxy.ServeHTTP(w, r)

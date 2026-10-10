@@ -368,6 +368,7 @@ export function App() {
         {activeScreen === 4 && (
           <AdStudioScreen
             adTemplates={adTemplates}
+            channels={channels}
             onRefreshTemplates={loadAdTemplates}
             onShowToast={showToast}
             t={t}

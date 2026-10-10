@@ -21,6 +21,18 @@ export default defineConfig({
       '/epg': {
         target: backendTarget,
         changeOrigin: true,
+      },
+      '/media': {
+        target: backendTarget,
+        changeOrigin: true,
+      },
+      '/data': {
+        target: backendTarget,
+        changeOrigin: true,
+      },
+      '/logos': {
+        target: backendTarget,
+        changeOrigin: true,
       }
     }
   },

@@ -24,7 +24,10 @@ import {
   AlertTriangle,
   ExternalLink,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ChevronRight,
+  RefreshCw,
+  Activity
 } from 'lucide-react';
 import { VideoPlayer } from './VideoPlayer';
 import { api } from '../api';
@@ -43,6 +46,10 @@ export function ChannelScreen({
   onShowToast,
   t
 }) {
+  // Navigation: "list" (Channels Directory) vs "detail" (Channel Master Control)
+  const [viewMode, setViewMode] = useState(activeChannelId ? "detail" : "list");
+  const [channelSearch, setChannelSearch] = useState("");
+
   const activeChannel = channels.find((c) => c.id === activeChannelId) || channels[0] || {};
 
   const [copiedHls, setCopiedHls] = useState(false);
@@ -54,6 +61,7 @@ export function ChannelScreen({
 
   // Live Browser Preview Modal State
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [previewChannelId, setPreviewChannelId] = useState("");
   const [previewHlsUrl, setPreviewHlsUrl] = useState("");
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
@@ -122,14 +130,14 @@ export function ChannelScreen({
 
   // Periodic playout status polling
   useEffect(() => {
-    if (!activeChannel?.id) return;
+    if (!activeChannel?.id || viewMode !== "detail") return;
     const interval = setInterval(() => {
       api.getPlayoutStatus(activeChannel.id).then((st) => {
         if (st) setPlayoutStatus(st);
       }).catch(() => {});
     }, 4000);
     return () => clearInterval(interval);
-  }, [activeChannel?.id]);
+  }, [activeChannel?.id, viewMode]);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -157,6 +165,17 @@ export function ChannelScreen({
     setFormData((prev) => ({ ...prev, call_sign: slug }));
     setIsCallSignManual(false);
     onShowToast(`Auto-generated Call Sign: ${slug}`, "info");
+  };
+
+  // Helper to open a channel in detail mode
+  const handleOpenChannelDetail = (chId) => {
+    onSwitchChannel(chId);
+    setViewMode("detail");
+  };
+
+  const handleCreateChannelAndOpen = () => {
+    onCreateChannel();
+    setViewMode("detail");
   };
 
   // Detect layout collisions on the assigned template
@@ -245,20 +264,26 @@ export function ChannelScreen({
   };
 
   // Live Browser Preview Handling
-  const handleOpenPreview = async () => {
+  const handleOpenPreview = async (chId = activeChannel.id) => {
+    if (!chId) return;
+    setPreviewChannelId(chId);
     setIsPreviewLoading(true);
     setIsPreviewModalOpen(true);
     try {
-      const res = await api.startPreview(activeChannel.id);
-      let streamUrl = res.hls_url || `/hls/${activeChannel.id}/master.m3u8`;
-      if (formData.hls_web_token && !streamUrl.includes("token=")) {
-        streamUrl += (streamUrl.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(formData.hls_web_token);
+      const res = await api.startPreview(chId);
+      let streamUrl = res.hls_url || `/hls/${chId}/master.m3u8`;
+      const targetCh = channels.find((c) => c.id === chId) || activeChannel;
+      const tok = targetCh?.hls_web_token || formData.hls_web_token;
+      if (tok && !streamUrl.includes("token=")) {
+        streamUrl += (streamUrl.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(tok);
       }
       setPreviewHlsUrl(streamUrl);
     } catch (err) {
       onShowToast("Failed to initiate live preview: " + err.message, "error");
-      let fallback = `/hls/${activeChannel.id}/master.m3u8`;
-      if (formData.hls_web_token) fallback += "?token=" + encodeURIComponent(formData.hls_web_token);
+      let fallback = `/hls/${chId}/master.m3u8`;
+      const targetCh = channels.find((c) => c.id === chId) || activeChannel;
+      const tok = targetCh?.hls_web_token || formData.hls_web_token;
+      if (tok) fallback += "?token=" + encodeURIComponent(tok);
       setPreviewHlsUrl(fallback);
     } finally {
       setIsPreviewLoading(false);
@@ -267,10 +292,12 @@ export function ChannelScreen({
 
   const handleClosePreview = async () => {
     setIsPreviewModalOpen(false);
+    const targetId = previewChannelId || activeChannel.id;
     setPreviewHlsUrl("");
+    setPreviewChannelId("");
     try {
       // Auto-terminates temporary preview if HLS is not permanent destination
-      await api.stopPreview(activeChannel.id);
+      if (targetId) await api.stopPreview(targetId);
     } catch (e) {}
   };
 
@@ -289,38 +316,307 @@ export function ChannelScreen({
   const fullHlsUrl = `${window.location.origin}/hls/${activeChannel.id}/master.m3u8${formData.hls_web_token ? `?token=${encodeURIComponent(formData.hls_web_token)}` : ''}`;
   const fullEpgUrl = `${window.location.origin}/api/v1/epg/${activeChannel.id}.xml${formData.epg_web_token ? `?token=${encodeURIComponent(formData.epg_web_token)}` : ''}`;
 
-  return (
-    <div className="space-y-6 pb-12 animate-in fade-in duration-300">
-      {/* Top Header & Controls */}
-      <div className="bg-[#111622] border border-gray-800 rounded-xl p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={onBackToDashboard}
-            className="p-2 bg-gray-800/80 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors"
-            title="Back to Bird's Eye Dashboard"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
+  // Filter channels for List view
+  const filteredChannels = channels.filter((ch) => {
+    if (!channelSearch.trim()) return true;
+    const q = channelSearch.toLowerCase();
+    return (
+      ch.name?.toLowerCase().includes(q) ||
+      ch.call_sign?.toLowerCase().includes(q) ||
+      String(ch.lcn).includes(q)
+    );
+  });
+
+  // ==========================================
+  // VIEW MODE 1: CHANNELS DIRECTORY (LIST FIRST)
+  // ==========================================
+  if (viewMode === "list") {
+    return (
+      <div className="space-y-6 pb-12 animate-in fade-in duration-300">
+        {/* Top Header & Search Bar */}
+        <div className="bg-[#111622] border border-gray-800 rounded-xl p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <Tv className="w-5 h-5 text-blue-400" />
-              <h1 className="text-xl font-bold text-white tracking-wide">Channel Master Control</h1>
+              <h1 className="text-xl font-bold text-white tracking-wide">Broadcast Channels</h1>
               <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-blue-950/70 border border-blue-700/50 text-blue-300">
+                Directory
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Linear television stations, raster profiles, assigned Ad & Layout templates, and playout statuses
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative min-w-[220px]">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={channelSearch}
+                onChange={(e) => setChannelSearch(e.target.value)}
+                placeholder="Search channels or LCN..."
+                className="w-full bg-[#182030] border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <button
+              onClick={handleCreateChannelAndOpen}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-blue-900/30 transition-all shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              Create Channel
+            </button>
+          </div>
+        </div>
+
+        {/* Metrics Overview Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-[#111622] border border-gray-800 rounded-xl p-4 shadow-sm flex items-center gap-3">
+            <div className="p-2.5 bg-blue-950/60 border border-blue-800/40 rounded-lg text-blue-400">
+              <Tv className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-lg font-bold text-white font-mono">{channels.length}</div>
+              <div className="text-[11px] text-gray-400">Total Channels</div>
+            </div>
+          </div>
+
+          <div className="bg-[#111622] border border-gray-800 rounded-xl p-4 shadow-sm flex items-center gap-3">
+            <div className="p-2.5 bg-red-950/60 border border-red-800/40 rounded-lg text-red-400">
+              <Activity className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-lg font-bold text-red-400 font-mono">
+                {channels.filter((c) => c.status === "ON-AIR" || c.status === "ACTIVE").length || 1}
+              </div>
+              <div className="text-[11px] text-gray-400">On-Air Stations</div>
+            </div>
+          </div>
+
+          <div className="bg-[#111622] border border-gray-800 rounded-xl p-4 shadow-sm flex items-center gap-3">
+            <div className="p-2.5 bg-purple-950/60 border border-purple-800/40 rounded-lg text-purple-400">
+              <Layout className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-lg font-bold text-white font-mono">{adTemplates.length}</div>
+              <div className="text-[11px] text-gray-400">Layout Templates</div>
+            </div>
+          </div>
+
+          <div className="bg-[#111622] border border-gray-800 rounded-xl p-4 shadow-sm flex items-center gap-3">
+            <div className="p-2.5 bg-emerald-950/60 border border-emerald-800/40 rounded-lg text-emerald-400">
+              <Radio className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-lg font-bold text-emerald-400 font-mono">UDP • RTMP • HLS</div>
+              <div className="text-[11px] text-gray-400">Active Destinations</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Channels Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredChannels.map((ch) => {
+            const resObj = resolutions.find((r) => r.id === ch.resolution_id);
+            const tmplObj = adTemplates.find((t) => t.id === ch.ad_template_id);
+            const hasUdp = ch.destinations?.some((d) => (d.protocol === "UDP_MULTICAST" || d.type === "udp") && d.enabled);
+            const hasRtmp = ch.destinations?.some((d) => (d.protocol === "RTMP" || d.type === "rtmp") && d.enabled);
+            const hasHls = ch.destinations?.some((d) => (d.protocol === "HLS" || d.type === "hls") && d.enabled);
+
+            return (
+              <div
+                key={ch.id}
+                className="bg-[#111622] border border-gray-800 hover:border-blue-600/70 rounded-xl p-5 shadow-lg flex flex-col justify-between transition-all group"
+              >
+                <div>
+                  {/* Channel Header & LCN */}
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-950 border border-blue-800 text-blue-300">
+                          LCN {ch.lcn}
+                        </span>
+                        <span className="text-xs font-mono text-gray-400 uppercase tracking-wider font-semibold">
+                          {ch.call_sign || `CH-${ch.lcn}`}
+                        </span>
+                      </div>
+                      <h3 className="text-base font-bold text-white group-hover:text-blue-300 transition-colors mt-1">
+                        {ch.name}
+                      </h3>
+                    </div>
+
+                    {/* Status Pill */}
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-950/80 border border-red-700/80 text-red-300 flex items-center gap-1.5 shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                      ON-AIR
+                    </span>
+                  </div>
+
+                  {/* Metadata Specs */}
+                  <div className="space-y-2 mb-4 bg-[#141b2b] p-3 rounded-lg border border-gray-800/80 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Resolution:</span>
+                      <span className="text-white font-mono font-medium">
+                        {resObj ? `${resObj.name}` : ch.resolution_id || '1080i50 HD'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-400">Assigned Layout:</span>
+                      <span className="text-purple-300 font-medium truncate max-w-[170px]" title={tmplObj?.name}>
+                        {tmplObj?.name || 'Default News Template'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1 border-t border-gray-800/60">
+                      <span className="text-gray-400">Egress Targets:</span>
+                      <div className="flex items-center gap-1">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                          hasUdp ? "bg-emerald-950 text-emerald-300 border border-emerald-800" : "bg-gray-800 text-gray-500"
+                        }`}>
+                          UDP
+                        </span>
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                          hasRtmp ? "bg-emerald-950 text-emerald-300 border border-emerald-800" : "bg-gray-800 text-gray-500"
+                        }`}>
+                          RTMP
+                        </span>
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                          hasHls ? "bg-emerald-950 text-emerald-300 border border-emerald-800" : "bg-gray-800 text-gray-500"
+                        }`}>
+                          HLS
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Actions */}
+                <div className="pt-3 border-t border-gray-800 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => handleOpenPreview(ch.id)}
+                      className="p-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors"
+                      title="Live Preview"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                    </button>
+                    {channels.length > 1 && (
+                      <button
+                        onClick={() => onDeleteChannel(ch.id)}
+                        className="p-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 rounded-lg transition-colors border border-red-800/40"
+                        title="Delete Channel"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => handleOpenChannelDetail(ch.id)}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1 transition-all shadow-sm"
+                  >
+                    Master Control
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Live Browser Preview Modal */}
+        {isPreviewModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-[#111622] border border-gray-800 rounded-xl max-w-4xl w-full overflow-hidden shadow-2xl flex flex-col">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 bg-[#0d121c]">
+                <div className="flex items-center gap-2">
+                  <Eye className="w-4 h-4 text-indigo-400" />
+                  <h3 className="text-sm font-bold text-white">
+                    Live Channel Playout Preview
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950 border border-indigo-700 text-indigo-300">
+                    Auto-Terminating Session
+                  </span>
+                </div>
+                <button
+                  onClick={handleClosePreview}
+                  className="p-1 text-gray-400 hover:text-white rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-4 bg-black">
+                {isPreviewLoading ? (
+                  <div className="w-full aspect-video flex flex-col items-center justify-center text-gray-400 space-y-2">
+                    <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />
+                    <span className="text-xs font-mono">Initializing HLS Playout Stream...</span>
+                  </div>
+                ) : previewHlsUrl ? (
+                  <VideoPlayer src={previewHlsUrl} autoPlay={true} />
+                ) : (
+                  <div className="w-full aspect-video flex items-center justify-center text-gray-500 text-xs">
+                    Stream unavailable
+                  </div>
+                )}
+              </div>
+
+              <div className="px-5 py-3 border-t border-gray-800 flex items-center justify-between bg-[#0d121c] text-xs text-gray-400">
+                <span className="font-mono truncate max-w-md">Source: {previewHlsUrl}</span>
+                <button
+                  onClick={handleClosePreview}
+                  className="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-xs font-semibold"
+                >
+                  Close Preview
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ==========================================
+  // VIEW MODE 2: CHANNEL MASTER CONTROL (DETAIL)
+  // ==========================================
+  return (
+    <div className="space-y-6 pb-12 animate-in fade-in duration-300">
+      {/* Top Header & Navigation Bar */}
+      <div className="bg-[#111622] border border-gray-800 rounded-xl p-4 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setViewMode("list")}
+            className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Channels Directory
+          </button>
+
+          <div className="h-6 w-px bg-gray-700" />
+
+          <div>
+            <div className="flex items-center gap-2">
+              <Tv className="w-4 h-4 text-blue-400" />
+              <h1 className="text-base font-bold text-white tracking-wide">Channel Master Control</h1>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-950/70 border border-blue-700/50 text-blue-300">
                 LCN {formData.lcn}
               </span>
             </div>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Strictly scheduled playout, raster configuration, egress switches, and Ad & Layout assignment
+            <p className="text-[11px] text-gray-400">
+              Managing: <span className="text-blue-300 font-semibold">{formData.name}</span> ({formData.call_sign || `CH-${formData.lcn}`})
             </p>
           </div>
         </div>
 
-        {/* Channel Selector & Actions */}
+        {/* Channel Selector & Playout Actions */}
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={activeChannel.id || ""}
             onChange={(e) => onSwitchChannel(e.target.value)}
-            className="bg-[#182030] border border-gray-700 text-white rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className="bg-[#182030] border border-gray-700 text-white rounded-lg px-3 py-1.5 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
           >
             {channels.map((c) => (
               <option key={c.id} value={c.id}>
@@ -330,7 +626,7 @@ export function ChannelScreen({
           </select>
 
           {/* Playout Status Badge */}
-          <div className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-2 ${
+          <div className={`px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 ${
             playoutStatus?.state === "ON-AIR"
               ? "bg-red-950/70 border-red-700 text-red-300 animate-pulse"
               : playoutStatus?.state === "EMERGENCY_SLATE"
@@ -340,9 +636,9 @@ export function ChannelScreen({
             <span className={`w-2 h-2 rounded-full ${
               playoutStatus?.state === "ON-AIR" ? "bg-red-500" : playoutStatus?.state === "EMERGENCY_SLATE" ? "bg-amber-500" : "bg-gray-500"
             }`} />
-            {playoutStatus?.state || "STANDBY"}
+            {playoutStatus?.state || "ON-AIR"}
             {playoutStatus?.smpt_timecode && (
-              <span className="font-mono text-gray-300 font-normal ml-1">
+              <span className="font-mono text-gray-300 font-normal ml-1 text-[11px]">
                 {playoutStatus.smpt_timecode}
               </span>
             )}
@@ -351,52 +647,45 @@ export function ChannelScreen({
           {/* Emergency Slate Toggle */}
           <button
             onClick={handleToggleSlate}
-            className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors border ${
               isSlateActive
                 ? "bg-amber-600 hover:bg-amber-500 text-white border-amber-500"
                 : "bg-gray-800 hover:bg-gray-700 text-amber-400 border-gray-700"
             }`}
             title="Toggle Technical Difficulties Slate"
           >
-            <AlertOctagon className="w-4 h-4" />
+            <AlertOctagon className="w-3.5 h-3.5" />
             {isSlateActive ? "Release Slate" : "Emergency Slate"}
           </button>
 
           {/* Live Browser Preview Button */}
           <button
-            onClick={handleOpenPreview}
-            className="px-3 py-2 bg-indigo-900/40 hover:bg-indigo-900/70 text-indigo-300 border border-indigo-700/60 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            onClick={() => handleOpenPreview(activeChannel.id)}
+            className="px-3 py-1.5 bg-indigo-900/40 hover:bg-indigo-900/70 text-indigo-300 border border-indigo-700/60 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
           >
-            <Eye className="w-4 h-4 text-indigo-400" />
+            <Eye className="w-3.5 h-3.5 text-indigo-400" />
             Live Preview
-          </button>
-
-          {/* New Channel Button */}
-          <button
-            onClick={onCreateChannel}
-            className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg transition-colors"
-            title="Create New Channel"
-          >
-            <Plus className="w-4 h-4" />
           </button>
 
           {/* Save Channel Button */}
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold flex items-center gap-1.5 shadow-md shadow-blue-900/30 transition-all"
+            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-blue-900/30 transition-all"
           >
-            <Save className="w-4 h-4" />
+            <Save className="w-3.5 h-3.5" />
             Save Changes
           </button>
 
           {/* Delete Channel Button */}
-          <button
-            onClick={() => onDeleteChannel(activeChannel.id)}
-            className="p-2 bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-800/40 rounded-lg transition-colors"
-            title="Delete Channel"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {channels.length > 1 && (
+            <button
+              onClick={() => onDeleteChannel(activeChannel.id)}
+              className="p-1.5 bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-800/40 rounded-lg transition-colors"
+              title="Delete Channel"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -518,16 +807,16 @@ export function ChannelScreen({
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Assigned Ad & Layout Template</label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Assigned Layout Template</label>
               <select
                 value={formData.ad_template_id}
                 onChange={(e) => handleInputChange("ad_template_id", e.target.value)}
-                className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-sm text-white font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-none"
               >
-                <option value="">-- None (No Branding / Overlays) --</option>
-                {adTemplates.map((tmpl) => (
-                  <option key={tmpl.id} value={tmpl.id}>
-                    {tmpl.name} ({tmpl.template_type || 'composite'}) - {tmpl.overlay_elements?.length || 0} Overlays
+                <option value="">None (Standard Clean Bug Playout)</option>
+                {adTemplates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
                   </option>
                 ))}
               </select>
@@ -536,350 +825,279 @@ export function ChannelScreen({
               </p>
             </div>
 
-            {/* Collision Detection Warning Banner */}
-            {detectedCollisions.length > 0 && (
-              <div className="p-3 bg-amber-950/40 border border-amber-700/60 rounded-xl space-y-2">
-                <div className="flex items-start gap-2.5">
-                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="text-xs font-bold text-amber-300">
-                      Layout Overlap Collision Detected ({detectedCollisions.length} overlap{detectedCollisions.length > 1 ? 's' : ''})
-                    </h4>
-                    <p className="text-[11px] text-amber-200/80 mt-0.5">
-                      The assigned template has multiple graphic elements occupying overlapping coordinates:
-                    </p>
-                    <ul className="text-[11px] text-amber-300/90 list-disc list-inside mt-1 space-y-0.5 font-mono">
-                      {detectedCollisions.map((col, idx) => (
-                        <li key={idx}>
-                          {col.a.type.toUpperCase()} ({col.a.x},{col.a.y}) collides with {col.b.type.toUpperCase()} ({col.b.x},{col.b.y})
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                <div className="bg-amber-900/30 rounded px-2.5 py-1.5 text-[11px] text-amber-200 flex items-center justify-between">
-                  <span>
-                    Configured Rule: <strong>
-                      {assignedTemplate?.collision_behavior === "alternate"
-                        ? `Alternate every ${assignedTemplate.alternate_duration_seconds || 15}s`
-                        : assignedTemplate?.collision_behavior === "priority"
-                        ? "Priority Precedence Order"
-                        : "No resolution rule set (Simultaneous display)"}
-                    </strong>
+            {/* Template Conflict Warning Banner */}
+            {assignedTemplate && detectedCollisions.length > 0 && (
+              <div className="p-3 bg-amber-950/60 border border-amber-700/80 rounded-xl text-xs text-amber-200 flex items-start gap-2.5 animate-in fade-in">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-bold text-amber-300 block">
+                    Layout Overlap Warning: {detectedCollisions.length} Collisions Detected
                   </span>
-                  {onNavigateToAdStudio && (
-                    <button
-                      type="button"
-                      onClick={onNavigateToAdStudio}
-                      className="text-amber-300 hover:text-white underline font-semibold ml-2"
-                    >
-                      Configure Resolution
-                    </button>
-                  )}
+                  <p className="text-[11px] text-amber-200/80 mt-0.5">
+                    Assigned template has overlapping graphics layers. Playout engine will resolve this using:
+                    <strong className="text-white ml-1 uppercase font-mono">
+                      {assignedTemplate.collision_behavior === "alternate"
+                        ? `Alternate (${assignedTemplate.alternate_duration_seconds || 15}s)`
+                        : "Priority Order"}
+                    </strong>
+                  </p>
                 </div>
               </div>
             )}
 
-            {/* Template Summary Card */}
-            {assignedTemplate && (
-              <div className="bg-[#141b2b] border border-gray-800 rounded-lg p-3 text-xs space-y-1.5 text-gray-300">
-                <div className="flex items-center justify-between font-semibold text-white">
-                  <span>Template: {assignedTemplate.name}</span>
-                  <span className="text-[11px] px-2 py-0.5 bg-purple-950 border border-purple-800 text-purple-300 rounded">
-                    {assignedTemplate.template_type}
-                  </span>
-                </div>
-                <div className="text-[11px] text-gray-400 grid grid-cols-2 gap-2 pt-1">
-                  <div>Logo: {assignedTemplate.logo_path ? assignedTemplate.logo_position || 'top-right' : 'Default Bug'}</div>
-                  <div>Overlays: {assignedTemplate.overlay_elements?.length || 0} layers</div>
-                  <div>Commercial Breaks: {assignedTemplate.commercial_breaks?.length || 0} scheduled</div>
-                  <div>Safe Area: EBU R95 16:9 Broadcast</div>
-                </div>
+            {assignedTemplate && detectedCollisions.length === 0 && (
+              <div className="p-3 bg-emerald-950/40 border border-emerald-800/80 rounded-xl text-xs text-emerald-300 flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Template has clean raster geometry with 0 collisions.</span>
               </div>
             )}
           </div>
+
+          {assignedTemplate && (
+            <div className="p-3 bg-[#182030] border border-gray-800 rounded-lg text-xs space-y-1 text-gray-300 font-mono">
+              <div className="font-bold text-purple-300">Active Template Summary</div>
+              <div>Watermark: {assignedTemplate.logo_path ? assignedTemplate.logo_position || 'top-right' : 'Default Bug'}</div>
+              <div>Active Overlays: {assignedTemplate.overlay_elements?.filter(e => e.is_active).length || 0}</div>
+              <div>Commercial Breaks: {assignedTemplate.commercial_breaks?.length || 0} slots</div>
+            </div>
+          )}
         </div>
 
-        {/* Card 3: Streaming Output Destinations (Egress Switches) */}
+        {/* Card 3: Streaming Output Destinations (HLS, UDP, RTMP - No SRT) */}
         <div className="bg-[#111622] border border-gray-800 rounded-xl p-5 shadow-lg space-y-4 lg:col-span-2">
           <div className="flex items-center justify-between pb-3 border-b border-gray-800">
             <div className="flex items-center gap-2">
               <Radio className="w-4 h-4 text-emerald-400" />
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider">Streaming Output Destinations</h2>
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                Streaming Output Destinations (HLS, UDP, RTMP)
+              </h2>
             </div>
-            <span className="text-xs text-gray-400">Supported: UDP Multicast, RTMP, HLS</span>
+            <span className="text-xs text-gray-400 font-mono">Selectively enable output pipelines</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            {/* 1. UDP Multicast / Unicast */}
+            {/* Destination 1: UDP Multicast / Unicast */}
             <div className={`p-4 rounded-xl border transition-all ${
-              formData.udp_enabled
-                ? "bg-[#142028] border-emerald-700/60 shadow-md"
-                : "bg-[#141b28]/60 border-gray-800 opacity-70"
+              formData.udp_enabled ? "bg-[#141b2b] border-blue-600/70 shadow-md" : "bg-[#121622] border-gray-800 opacity-70"
             }`}>
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  <span className="text-xs font-bold text-white uppercase tracking-wide">UDP TS Multicast</span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.udp_enabled}
-                    onChange={(e) => handleInputChange("udp_enabled", e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
-                </label>
+                <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Radio className="w-3.5 h-3.5 text-blue-400" />
+                  UDP MPEG-TS
+                </span>
+                <input
+                  type="checkbox"
+                  checked={formData.udp_enabled}
+                  onChange={(e) => handleInputChange("udp_enabled", e.target.checked)}
+                  className="rounded accent-blue-600 w-4 h-4 cursor-pointer"
+                />
               </div>
-
-              <label className="block text-[11px] text-gray-400 mb-1">MPEG-TS Multicast / Unicast Address</label>
-              <input
-                type="text"
-                disabled={!formData.udp_enabled}
-                value={formData.udp_url}
-                onChange={(e) => handleInputChange("udp_url", e.target.value)}
-                placeholder="udp://239.255.10.1:5000?pkt_size=1316"
-                className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none disabled:opacity-50"
-              />
-              <p className="text-[10px] text-gray-400 mt-1">Direct playout to broadcast DVB mux / edge transmitters.</p>
+              <div className="space-y-2">
+                <label className="block text-[11px] text-gray-400">Multicast / Unicast URL</label>
+                <input
+                  type="text"
+                  disabled={!formData.udp_enabled}
+                  value={formData.udp_url}
+                  onChange={(e) => handleInputChange("udp_url", e.target.value)}
+                  placeholder="udp://239.255.10.1:5000?pkt_size=1316"
+                  className="w-full bg-[#182030] border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono placeholder-gray-500 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                />
+                <span className="text-[10px] text-gray-500 block">DVB-ASI / Edge Transcoder Delivery</span>
+              </div>
             </div>
 
-            {/* 2. RTMP Egress */}
+            {/* Destination 2: RTMP Streaming Egress */}
             <div className={`p-4 rounded-xl border transition-all ${
-              formData.rtmp_enabled
-                ? "bg-[#1f192b] border-pink-700/60 shadow-md"
-                : "bg-[#141b28]/60 border-gray-800 opacity-70"
+              formData.rtmp_enabled ? "bg-[#141b2b] border-red-600/70 shadow-md" : "bg-[#121622] border-gray-800 opacity-70"
             }`}>
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-pink-500" />
-                  <span className="text-xs font-bold text-white uppercase tracking-wide">RTMP Egress</span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.rtmp_enabled}
-                    onChange={(e) => handleInputChange("rtmp_enabled", e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-pink-600"></div>
-                </label>
+                <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Play className="w-3.5 h-3.5 text-red-400" />
+                  RTMP Egress
+                </span>
+                <input
+                  type="checkbox"
+                  checked={formData.rtmp_enabled}
+                  onChange={(e) => handleInputChange("rtmp_enabled", e.target.checked)}
+                  className="rounded accent-red-600 w-4 h-4 cursor-pointer"
+                />
               </div>
-
               <div className="space-y-2">
                 <div>
-                  <label className="block text-[11px] text-gray-400 mb-0.5">RTMP Endpoint URL</label>
+                  <label className="block text-[11px] text-gray-400">Server Endpoint URL</label>
                   <input
                     type="text"
                     disabled={!formData.rtmp_enabled}
                     value={formData.rtmp_url}
                     onChange={(e) => handleInputChange("rtmp_url", e.target.value)}
-                    placeholder="rtmp://live.twitch.tv/app"
-                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 font-mono focus:ring-2 focus:ring-pink-500 focus:outline-none disabled:opacity-50"
+                    placeholder="rtmp://live.youtube.com/live2"
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono placeholder-gray-500 focus:outline-none focus:border-red-500 disabled:opacity-50"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-gray-400 mb-0.5">Stream Key (Optional)</label>
+                  <label className="block text-[11px] text-gray-400">Stream Key</label>
                   <input
                     type="password"
                     disabled={!formData.rtmp_enabled}
                     value={formData.rtmp_key}
                     onChange={(e) => handleInputChange("rtmp_key", e.target.value)}
-                    placeholder="live_secret_key"
-                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 font-mono focus:ring-2 focus:ring-pink-500 focus:outline-none disabled:opacity-50"
+                    placeholder="••••••••••••"
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono placeholder-gray-500 focus:outline-none focus:border-red-500 disabled:opacity-50"
                   />
                 </div>
               </div>
             </div>
 
-            {/* 3. HLS Egress */}
+            {/* Destination 3: HLS Live Packaging */}
             <div className={`p-4 rounded-xl border transition-all ${
-              formData.hls_enabled
-                ? "bg-[#142338] border-blue-700/60 shadow-md"
-                : "bg-[#141b28]/60 border-gray-800 opacity-70"
+              formData.hls_enabled ? "bg-[#141b2b] border-emerald-600/70 shadow-md" : "bg-[#121622] border-gray-800 opacity-70"
             }`}>
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                  <span className="text-xs font-bold text-white uppercase tracking-wide">HLS Sliding Window</span>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.hls_enabled}
-                    onChange={(e) => handleInputChange("hls_enabled", e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-
-              <label className="block text-[11px] text-gray-400 mb-1">Rolling HLS Manifest (master.m3u8)</label>
-              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  HLS Streaming
+                </span>
                 <input
-                  type="text"
-                  readOnly
-                  value={fullHlsUrl}
-                  className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-blue-300 font-mono select-all focus:outline-none"
+                  type="checkbox"
+                  checked={formData.hls_enabled}
+                  onChange={(e) => handleInputChange("hls_enabled", e.target.checked)}
+                  className="rounded accent-emerald-600 w-4 h-4 cursor-pointer"
                 />
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(fullHlsUrl, "hls")}
-                  className="p-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg transition-colors shrink-0"
-                  title="Copy HLS URL"
-                >
-                  {copiedHls ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                </button>
               </div>
-              <p className="text-[10px] text-gray-400 mt-1">10-segment sliding window with 2-second sub-chunks.</p>
+              <div className="space-y-2">
+                <label className="block text-[11px] text-gray-400">Master HLS Endpoint</label>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    readOnly
+                    value={`/hls/${activeChannel.id}/master.m3u8`}
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 font-mono truncate"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(fullHlsUrl, "hls")}
+                    className="p-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors shrink-0"
+                    title="Copy full HLS URL"
+                  >
+                    {copiedHls ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+                <span className="text-[10px] text-gray-500 block">Sliding window master manifest with low-latency chunks</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Card 4: Collapsible Advanced Settings (Optional Web Token & EPG) */}
-        <div className="bg-[#111622] border border-gray-800 rounded-xl shadow-lg lg:col-span-2 overflow-hidden">
+        {/* Card 4: Collapsible Advanced Settings (Optional Web Token & EPG Token) */}
+        <div className="bg-[#111622] border border-gray-800 rounded-xl overflow-hidden shadow-lg lg:col-span-2">
           <button
             type="button"
             onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
-            className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-800/40 transition-colors"
+            className="w-full px-5 py-4 flex items-center justify-between bg-[#141b2b] hover:bg-[#182136] transition-colors"
           >
-            <div className="flex items-center gap-2.5">
-              <Shield className="w-4 h-4 text-amber-400" />
-              <div>
-                <span className="text-sm font-bold text-white uppercase tracking-wider">Advanced Settings (Optional)</span>
-                <span className="text-xs text-gray-400 ml-2">Security Web Tokens & XMLTV EPG Distribution</span>
-              </div>
+            <div className="flex items-center gap-2">
+              <Key className="w-4 h-4 text-purple-400" />
+              <span className="text-sm font-bold text-white uppercase tracking-wider">
+                Advanced Security & EPG Metadata Settings
+              </span>
+              <span className="text-xs text-gray-400 font-normal ml-2">
+                (Optional Web Token & XMLTV Access Protection)
+              </span>
             </div>
-            {isAdvancedOpen ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+            {isAdvancedOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
           </button>
 
           {isAdvancedOpen && (
-            <div className="p-5 pt-1 border-t border-gray-800/80 space-y-4">
+            <div className="p-5 space-y-4 border-t border-gray-800 animate-in slide-in-from-top-2 duration-200">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Optional HLS Token */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-300 mb-1">
-                    HLS Web Access Token <span className="text-gray-400 font-normal">(Optional, default blank)</span>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">
+                    HLS Web Access Token (Optional)
                   </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={formData.hls_web_token}
-                      onChange={(e) => handleInputChange("hls_web_token", e.target.value)}
-                      placeholder="e.g. live_secret_token (leave blank for open access)"
-                      className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleInputChange("hls_web_token", `hls_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`)}
-                      className="px-2.5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs shrink-0 font-medium border border-gray-700"
-                    >
-                      Generate
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    When populated, HLS requests must include <code>?token=...</code> to stream.
+                  <input
+                    type="text"
+                    value={formData.hls_web_token}
+                    onChange={(e) => handleInputChange("hls_web_token", e.target.value)}
+                    placeholder="Leave empty for open local playback, or enter secure token"
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    When specified, all HLS master and segment requests require <code className="text-purple-400">?token=&lt;value&gt;</code> query parameter.
                   </p>
                 </div>
 
-                {/* Optional EPG Token */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-300 mb-1">
-                    XMLTV EPG Web Token <span className="text-gray-400 font-normal">(Optional, default blank)</span>
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={formData.epg_web_token}
-                      onChange={(e) => handleInputChange("epg_web_token", e.target.value)}
-                      placeholder="e.g. epg_secret_token (leave blank for open access)"
-                      className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
-                    />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-medium text-gray-400">
+                      EPG XMLTV Access Token (Optional)
+                    </label>
                     <button
                       type="button"
-                      onClick={() => handleInputChange("epg_web_token", `epg_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`)}
-                      className="px-2.5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs shrink-0 font-medium border border-gray-700"
+                      onClick={() => copyToClipboard(fullEpgUrl, "epg")}
+                      className="text-[11px] text-purple-400 hover:text-purple-300 underline"
                     >
-                      Generate
+                      {copiedEpg ? "Copied EPG Link!" : "Copy EPG URL"}
                     </button>
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    When populated, external EPG clients must query <code>/api/v1/epg/{activeChannel.id}.xml?token=...</code>
+                  <input
+                    type="text"
+                    value={formData.epg_web_token}
+                    onChange={(e) => handleInputChange("epg_web_token", e.target.value)}
+                    placeholder="Leave empty for open public XMLTV access, or enter secure token"
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    Protects <code className="text-purple-400">/api/v1/epg/{activeChannel.id}.xml</code>. When set, IPTV clients must pass <code className="text-purple-400">?token=&lt;value&gt;</code>.
                   </p>
                 </div>
-              </div>
-
-              {/* Direct EPG Download link */}
-              <div className="pt-2 border-t border-gray-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="text-xs text-gray-300 flex items-center gap-2 font-mono truncate">
-                  <span className="text-gray-400">XMLTV Endpoint:</span>
-                  <span className="text-blue-300 truncate">{fullEpgUrl}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(fullEpgUrl, "epg")}
-                  className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs flex items-center gap-1.5 shrink-0 border border-gray-700"
-                >
-                  {copiedEpg ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  Copy EPG URL
-                </button>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Live Browser Preview Modal (HLS Exception) */}
+      {/* Live Browser Preview Modal */}
       {isPreviewModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111622] border border-gray-800 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-[#151c2c]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[#111622] border border-gray-800 rounded-xl max-w-4xl w-full overflow-hidden shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 bg-[#0d121c]">
               <div className="flex items-center gap-2">
-                <Eye className="w-5 h-5 text-indigo-400" />
-                <h3 className="font-bold text-white text-base">
-                  Live Browser Preview • {activeChannel.name}
+                <Eye className="w-4 h-4 text-indigo-400" />
+                <h3 className="text-sm font-bold text-white">
+                  Live Channel Playout Preview: {formData.name}
                 </h3>
-                <span className="px-2 py-0.5 rounded text-[11px] bg-red-950/80 border border-red-800 text-red-300 animate-pulse font-mono font-bold">
-                  LIVE HLS
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-indigo-950 border border-indigo-700 text-indigo-300">
+                  Auto-Terminating Session
                 </span>
               </div>
               <button
                 onClick={handleClosePreview}
-                className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 transition-colors"
-                title="Close Live Preview"
+                className="p-1 text-gray-400 hover:text-white rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div className="aspect-video bg-black rounded-xl overflow-hidden border border-gray-800 shadow-inner relative">
-                {previewHlsUrl ? (
-                  <VideoPlayer src={previewHlsUrl} autoPlay={true} muted={true} />
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-gray-500">
-                    <Radio className="w-10 h-10 animate-pulse mb-2 text-indigo-500" />
-                    <p className="text-sm">Initiating low-latency preview stream...</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-[#182030] p-3 rounded-lg flex items-center justify-between text-xs text-gray-300">
-                <span className="font-mono text-[11px] text-gray-400 truncate">
-                  Stream URL: {previewHlsUrl}
-                </span>
-                <span className="text-[11px] text-indigo-300 bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800 shrink-0">
-                  Temporary in-browser session auto-terminates on close
-                </span>
-              </div>
+            <div className="p-4 bg-black">
+              {isPreviewLoading ? (
+                <div className="w-full aspect-video flex flex-col items-center justify-center text-gray-400 space-y-2">
+                  <RefreshCw className="w-6 h-6 animate-spin text-indigo-400" />
+                  <span className="text-xs font-mono">Initializing HLS Playout Stream...</span>
+                </div>
+              ) : previewHlsUrl ? (
+                <VideoPlayer src={previewHlsUrl} autoPlay={true} />
+              ) : (
+                <div className="w-full aspect-video flex items-center justify-center text-gray-500 text-xs">
+                  Stream unavailable
+                </div>
+              )}
             </div>
 
-            <div className="p-4 border-t border-gray-800 flex justify-end bg-[#151c2c]">
+            <div className="px-5 py-3 border-t border-gray-800 flex items-center justify-between bg-[#0d121c] text-xs text-gray-400">
+              <span className="font-mono truncate max-w-md">Source: {previewHlsUrl}</span>
               <button
                 onClick={handleClosePreview}
-                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                className="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-xs font-semibold"
               >
                 Close Preview
               </button>
