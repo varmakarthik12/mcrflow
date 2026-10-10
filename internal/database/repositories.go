@@ -489,11 +489,11 @@ func (r *Repository) CreateScheduleItem(s *models.ScheduleItem) error {
 
 	_, err := r.db.Exec(`
 		INSERT INTO schedules 
-		(id, channel_id, program_title, media_path, start_time, duration_seconds, end_time, tmdb_id, tmdb_poster, tmdb_overview, ad_template_id, audio_track_index, subtitle_track_index, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(id, channel_id, program_title, media_path, start_time, duration_seconds, end_time, tmdb_id, tmdb_poster, tmdb_overview, ad_template_id, special_promo_title, special_promo_subtext, audio_track_index, subtitle_track_index, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		s.ID, s.ChannelID, s.ProgramTitle, s.MediaPath, s.StartTime,
 		s.DurationSeconds, s.EndTime, s.TmdbID, s.TmdbPoster, s.TmdbOverview,
-		s.AdTemplateID, s.AudioTrackIndex, s.SubtitleTrackIndex, s.CreatedAt,
+		s.AdTemplateID, s.SpecialPromoTitle, s.SpecialPromoSubtext, s.AudioTrackIndex, s.SubtitleTrackIndex, s.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert schedule item: %w", err)
@@ -503,14 +503,14 @@ func (r *Repository) CreateScheduleItem(s *models.ScheduleItem) error {
 
 func (r *Repository) GetScheduleItemByID(id string) (*models.ScheduleItem, error) {
 	row := r.db.QueryRow(`
-		SELECT id, channel_id, program_title, media_path, start_time, duration_seconds, end_time, tmdb_id, tmdb_poster, tmdb_overview, ad_template_id, audio_track_index, subtitle_track_index, created_at
+		SELECT id, channel_id, program_title, media_path, start_time, duration_seconds, end_time, tmdb_id, tmdb_poster, tmdb_overview, ad_template_id, special_promo_title, special_promo_subtext, audio_track_index, subtitle_track_index, created_at
 		FROM schedules WHERE id = ?`, id)
 
 	s := &models.ScheduleItem{}
 	err := row.Scan(
 		&s.ID, &s.ChannelID, &s.ProgramTitle, &s.MediaPath, &s.StartTime,
 		&s.DurationSeconds, &s.EndTime, &s.TmdbID, &s.TmdbPoster, &s.TmdbOverview,
-		&s.AdTemplateID, &s.AudioTrackIndex, &s.SubtitleTrackIndex, &s.CreatedAt,
+		&s.AdTemplateID, &s.SpecialPromoTitle, &s.SpecialPromoSubtext, &s.AudioTrackIndex, &s.SubtitleTrackIndex, &s.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -525,7 +525,7 @@ func (r *Repository) GetScheduleItemByID(id string) (*models.ScheduleItem, error
 
 func (r *Repository) ListScheduleByChannel(channelID string) ([]models.ScheduleItem, error) {
 	rows, err := r.db.Query(`
-		SELECT id, channel_id, program_title, media_path, start_time, duration_seconds, end_time, tmdb_id, tmdb_poster, tmdb_overview, ad_template_id, audio_track_index, subtitle_track_index, created_at
+		SELECT id, channel_id, program_title, media_path, start_time, duration_seconds, end_time, tmdb_id, tmdb_poster, tmdb_overview, ad_template_id, special_promo_title, special_promo_subtext, audio_track_index, subtitle_track_index, created_at
 		FROM schedules WHERE channel_id = ? ORDER BY start_time ASC`, channelID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query schedule by channel: %w", err)
@@ -538,7 +538,7 @@ func (r *Repository) ListScheduleByChannel(channelID string) ([]models.ScheduleI
 		err := rows.Scan(
 			&s.ID, &s.ChannelID, &s.ProgramTitle, &s.MediaPath, &s.StartTime,
 			&s.DurationSeconds, &s.EndTime, &s.TmdbID, &s.TmdbPoster, &s.TmdbOverview,
-			&s.AdTemplateID, &s.AudioTrackIndex, &s.SubtitleTrackIndex, &s.CreatedAt,
+			&s.AdTemplateID, &s.SpecialPromoTitle, &s.SpecialPromoSubtext, &s.AudioTrackIndex, &s.SubtitleTrackIndex, &s.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan schedule item: %w", err)
@@ -555,7 +555,7 @@ func (r *Repository) ListScheduleByChannel(channelID string) ([]models.ScheduleI
 
 func (r *Repository) ListScheduleBetween(channelID string, start, end time.Time) ([]models.ScheduleItem, error) {
 	rows, err := r.db.Query(`
-		SELECT id, channel_id, program_title, media_path, start_time, duration_seconds, end_time, tmdb_id, tmdb_poster, tmdb_overview, ad_template_id, audio_track_index, subtitle_track_index, created_at
+		SELECT id, channel_id, program_title, media_path, start_time, duration_seconds, end_time, tmdb_id, tmdb_poster, tmdb_overview, ad_template_id, special_promo_title, special_promo_subtext, audio_track_index, subtitle_track_index, created_at
 		FROM schedules 
 		WHERE channel_id = ? AND start_time < ? AND end_time > ? 
 		ORDER BY start_time ASC`, channelID, end, start)
@@ -570,7 +570,7 @@ func (r *Repository) ListScheduleBetween(channelID string, start, end time.Time)
 		err := rows.Scan(
 			&s.ID, &s.ChannelID, &s.ProgramTitle, &s.MediaPath, &s.StartTime,
 			&s.DurationSeconds, &s.EndTime, &s.TmdbID, &s.TmdbPoster, &s.TmdbOverview,
-			&s.AdTemplateID, &s.AudioTrackIndex, &s.SubtitleTrackIndex, &s.CreatedAt,
+			&s.AdTemplateID, &s.SpecialPromoTitle, &s.SpecialPromoSubtext, &s.AudioTrackIndex, &s.SubtitleTrackIndex, &s.CreatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan schedule item: %w", err)
@@ -608,12 +608,14 @@ func (r *Repository) UpdateScheduleItem(s *models.ScheduleItem) error {
 	res, err := r.db.Exec(`
 		UPDATE schedules 
 		SET program_title = ?, media_path = ?, start_time = ?, duration_seconds = ?, end_time = ?,
-		    tmdb_id = ?, tmdb_poster = ?, tmdb_overview = ?, ad_template_id = ?, audio_track_index = ?,
-		    subtitle_track_index = ?
+		    tmdb_id = ?, tmdb_poster = ?, tmdb_overview = ?, ad_template_id = ?,
+		    special_promo_title = ?, special_promo_subtext = ?,
+		    audio_track_index = ?, subtitle_track_index = ?
 		WHERE id = ?`,
 		s.ProgramTitle, s.MediaPath, s.StartTime, s.DurationSeconds, s.EndTime,
-		s.TmdbID, s.TmdbPoster, s.TmdbOverview, s.AdTemplateID, s.AudioTrackIndex,
-		s.SubtitleTrackIndex, s.ID,
+		s.TmdbID, s.TmdbPoster, s.TmdbOverview, s.AdTemplateID,
+		s.SpecialPromoTitle, s.SpecialPromoSubtext,
+		s.AudioTrackIndex, s.SubtitleTrackIndex, s.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update schedule item: %w", err)
@@ -807,6 +809,21 @@ func (r *Repository) CreateAdTemplate(tmpl *models.AdTemplate) error {
 	if tmpl.ID == "" {
 		tmpl.ID = "tmpl-" + uuid.New().String()[:8]
 	}
+	if tmpl.LogoPosition == "" {
+		tmpl.LogoPosition = "top-right"
+	}
+	if tmpl.LogoOpacity <= 0 {
+		tmpl.LogoOpacity = 0.90
+	}
+	if tmpl.LogoFit == "" {
+		tmpl.LogoFit = "contain"
+	}
+	if tmpl.CollisionBehavior == "" {
+		tmpl.CollisionBehavior = "alternate"
+	}
+	if tmpl.AlternateDurationSeconds <= 0 {
+		tmpl.AlternateDurationSeconds = 15
+	}
 	tmpl.PackJSON()
 	now := time.Now().UTC()
 	tmpl.CreatedAt = now
@@ -819,9 +836,13 @@ func (r *Repository) CreateAdTemplate(tmpl *models.AdTemplate) error {
 
 	_, err := r.db.Exec(`
 		INSERT INTO ad_templates 
-		(id, name, template_type, overlay_elements_json, commercial_breaks_json, is_active, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		tmpl.ID, tmpl.Name, tmpl.TemplateType, tmpl.OverlayElementsJSON, tmpl.CommercialBreaksJSON, isActiveInt, tmpl.CreatedAt, tmpl.UpdatedAt,
+		(id, name, template_type, logo_path, logo_position, logo_x, logo_y, logo_width, logo_height, logo_opacity, logo_fit, overlay_elements_json, commercial_breaks_json, collision_behavior, alternate_duration_seconds, priority_order_json, general_layout_json, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		tmpl.ID, tmpl.Name, tmpl.TemplateType, tmpl.LogoPath, tmpl.LogoPosition,
+		tmpl.LogoX, tmpl.LogoY, tmpl.LogoWidth, tmpl.LogoHeight, tmpl.LogoOpacity, tmpl.LogoFit,
+		tmpl.OverlayElementsJSON, tmpl.CommercialBreaksJSON,
+		tmpl.CollisionBehavior, tmpl.AlternateDurationSeconds, tmpl.PriorityOrderJSON, tmpl.GeneralLayoutJSON,
+		isActiveInt, tmpl.CreatedAt, tmpl.UpdatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to insert ad template: %w", err)
@@ -831,14 +852,17 @@ func (r *Repository) CreateAdTemplate(tmpl *models.AdTemplate) error {
 
 func (r *Repository) GetAdTemplateByID(id string) (*models.AdTemplate, error) {
 	row := r.db.QueryRow(`
-		SELECT id, name, template_type, overlay_elements_json, commercial_breaks_json, is_active, created_at, updated_at
+		SELECT id, name, template_type, logo_path, logo_position, logo_x, logo_y, logo_width, logo_height, logo_opacity, logo_fit, overlay_elements_json, commercial_breaks_json, collision_behavior, alternate_duration_seconds, priority_order_json, general_layout_json, is_active, created_at, updated_at
 		FROM ad_templates WHERE id = ?`, id)
 
 	tmpl := &models.AdTemplate{}
 	var isActiveInt int
 	err := row.Scan(
-		&tmpl.ID, &tmpl.Name, &tmpl.TemplateType, &tmpl.OverlayElementsJSON,
-		&tmpl.CommercialBreaksJSON, &isActiveInt, &tmpl.CreatedAt, &tmpl.UpdatedAt,
+		&tmpl.ID, &tmpl.Name, &tmpl.TemplateType, &tmpl.LogoPath, &tmpl.LogoPosition,
+		&tmpl.LogoX, &tmpl.LogoY, &tmpl.LogoWidth, &tmpl.LogoHeight, &tmpl.LogoOpacity, &tmpl.LogoFit,
+		&tmpl.OverlayElementsJSON, &tmpl.CommercialBreaksJSON,
+		&tmpl.CollisionBehavior, &tmpl.AlternateDurationSeconds, &tmpl.PriorityOrderJSON, &tmpl.GeneralLayoutJSON,
+		&isActiveInt, &tmpl.CreatedAt, &tmpl.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -853,7 +877,7 @@ func (r *Repository) GetAdTemplateByID(id string) (*models.AdTemplate, error) {
 
 func (r *Repository) ListAdTemplates() ([]models.AdTemplate, error) {
 	rows, err := r.db.Query(`
-		SELECT id, name, template_type, overlay_elements_json, commercial_breaks_json, is_active, created_at, updated_at
+		SELECT id, name, template_type, logo_path, logo_position, logo_x, logo_y, logo_width, logo_height, logo_opacity, logo_fit, overlay_elements_json, commercial_breaks_json, collision_behavior, alternate_duration_seconds, priority_order_json, general_layout_json, is_active, created_at, updated_at
 		FROM ad_templates ORDER BY created_at ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query ad templates: %w", err)
@@ -865,8 +889,11 @@ func (r *Repository) ListAdTemplates() ([]models.AdTemplate, error) {
 		var tmpl models.AdTemplate
 		var isActiveInt int
 		err := rows.Scan(
-			&tmpl.ID, &tmpl.Name, &tmpl.TemplateType, &tmpl.OverlayElementsJSON,
-			&tmpl.CommercialBreaksJSON, &isActiveInt, &tmpl.CreatedAt, &tmpl.UpdatedAt,
+			&tmpl.ID, &tmpl.Name, &tmpl.TemplateType, &tmpl.LogoPath, &tmpl.LogoPosition,
+			&tmpl.LogoX, &tmpl.LogoY, &tmpl.LogoWidth, &tmpl.LogoHeight, &tmpl.LogoOpacity, &tmpl.LogoFit,
+			&tmpl.OverlayElementsJSON, &tmpl.CommercialBreaksJSON,
+			&tmpl.CollisionBehavior, &tmpl.AlternateDurationSeconds, &tmpl.PriorityOrderJSON, &tmpl.GeneralLayoutJSON,
+			&isActiveInt, &tmpl.CreatedAt, &tmpl.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan ad template: %w", err)
@@ -891,9 +918,9 @@ func (r *Repository) UpdateAdTemplate(tmpl *models.AdTemplate) error {
 
 	res, err := r.db.Exec(`
 		UPDATE ad_templates 
-		SET name = ?, template_type = ?, overlay_elements_json = ?, commercial_breaks_json = ?, is_active = ?, updated_at = ?
+		SET name = ?, template_type = ?, logo_path = ?, logo_position = ?, logo_x = ?, logo_y = ?, logo_width = ?, logo_height = ?, logo_opacity = ?, logo_fit = ?, overlay_elements_json = ?, commercial_breaks_json = ?, collision_behavior = ?, alternate_duration_seconds = ?, priority_order_json = ?, general_layout_json = ?, is_active = ?, updated_at = ?
 		WHERE id = ?`,
-		tmpl.Name, tmpl.TemplateType, tmpl.OverlayElementsJSON, tmpl.CommercialBreaksJSON, isActiveInt, tmpl.UpdatedAt, tmpl.ID,
+		tmpl.Name, tmpl.TemplateType, tmpl.LogoPath, tmpl.LogoPosition, tmpl.LogoX, tmpl.LogoY, tmpl.LogoWidth, tmpl.LogoHeight, tmpl.LogoOpacity, tmpl.LogoFit, tmpl.OverlayElementsJSON, tmpl.CommercialBreaksJSON, tmpl.CollisionBehavior, tmpl.AlternateDurationSeconds, tmpl.PriorityOrderJSON, tmpl.GeneralLayoutJSON, isActiveInt, tmpl.UpdatedAt, tmpl.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update ad template: %w", err)

@@ -32,6 +32,7 @@ type PlayoutConfig struct {
 	Loop              bool
 	ExtraArgs         []string
 	HLSOutputDir      string
+	EnablePreviewHLS  bool
 	ChannelID         string
 	DataDir           string
 	MediaDir          string
@@ -145,23 +146,6 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 				url:    fmt.Sprintf("%s?pkt_size=1316", targetURL),
 			})
 
-		case "srt":
-			if dst.Port > 0 && !strings.Contains(targetURL, fmt.Sprintf(":%d", dst.Port)) {
-				targetURL = fmt.Sprintf("%s:%d", targetURL, dst.Port)
-			}
-			mode := dst.Mode
-			if mode == "" {
-				mode = "caller"
-			}
-			latency := dst.LatencyMs
-			if latency <= 0 {
-				latency = 120
-			}
-			targets = append(targets, destTarget{
-				format: "mpegts",
-				url:    fmt.Sprintf("%s?mode=%s&latency=%d", targetURL, mode, latency),
-			})
-
 		case "rtmp":
 			if dst.StreamKey != "" {
 				targetURL = fmt.Sprintf("%s/%s", strings.TrimSuffix(targetURL, "/"), dst.StreamKey)
@@ -180,8 +164,15 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 		}
 	}
 
-	// Local HLS packaging if HLSOutputDir is specified
-	if cfg.HLSOutputDir != "" {
+	// Local HLS packaging if permanent HLS destination is enabled OR EnablePreviewHLS is explicitly requested
+	isHLSRequested := cfg.EnablePreviewHLS
+	for _, dst := range cfg.Destinations {
+		if dst.Enabled && strings.ToLower(dst.Type) == "hls" {
+			isHLSRequested = true
+			break
+		}
+	}
+	if isHLSRequested && cfg.HLSOutputDir != "" {
 		hasLocalHLS := false
 		for _, t := range targets {
 			if t.format == "hls" {
@@ -547,6 +538,13 @@ type PlayoutChannelState struct {
 	IsSlateActive         bool
 }
 
+// PreviewSession tracks an active temporary live HLS browser preview
+type PreviewSession struct {
+	ChannelID string
+	Cancel    context.CancelFunc
+	Cmd       *exec.Cmd
+}
+
 // Engine supervises active channel playout processes
 type Engine struct {
 	mu                 sync.RWMutex
@@ -555,6 +553,8 @@ type Engine struct {
 	adTemplateProvider AdTemplateProvider
 	mediaDir           string
 	dataDir            string
+	previewMu          sync.Mutex
+	previews           map[string]*PreviewSession
 }
 
 // NewEngine creates a new playout engine
@@ -569,6 +569,7 @@ func NewEngine(dirs ...string) *Engine {
 	}
 	return &Engine{
 		channels: make(map[string]*PlayoutChannelState),
+		previews: make(map[string]*PreviewSession),
 		mediaDir: mediaDir,
 		dataDir:  dataDir,
 	}
@@ -601,13 +602,114 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 		}
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	now := time.Now().UTC()
+
+	initialProg := programTitle
+	initialMedia := mediaPath
+	initialItemID := ""
+	initialRemaining := 3600
+	initialElapsed := 0
+
+	var activeSched *models.ScheduleItem
+	if e.scheduleProvider != nil {
+		if sched, _ := e.scheduleProvider.GetActiveProgram(ch.ID, now); sched != nil {
+			activeSched = sched
+			initialProg = sched.ProgramTitle
+			initialMedia = sched.MediaPath
+			initialItemID = sched.ID
+			initialElapsed = int(now.Sub(sched.StartTime).Seconds())
+			if initialElapsed < 0 {
+				initialElapsed = 0
+			}
+			initialRemaining = int(sched.EndTime.Sub(now).Seconds())
+			if initialRemaining < 0 {
+				initialRemaining = 0
+			}
+		}
+	}
+
+	if initialProg == "" {
+		initialProg = "Station Broadcast Intermission"
+	}
+
+	// 1. Resolve input media path
+	resolvedMedia := initialMedia
+	if resolvedMedia == "" {
+		resolvedMedia = "sample_movie.mp4"
+	}
+	if _, err := os.Stat(resolvedMedia); err != nil {
+		cand := filepath.Join(e.mediaDir, resolvedMedia)
+		if _, errCand := os.Stat(cand); errCand == nil {
+			resolvedMedia = cand
+		} else {
+			candSample := filepath.Join(e.mediaDir, "sample_movie.mp4")
+			if _, errSample := os.Stat(candSample); errSample == nil {
+				resolvedMedia = candSample
+			}
+		}
+	}
+
+	// 2. Resolve Ad & Layout Template
+	adTmplID := ch.AdTemplateID
+	if activeSched != nil && activeSched.AdTemplateID != "" {
+		adTmplID = activeSched.AdTemplateID
+	}
+
+	var activeTmpl *models.AdTemplate
+	if adTmplID != "" && e.adTemplateProvider != nil {
+		if tmpl, err := e.adTemplateProvider.GetTemplateByID(adTmplID); err == nil && tmpl != nil {
+			tmpl.ParseJSON()
+			activeTmpl = tmpl
+		}
+	}
+
+	// Resolve station logo from template (priority) or fallback to channel
 	logoPos := ch.LogoPosition
+	logoX := ch.LogoX
+	logoY := ch.LogoY
+	logoW := ch.LogoWidth
+	logoH := ch.LogoHeight
+	logoOpacity := ch.LogoOpacity
+	logoFit := ch.LogoFit
+	logoPath := ch.LogoPath
+
+	if activeTmpl != nil {
+		if activeTmpl.LogoPath != "" {
+			logoPath = activeTmpl.LogoPath
+		}
+		if activeTmpl.LogoPosition != "" {
+			logoPos = activeTmpl.LogoPosition
+		}
+		if activeTmpl.LogoX > 0 || activeTmpl.LogoY > 0 {
+			logoX = activeTmpl.LogoX
+			logoY = activeTmpl.LogoY
+		}
+		if activeTmpl.LogoWidth > 0 {
+			logoW = activeTmpl.LogoWidth
+		}
+		if activeTmpl.LogoHeight > 0 {
+			logoH = activeTmpl.LogoHeight
+		}
+		if activeTmpl.LogoOpacity > 0 {
+			logoOpacity = activeTmpl.LogoOpacity
+		}
+		if activeTmpl.LogoFit != "" {
+			logoFit = activeTmpl.LogoFit
+		}
+	}
+
 	if logoPos == "" {
 		logoPos = "top-right"
 	}
+	if logoOpacity <= 0 || logoOpacity > 1.0 {
+		logoOpacity = 0.90
+	}
+	if logoFit == "" {
+		logoFit = "contain"
+	}
 
-	// 1. Resolve logo file
-	resolvedLogo := ch.LogoPath
+	resolvedLogo := logoPath
 	if resolvedLogo != "" {
 		if _, err := os.Stat(resolvedLogo); err != nil {
 			cand := filepath.Join(e.dataDir, "logos", filepath.Base(resolvedLogo))
@@ -627,92 +729,91 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	now := time.Now().UTC()
-
-	initialProg := programTitle
-	initialMedia := mediaPath
-	initialItemID := ""
-	initialRemaining := 3600
-	initialElapsed := 0
-
-	if e.scheduleProvider != nil {
-		if sched, _ := e.scheduleProvider.GetActiveProgram(ch.ID, now); sched != nil {
-			initialProg = sched.ProgramTitle
-			initialMedia = sched.MediaPath
-			initialItemID = sched.ID
-			initialElapsed = int(now.Sub(sched.StartTime).Seconds())
-			if initialElapsed < 0 {
-				initialElapsed = 0
-			}
-			initialRemaining = int(sched.EndTime.Sub(now).Seconds())
-			if initialRemaining < 0 {
-				initialRemaining = 0
-			}
-		}
-	}
-
-	// 2. Resolve input media path
-	resolvedMedia := initialMedia
-	if resolvedMedia == "" {
-		resolvedMedia = "sample_movie.mp4"
-	}
-	if _, err := os.Stat(resolvedMedia); err != nil {
-		cand := filepath.Join(e.mediaDir, resolvedMedia)
-		if _, errCand := os.Stat(cand); errCand == nil {
-			resolvedMedia = cand
-		} else {
-			candSample := filepath.Join(e.mediaDir, "sample_movie.mp4")
-			if _, errSample := os.Stat(candSample); errSample == nil {
-				resolvedMedia = candSample
-			}
-		}
-	}
-
-	hlsDir := filepath.Join(e.dataDir, "hls", ch.ID)
-	_ = os.MkdirAll(hlsDir, 0755)
-
-	// Combine overlays: channel overlays + ad template overlays
+	// 3. Resolve Overlays & Dynamic "Now Playing", "Up Next", and "Special Promo"
 	var effectiveOverlays []models.OverlayElement
-	ch.ParseOverlays()
-	effectiveOverlays = append(effectiveOverlays, ch.Overlays...)
-
-	adTmplID := ch.AdTemplateID
-	if e.scheduleProvider != nil {
-		if sched, _ := e.scheduleProvider.GetActiveProgram(ch.ID, now); sched != nil && sched.AdTemplateID != "" {
-			adTmplID = sched.AdTemplateID
+	if activeTmpl != nil && len(activeTmpl.OverlayElements) > 0 {
+		for _, elem := range activeTmpl.OverlayElements {
+			if elem.IsActive {
+				effectiveOverlays = append(effectiveOverlays, elem)
+			}
 		}
+	} else {
+		ch.ParseOverlays()
+		effectiveOverlays = append(effectiveOverlays, ch.Overlays...)
 	}
 
-	if adTmplID != "" && e.adTemplateProvider != nil {
-		if tmpl, err := e.adTemplateProvider.GetTemplateByID(adTmplID); err == nil && tmpl != nil {
-			tmpl.ParseJSON()
-			for _, elem := range tmpl.OverlayElements {
-				if elem.IsActive {
-					effectiveOverlays = append(effectiveOverlays, elem)
+	var nextSched *models.ScheduleItem
+	if e.scheduleProvider != nil {
+		nextSched, _ = e.scheduleProvider.GetNextProgram(ch.ID, now)
+	}
+
+	hasNowPlaying := false
+	hasUpNext := false
+	hasPromo := false
+
+	for i := range effectiveOverlays {
+		switch strings.ToLower(effectiveOverlays[i].Type) {
+		case "now_playing":
+			hasNowPlaying = true
+			if initialProg != "" {
+				effectiveOverlays[i].Text = initialProg
+			}
+			if activeSched != nil && activeSched.TmdbOverview != "" {
+				effectiveOverlays[i].SubText = activeSched.TmdbOverview
+			}
+		case "up_next":
+			hasUpNext = true
+			if nextSched != nil {
+				effectiveOverlays[i].Text = nextSched.ProgramTitle
+				effectiveOverlays[i].SubText = fmt.Sprintf("STARTS %s", nextSched.StartTime.Format("15:04"))
+			} else {
+				effectiveOverlays[i].Text = "Coming Up: Scheduled Programs"
+			}
+		case "promo":
+			hasPromo = true
+			if activeSched != nil && activeSched.SpecialPromoTitle != "" {
+				effectiveOverlays[i].Text = activeSched.SpecialPromoTitle
+				if activeSched.SpecialPromoSubtext != "" {
+					effectiveOverlays[i].SubText = activeSched.SpecialPromoSubtext
 				}
 			}
 		}
 	}
 
-	logoOpacity := ch.LogoOpacity
-	if logoOpacity <= 0 || logoOpacity > 1.0 {
-		logoOpacity = 0.90
+	// Inject Special Promo if schedule item has it and template doesn't already have a promo element
+	if !hasPromo && activeSched != nil && activeSched.SpecialPromoTitle != "" {
+		effectiveOverlays = append(effectiveOverlays, models.OverlayElement{
+			ID:                "auto-promo",
+			Type:              "promo",
+			Text:              activeSched.SpecialPromoTitle,
+			SubText:           activeSched.SpecialPromoSubtext,
+			X:                 1460,
+			Y:                 840,
+			Width:             400,
+			Height:            95,
+			BackgroundColor:   "purple@0.85",
+			TextColor:         "gold",
+			FontSize:          18,
+			EntranceAnimation: "zoom_in",
+			IsActive:          true,
+		})
 	}
-	logoFit := ch.LogoFit
-	if logoFit == "" {
-		logoFit = "contain"
-	}
+
+	_ = hasNowPlaying
+	_ = hasUpNext
+
+	hlsDir := filepath.Join(e.dataDir, "hls", ch.ID)
+	_ = os.MkdirAll(hlsDir, 0755)
 
 	cfg := PlayoutConfig{
 		InputMedia:        resolvedMedia,
 		Resolution:        res,
 		LogoPath:          resolvedLogo,
 		LogoPosition:      logoPos,
-		LogoX:             ch.LogoX,
-		LogoY:             ch.LogoY,
-		LogoWidth:         ch.LogoWidth,
-		LogoHeight:        ch.LogoHeight,
+		LogoX:             logoX,
+		LogoY:             logoY,
+		LogoWidth:         logoW,
+		LogoHeight:        logoH,
 		LogoOpacity:       logoOpacity,
 		LogoFit:           logoFit,
 		Overlays:          effectiveOverlays,
@@ -914,3 +1015,89 @@ func (e *Engine) GetStatus(channelID string) models.PlayoutStatus {
 		UpdatedAt: time.Now().UTC(),
 	}
 }
+
+// StartPreview starts a temporary live HLS preview for a channel if HLS is not already a permanent destination
+func (e *Engine) StartPreview(ch models.Channel, res models.ResolutionPreset) (bool, error) {
+	e.previewMu.Lock()
+	defer e.previewMu.Unlock()
+
+	// Check if HLS is already a permanently enabled destination
+	for _, dst := range ch.Destinations {
+		if dst.Enabled && strings.ToLower(dst.Type) == "hls" {
+			// Permanent HLS destination is already active or handled by main playout
+			return false, nil // isTemporary = false
+		}
+	}
+
+	// Check if a temporary preview is already active
+	if existing, ok := e.previews[ch.ID]; ok && existing != nil {
+		return true, nil // isTemporary = true, already running
+	}
+
+	// Start a temporary preview stream
+	hlsDir := filepath.Join(e.dataDir, "hls", ch.ID)
+	_ = os.MkdirAll(hlsDir, 0755)
+
+	// Determine input media from active schedule or fallback
+	inputMedia := filepath.Join(e.mediaDir, "sample_movie.mp4")
+	if e.scheduleProvider != nil {
+		if sched, _ := e.scheduleProvider.GetActiveProgram(ch.ID, time.Now().UTC()); sched != nil && sched.MediaPath != "" {
+			inputMedia = sched.MediaPath
+		}
+	}
+	if _, err := os.Stat(inputMedia); err != nil {
+		inputMedia = filepath.Join(e.mediaDir, filepath.Base(inputMedia))
+	}
+
+	previewCfg := PlayoutConfig{
+		InputMedia:       inputMedia,
+		Resolution:       res,
+		EnablePreviewHLS:  true,
+		HLSOutputDir:     hlsDir,
+		Loop:             true,
+		ChannelID:        ch.ID,
+		DataDir:          e.dataDir,
+		MediaDir:         e.mediaDir,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	sess := &PreviewSession{
+		ChannelID: ch.ID,
+		Cancel:    cancel,
+	}
+
+	if ffmpegPath, err := exec.LookPath("ffmpeg"); err == nil {
+		args, err := BuildFFmpegArgs(previewCfg)
+		if err == nil {
+			cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+			if err := cmd.Start(); err == nil {
+				sess.Cmd = cmd
+				go func() {
+					_ = cmd.Wait()
+				}()
+			}
+		}
+	}
+
+	e.previews[ch.ID] = sess
+	return true, nil // isTemporary = true
+}
+
+// StopPreview stops the temporary live HLS preview for a channel if one is active
+func (e *Engine) StopPreview(channelID string) bool {
+	e.previewMu.Lock()
+	defer e.previewMu.Unlock()
+
+	if sess, ok := e.previews[channelID]; ok && sess != nil {
+		if sess.Cancel != nil {
+			sess.Cancel()
+		}
+		if sess.Cmd != nil && sess.Cmd.Process != nil {
+			_ = sess.Cmd.Process.Kill()
+		}
+		delete(e.previews, channelID)
+		return true
+	}
+	return false
+}
+

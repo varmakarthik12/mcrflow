@@ -18,9 +18,34 @@ import {
   ArrowRight,
   ShieldAlert,
   Loader2,
-  ChevronRight
+  ChevronRight,
+  Sparkles,
+  Layers,
+  Radio,
+  Tv,
+  Eye,
+  Tag
 } from 'lucide-react';
 import { api } from '../api';
+
+const PROMO_PRESETS = [
+  { title: "Diwali Movie Festival Premiere", subtext: "Exclusive 4K Broadcast This Weekend" },
+  { title: "Weekend Mega Blockbuster", subtext: "Commercial-Free Television Event" },
+  { title: "Director's Special Cut", subtext: "Original Theatrical Version In Dolby Atmos" },
+  { title: "Live Sports Special Highlights", subtext: "Action Recap & Expert Analysis" },
+  { title: "Prime Time Super Premiere", subtext: "Streaming In High Definition Tonight" }
+];
+
+const getFallbackPoster = (title = "Broadcast Feature", year = "") => {
+  const initials = (title || "MCR")
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() || "")
+    .join("") || "TV";
+  const safeTitle = (title || "").slice(0, 22);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 450" width="300" height="450"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#0f172a"/></linearGradient></defs><rect width="300" height="450" fill="url(#g)" rx="12"/><circle cx="150" cy="180" r="54" fill="#3b82f6" opacity="0.25"/><text x="150" y="195" font-family="system-ui, sans-serif" font-size="40" font-weight="bold" fill="#60a5fa" text-anchor="middle">${initials}</text><text x="150" y="280" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" fill="#f8fafc" text-anchor="middle">${safeTitle}</text><text x="150" y="310" font-family="system-ui, sans-serif" font-size="14" fill="#94a3b8" text-anchor="middle">${year}</text></svg>`;
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+};
 
 export function ScheduleScreen({
   channels = [],
@@ -38,12 +63,19 @@ export function ScheduleScreen({
   const [fileFilterQuery, setFileFilterQuery] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
 
+  // Multi-Day Date Navigation State
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+
   // Form State
   const [title, setTitle] = useState("");
   const [startTime, setStartTime] = useState("16:00:00");
   const [duration, setDuration] = useState("02:15:00");
   const [endTime, setEndTime] = useState("18:15:00");
   const [selectedAdTemplateId, setSelectedAdTemplateId] = useState("");
+  const [specialPromoTitle, setSpecialPromoTitle] = useState("");
+  const [specialPromoSubtext, setSpecialPromoSubtext] = useState("");
+  const [showPromoSuggestions, setShowPromoSuggestions] = useState(false);
 
   // TMDb Typeahead State
   const [tmdbQuery, setTmdbQuery] = useState("");
@@ -52,11 +84,20 @@ export function ScheduleScreen({
   const [isSearchingTmdb, setIsSearchingTmdb] = useState(false);
   const [tmdbResult, setTmdbResult] = useState(null);
   const tmdbRef = useRef(null);
+  const promoRef = useRef(null);
 
   // Conflict State
   const [conflictReport, setConflictReport] = useState(null);
   const [isCheckingConflict, setIsCheckingConflict] = useState(false);
   const [selectedConflictAction, setSelectedConflictAction] = useState(""); // RIPPLE, ADJUST_START, ADJUST_END, FORCE_PREEMPT
+
+  // Auto-Fill Gaps Modal State
+  const [isGapModalOpen, setIsGapModalOpen] = useState(false);
+  const [detectedGaps, setDetectedGaps] = useState([]);
+  const [isDetectingGaps, setIsDetectingGaps] = useState(false);
+  const [isFillingGaps, setIsFillingGaps] = useState(false);
+  const [fillerTitle, setFillerTitle] = useState("Station Intermission & Reel");
+  const [fillerMedia, setFillerMedia] = useState("sample_movie.mp4");
 
   // Browse files when modal opens or path changes
   useEffect(() => {
@@ -89,19 +130,20 @@ export function ScheduleScreen({
     } catch (e) {}
   }, [startTime, duration]);
 
-  // Check conflicts whenever channel, start time, or duration changes
+  // Check conflicts whenever channel, date, start time, or duration changes
   useEffect(() => {
     if (!isModalOpen || !activeChannelId) return;
 
     const timer = setTimeout(async () => {
       try {
         setIsCheckingConflict(true);
-        const now = new Date();
+        const [year, month, day] = selectedDate.split('-').map(Number);
         const sParts = startTime.split(':').map(Number);
         const dParts = duration.split(':').map(Number);
         const durSecs = (dParts[0] || 0) * 3600 + (dParts[1] || 0) * 60 + (dParts[2] || 0);
-        const startIso = new Date(now.getFullYear(), now.getMonth(), now.getDate(), sParts[0] || 0, sParts[1] || 0, sParts[2] || 0).toISOString();
-        const endIso = new Date(new Date(startIso).getTime() + durSecs * 1000).toISOString();
+        const startDate = new Date(Date.UTC(year, month - 1, day, sParts[0] || 0, sParts[1] || 0, sParts[2] || 0));
+        const startIso = startDate.toISOString();
+        const endIso = new Date(startDate.getTime() + durSecs * 1000).toISOString();
 
         const report = await api.checkScheduleConflicts({
           channel_id: activeChannelId,
@@ -116,7 +158,6 @@ export function ScheduleScreen({
           setConflictReport(null);
         }
       } catch (err) {
-        // Fallback local check
         checkLocalConflicts();
       } finally {
         setIsCheckingConflict(false);
@@ -124,15 +165,15 @@ export function ScheduleScreen({
     }, 200);
 
     return () => clearTimeout(timer);
-  }, [isModalOpen, activeChannelId, startTime, duration]);
+  }, [isModalOpen, activeChannelId, selectedDate, startTime, duration]);
 
   const checkLocalConflicts = () => {
     try {
-      const now = new Date();
+      const [year, month, day] = selectedDate.split('-').map(Number);
       const sParts = startTime.split(':').map(Number);
       const dParts = duration.split(':').map(Number);
       const durSecs = (dParts[0] || 0) * 3600 + (dParts[1] || 0) * 60 + (dParts[2] || 0);
-      const sMs = new Date(now.getFullYear(), now.getMonth(), now.getDate(), sParts[0] || 0, sParts[1] || 0, sParts[2] || 0).getTime();
+      const sMs = Date.UTC(year, month - 1, day, sParts[0] || 0, sParts[1] || 0, sParts[2] || 0);
       const eMs = sMs + durSecs * 1000;
 
       const collisions = scheduleItems.filter(it => {
@@ -154,11 +195,14 @@ export function ScheduleScreen({
     } catch (e) {}
   };
 
-  // Close TMDb dropdown on outside click
+  // Close TMDb and Promo dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event) {
       if (tmdbRef.current && !tmdbRef.current.contains(event.target)) {
         setIsTmdbDropdownOpen(false);
+      }
+      if (promoRef.current && !promoRef.current.contains(event.target)) {
+        setShowPromoSuggestions(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -237,7 +281,7 @@ export function ScheduleScreen({
     onShowToast(`Enriched metadata with TMDb hit: "${hit.title}"`, "info");
   };
 
-  // Conflict Resolution Action Buttons
+  // Conflict Resolution Action Handlers
   const handleSnapStartTime = () => {
     if (!conflictReport?.suggested_start) return;
     try {
@@ -280,24 +324,27 @@ export function ScheduleScreen({
     const durParts = duration.split(':').map(Number);
     const durSecs = (durParts[0] || 0) * 3600 + (durParts[1] || 0) * 60 + (durParts[2] || 0);
 
-    const now = new Date();
+    const [year, month, day] = selectedDate.split('-').map(Number);
     const sParts = startTime.split(':').map(Number);
-    const startIso = new Date(now.getFullYear(), now.getMonth(), now.getDate(), sParts[0] || 0, sParts[1] || 0, sParts[2] || 0).toISOString();
-    const endIso = new Date(new Date(startIso).getTime() + durSecs * 1000).toISOString();
+    const startDate = new Date(Date.UTC(year, month - 1, day, sParts[0] || 0, sParts[1] || 0, sParts[2] || 0));
+    const startIso = startDate.toISOString();
+    const endIso = new Date(startDate.getTime() + durSecs * 1000).toISOString();
 
     const payload = {
       item: {
         channel_id: activeChannelId,
         program_title: title,
         title: title,
-        media_path: selectedFile?.path || selectedFile?.relative_path || selectedFile?.name || "sample_broadcast_promo.mp4",
-        media_file_path: selectedFile?.path || selectedFile?.relative_path || selectedFile?.name || "sample_broadcast_promo.mp4",
+        media_path: selectedFile?.path || selectedFile?.relative_path || selectedFile?.name || "sample_movie.mp4",
+        media_file_path: selectedFile?.path || selectedFile?.relative_path || selectedFile?.name || "sample_movie.mp4",
         start_time: startIso,
         duration_seconds: durSecs,
         end_time: endIso,
         ad_template_id: selectedAdTemplateId || "",
-        tmdb_id: tmdbResult?.id || tmdbResult?.tmdb_id || "",
-        tmdb_poster: tmdbResult?.poster_path || tmdbResult?.poster_url || "",
+        special_promo_title: specialPromoTitle.trim(),
+        special_promo_subtext: specialPromoSubtext.trim(),
+        tmdb_id: tmdbResult?.id || "",
+        tmdb_poster: tmdbResult?.poster_path || getFallbackPoster(title, selectedDate.slice(0, 4)),
         tmdb_overview: tmdbResult?.overview || "Broadcast linear program event.",
         tmdb_metadata: tmdbResult || {
           title: title,
@@ -309,10 +356,12 @@ export function ScheduleScreen({
 
     try {
       await api.createScheduleItem(payload);
-      onShowToast(`Scheduled "${title}" successfully!`, "success");
+      onShowToast(`Scheduled "${title}" on ${selectedDate} successfully!`, "success");
       setIsModalOpen(false);
       setConflictReport(null);
       setSelectedConflictAction("");
+      setSpecialPromoTitle("");
+      setSpecialPromoSubtext("");
       onRefreshSchedule(activeChannelId);
     } catch (err) {
       if (err.status === 409 && err.data) {
@@ -340,11 +389,79 @@ export function ScheduleScreen({
     onShowToast("Exporting DVB-SI / XMLTV schedule feed", "info");
   };
 
+  // Gap Detection & Auto-Fill
+  const handleOpenGapModal = async () => {
+    setIsGapModalOpen(true);
+    setIsDetectingGaps(true);
+    try {
+      const [y, m, d] = selectedDate.split('-').map(Number);
+      const startDay = new Date(Date.UTC(y, m - 1, d, 0, 0, 0)).toISOString();
+      const endDay = new Date(Date.UTC(y, m - 1, d, 23, 59, 59)).toISOString();
+      const gaps = await api.getScheduleGaps(activeChannelId, startDay, endDay);
+      setDetectedGaps(Array.isArray(gaps) ? gaps : []);
+    } catch (e) {
+      onShowToast("Failed to detect schedule gaps: " + e.message, "error");
+    } finally {
+      setIsDetectingGaps(false);
+    }
+  };
+
+  const handleAutoFillGaps = async () => {
+    setIsFillingGaps(true);
+    try {
+      const [y, m, d] = selectedDate.split('-').map(Number);
+      const startDay = new Date(Date.UTC(y, m - 1, d, 0, 0, 0)).toISOString();
+      const endDay = new Date(Date.UTC(y, m - 1, d, 23, 59, 59)).toISOString();
+
+      const res = await api.autoFillGaps({
+        channel_id: activeChannelId,
+        start_time: startDay,
+        end_time: endDay,
+        filler_title: fillerTitle,
+        filler_media: fillerMedia
+      });
+
+      onShowToast(`Auto-filled ${res.filled_count || detectedGaps.length} schedule gap(s) successfully!`, "success");
+      setIsGapModalOpen(false);
+      onRefreshSchedule(activeChannelId);
+    } catch (e) {
+      onShowToast("Failed to auto-fill gaps: " + e.message, "error");
+    } finally {
+      setIsFillingGaps(false);
+    }
+  };
+
+  // Now Playing & Up Next Automation Calculation
+  const nowMs = Date.now();
+  const sortedItems = [...scheduleItems].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+  const activeNowItem = sortedItems.find((it) => {
+    const s = new Date(it.start_time).getTime();
+    const e = new Date(it.end_time).getTime();
+    return s <= nowMs && e > nowMs;
+  });
+  const upcomingNextItem = sortedItems.find((it) => new Date(it.start_time).getTime() > nowMs);
+
+  // Filter schedule items for selectedDate
+  const dayItems = sortedItems.filter((it) => {
+    if (!it.start_time) return false;
+    const itDate = new Date(it.start_time).toISOString().slice(0, 10);
+    return itDate === selectedDate;
+  });
+
+  // Multi-day quick date navigation pills
+  const datePills = [0, 1, 2, 3, 4, 5, 6].map((offset) => {
+    const d = new Date();
+    d.setDate(d.getDate() + offset);
+    const iso = d.toISOString().slice(0, 10);
+    const label = offset === 0 ? "Today" : offset === 1 ? "Tomorrow" : d.toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+    return { date: iso, label };
+  });
+
   return (
     <div className="w-full flex-1 flex flex-col p-3 sm:p-4 md:p-6 space-y-4 max-w-full">
       {/* Top Scheduling Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 bg-[#111827] border border-[#1F2937] p-3 rounded-lg shadow-sm">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0 bg-[#111827] border border-[#1F2937] p-3 rounded-xl shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <Calendar className="w-5 h-5 text-indigo-400 shrink-0" />
             <div>
@@ -352,7 +469,7 @@ export function ScheduleScreen({
                 {t('sched.title') || "24/7 Playout Schedule & EPG Master"}
               </h2>
               <p className="text-[11px] text-gray-400">
-                {t('sched.subtitle') || "Linear playlists, TMDb metadata & conflict resolution"}
+                Multi-day linear timeline, TMDb enrichment, promotions & gap auto-fill
               </p>
             </div>
           </div>
@@ -362,7 +479,7 @@ export function ScheduleScreen({
           <select
             value={activeChannelId}
             onChange={(e) => onSwitchChannel(e.target.value)}
-            className="w-full sm:w-auto bg-[#1F2937] border border-gray-700 text-xs text-white rounded px-2.5 py-1.5 font-medium focus:outline-none focus:border-indigo-500"
+            className="bg-[#1F2937] border border-gray-700 text-xs text-white rounded-lg px-2.5 py-1.5 font-medium focus:outline-none focus:border-indigo-500"
           >
             {channels.map((ch) => (
               <option key={ch.id} value={ch.id}>
@@ -372,21 +489,35 @@ export function ScheduleScreen({
           </select>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
+        {/* Action Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Auto-Fill Gaps Button */}
+          <button
+            onClick={handleOpenGapModal}
+            className="px-3 py-1.5 bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-800/70 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Detect and auto-fill unprogrammed schedule slots"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span>Auto-Fill Gaps</span>
+          </button>
+
+          {/* Add Media Button */}
           <button
             onClick={() => {
               setIsModalOpen(true);
               setConflictReport(null);
               setSelectedConflictAction("");
             }}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded text-white shadow-sm flex items-center gap-1.5 transition-colors"
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold rounded-lg text-white shadow-sm flex items-center gap-1.5 transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>+ Add Media</span>
+            <span>+ Add Media to Schedule</span>
           </button>
+
+          {/* Export XMLTV Button */}
           <button
             onClick={handleExportXmltv}
-            className="px-3 py-1.5 bg-[#1F2937] hover:bg-[#374151] text-xs font-medium rounded text-gray-200 border border-gray-700 flex items-center gap-1.5 transition-colors"
+            className="px-3 py-1.5 bg-[#1F2937] hover:bg-[#374151] text-xs font-medium rounded-lg text-gray-200 border border-gray-700 flex items-center gap-1.5 transition-colors"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export XMLTV</span>
@@ -394,42 +525,76 @@ export function ScheduleScreen({
         </div>
       </div>
 
-      {/* 24-Hour Visual Schedule Bar */}
-      <div className="bg-[#111827] border border-[#1F2937] rounded-lg p-3 shrink-0 space-y-2">
-        <div className="flex items-center justify-between text-[11px] font-mono text-gray-400">
-          <span>00:00:00</span>
-          <span>06:00:00</span>
-          <span>12:00:00</span>
-          <span className="text-emerald-400 font-bold underline">16:15:00 (ON-AIR NOW)</span>
-          <span>20:00:00</span>
-          <span>23:59:59</span>
+      {/* Dynamic Playout Status Strip (Derived from Active Schedule) */}
+      <div className="bg-[#101726] border border-blue-900/40 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+            <span className="font-bold text-gray-400 uppercase tracking-wider text-[11px]">Now On-Air:</span>
+            {activeNowItem ? (
+              <span className="font-bold text-white bg-red-950/80 px-2 py-0.5 rounded border border-red-800 text-red-200">
+                {activeNowItem.program_title}
+              </span>
+            ) : (
+              <span className="text-gray-500 italic">Intermission Playout Reel</span>
+            )}
+          </div>
+          <div className="hidden md:block h-4 w-px bg-gray-800"></div>
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-gray-400 uppercase tracking-wider text-[11px]">Up Next:</span>
+            {upcomingNextItem ? (
+              <span className="font-semibold text-amber-200 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/80">
+                {upcomingNextItem.program_title} (Starts {new Date(upcomingNextItem.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+              </span>
+            ) : (
+              <span className="text-gray-500 italic">No scheduled upcoming queue</span>
+            )}
+          </div>
         </div>
-        <div className="h-6 w-full bg-gray-900 rounded flex overflow-hidden border border-gray-800 text-[10px] font-bold text-white select-none">
-          <div style={{ width: '25%' }} className="bg-blue-700/80 flex items-center justify-center truncate px-1 border-r border-gray-900">
-            Morning Classics
-          </div>
-          <div style={{ width: '15%' }} className="bg-indigo-700/80 flex items-center justify-center truncate px-1 border-r border-gray-900">
-            News Live
-          </div>
-          <div style={{ width: '28%' }} className="bg-amber-600/80 flex items-center justify-center truncate px-1 border-r border-gray-900">
-            Blockbuster Cinema
-          </div>
-          <div style={{ width: '18%' }} className="bg-emerald-600 flex items-center justify-center truncate px-1 border-r border-gray-900 animate-pulse">
-            ▶ On-Air Feature
-          </div>
-          <div style={{ width: '14%' }} className="bg-blue-700/80 flex items-center justify-center truncate px-1 border-r border-gray-900">
-            Prime Special
-          </div>
+
+        <div className="text-[11px] text-gray-400 font-mono">
+          Single Source of Truth: Automated Master Playout
         </div>
       </div>
 
-      {/* Schedule Items List */}
-      <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-lg p-4 space-y-3 overflow-y-auto">
+      {/* Multi-Day Navigation Bar */}
+      <div className="bg-[#111827] border border-[#1F2937] rounded-xl p-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mr-2">Timeline Date:</span>
+          {datePills.map((pill) => (
+            <button
+              key={pill.date}
+              onClick={() => setSelectedDate(pill.date)}
+              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                selectedDate === pill.date
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-900/30"
+                  : "bg-gray-800/80 hover:bg-gray-700 text-gray-300"
+              }`}
+            >
+              {pill.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Custom Date Picker Input */}
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-gray-400">Custom Date:</label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="bg-[#1F2937] border border-gray-700 text-xs text-white rounded-lg px-2.5 py-1 font-mono focus:outline-none focus:border-blue-500"
+          />
+        </div>
+      </div>
+
+      {/* Schedule Items List for Selected Day */}
+      <div className="flex-1 bg-[#111827] border border-[#1F2937] rounded-xl p-4 space-y-3 overflow-y-auto">
         <div className="flex items-center justify-between border-b border-gray-800 pb-2">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-gray-400" />
             <h3 className="text-xs font-bold text-gray-200 uppercase tracking-wider">
-              Channel Broadcast Events ({scheduleItems.length})
+              Broadcast Events for {selectedDate} ({dayItems.length})
             </h3>
           </div>
           <span className="text-[11px] font-mono text-gray-400">
@@ -438,62 +603,100 @@ export function ScheduleScreen({
         </div>
 
         <div className="space-y-2">
-          {scheduleItems.length === 0 ? (
-            <div className="text-center py-12 text-gray-500 font-mono text-xs">
-              No programs scheduled on this channel. Click "+ Add Media / Schedule Movie" above to add.
+          {dayItems.length === 0 ? (
+            <div className="text-center py-14 text-gray-500 font-mono text-xs space-y-3">
+              <p>No programs scheduled on {selectedDate}.</p>
+              <div className="flex justify-center gap-2">
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="px-3 py-1.5 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-lg text-xs font-semibold"
+                >
+                  + Add Media to {selectedDate}
+                </button>
+                <button
+                  onClick={handleOpenGapModal}
+                  className="px-3 py-1.5 bg-amber-950/60 hover:bg-amber-900 text-amber-300 border border-amber-800 rounded-lg text-xs font-semibold"
+                >
+                  Auto-Fill Gaps for {selectedDate}
+                </button>
+              </div>
             </div>
           ) : (
-            scheduleItems.map((item) => {
-              const startStr = item.start_time ? new Date(item.start_time).toLocaleTimeString() : "16:00:00";
-              const endStr = item.end_time ? new Date(item.end_time).toLocaleTimeString() : "18:15:00";
+            dayItems.map((item) => {
+              const startStr = item.start_time ? new Date(item.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "16:00:00";
+              const endStr = item.end_time ? new Date(item.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : "18:15:00";
               const durMinutes = Math.floor((item.duration_seconds || 3600) / 60);
+
+              const isItemActiveNow = activeNowItem && activeNowItem.id === item.id;
+              const isItemNext = upcomingNextItem && upcomingNextItem.id === item.id;
 
               return (
                 <div
                   key={item.id}
-                  className="bg-[#1F2937] hover:bg-[#253045] border border-gray-700/80 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all"
+                  className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 rounded-xl border transition-all gap-3 ${
+                    isItemActiveNow
+                      ? "bg-[#1f1322] border-red-600/80 shadow-md shadow-red-950/40"
+                      : isItemNext
+                      ? "bg-[#1d1f2b] border-amber-600/80 shadow-md shadow-amber-950/40"
+                      : "bg-[#182030]/60 border-gray-800 hover:border-gray-700"
+                  }`}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    {/* Poster thumbnail or film icon */}
-                    {item.tmdb_poster ? (
+                  <div className="flex items-center gap-3.5 w-full sm:w-auto">
+                    {/* Poster Thumbnail */}
+                    <div className="w-12 h-16 bg-gray-900 rounded-lg overflow-hidden border border-gray-800 shrink-0 relative">
                       <img
-                        src={item.tmdb_poster}
-                        alt="Poster"
-                        className="w-10 h-14 object-cover rounded shadow border border-gray-700 shrink-0"
+                        src={item.tmdb_poster || getFallbackPoster(item.program_title)}
+                        alt={item.program_title}
+                        onError={(e) => {
+                          e.currentTarget.src = getFallbackPoster(item.program_title);
+                        }}
+                        className="w-full h-full object-cover"
                       />
-                    ) : (
-                      <div className="w-10 h-14 bg-gray-800 border border-gray-700 rounded flex items-center justify-center shrink-0 text-gray-500">
-                        <Film className="w-5 h-5 text-indigo-400" />
-                      </div>
-                    )}
+                    </div>
 
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-white text-xs truncate">
-                          {item.program_title || item.title || "Untitled Program"}
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-bold text-white">
+                          {item.program_title}
                         </span>
-                        {item.tmdb_id && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-                            TMDb Linked
+
+                        {isItemActiveNow && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white animate-pulse">
+                            🔴 NOW ON-AIR
+                          </span>
+                        )}
+
+                        {isItemNext && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-600 text-white">
+                            UP NEXT
+                          </span>
+                        )}
+
+                        {item.special_promo_title && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-950 border border-purple-800 text-purple-300 flex items-center gap-1">
+                            <Tag className="w-3 h-3 text-purple-400" />
+                            PROMO: {item.special_promo_title}
                           </span>
                         )}
                       </div>
-                      <div className="text-[11px] text-gray-400 font-mono flex items-center gap-2 mt-0.5">
-                        <span className="text-indigo-400 font-semibold">{startStr} - {endStr}</span>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400 font-mono">
+                        <span className="text-blue-400 font-semibold">{startStr}</span>
+                        <span>➔</span>
+                        <span className="text-gray-300">{endStr}</span>
                         <span>•</span>
-                        <span>{durMinutes} min ({item.duration_seconds}s)</span>
-                      </div>
-                      <div className="text-[10px] text-gray-400 truncate mt-0.5 font-mono">
-                        Path: {item.media_path || item.media_file_path || "sample_promo.mp4"}
+                        <span>{durMinutes} min</span>
+                        <span>•</span>
+                        <span className="text-gray-400 truncate max-w-xs">{item.media_path}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
                     <button
                       onClick={() => handleDeleteItem(item.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-950/40 rounded transition-colors"
-                      title="Remove from Playout Calendar"
+                      className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-800 rounded-lg transition-colors"
+                      title="Remove from timeline"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -505,425 +708,429 @@ export function ScheduleScreen({
         </div>
       </div>
 
-      {/* Enhanced Add Media / Schedule Modal with Intuitive File Picker & TMDb Typeahead */}
+      {/* Modal: Add Media to Schedule (Integrated Media Picker + TMDb + Promotions) */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#111827] border border-[#2D3A54] rounded-xl w-full max-w-2xl max-h-[88dvh] flex flex-col shadow-2xl overflow-hidden">
-            {/* Modal Header */}
-            <div className="px-5 py-3.5 bg-[#1A2234] border-b border-[#2D3A54] flex items-center justify-between shrink-0">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Film className="w-4 h-4 text-indigo-400" />
-                <span>Add Media to Playout Schedule</span>
-              </h3>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-[#111827] border border-gray-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-8">
+            <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-[#151c2c]">
+              <div className="flex items-center gap-2">
+                <Film className="w-5 h-5 text-indigo-400" />
+                <h3 className="font-bold text-white text-base">Schedule Program to Timeline</h3>
+                <span className="text-xs px-2 py-0.5 rounded bg-blue-950 border border-blue-800 text-blue-300 font-mono">
+                  {selectedDate}
+                </span>
+              </div>
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  setConflictReport(null);
-                  setSelectedConflictAction("");
-                }}
-                className="text-gray-400 hover:text-white"
+                onClick={() => setIsModalOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-5 space-y-4 overflow-y-auto overscroll-contain text-xs">
-              {/* SECTION 1: Intuitive Local Media Library File Picker with Type-Ahead Filter */}
-              <div className="space-y-2 bg-[#161F30] p-3.5 rounded-lg border border-[#23314B]">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1.5">
-                    <FolderOpen className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Media File Picker (./media{currentPath ? `/${currentPath}` : ''})</span>
-                  </label>
-                  {currentPath && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const parent = currentPath.includes('/') ? currentPath.substring(0, currentPath.lastIndexOf('/')) : '';
-                        setCurrentPath(parent);
-                      }}
-                      className="text-[10px] text-indigo-400 hover:text-indigo-300 font-mono px-2 py-0.5 bg-gray-800 rounded border border-gray-700"
-                    >
-                      .. (Up Level)
-                    </button>
-                  )}
-                </div>
-
-                {/* Type-Ahead Filter Input for long lists of media files */}
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
-                  <input
-                    type="text"
-                    value={fileFilterQuery}
-                    onChange={(e) => setFileFilterQuery(e.target.value)}
-                    placeholder="Type-ahead search/filter media files and folders..."
-                    className="w-full bg-[#0B0F17] border border-gray-700 rounded pl-8 pr-2.5 py-1.5 text-xs text-white placeholder-gray-500 font-mono"
-                  />
-                  {fileFilterQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setFileFilterQuery("")}
-                      className="absolute right-2.5 top-2 text-gray-400 hover:text-white"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-
-                {/* File / Folder Items List */}
-                <div className="bg-[#0B0F17] border border-gray-800 rounded-lg max-h-40 overflow-y-auto divide-y divide-gray-800">
-                  {filteredFiles.length === 0 ? (
-                    <div className="p-3 text-gray-500 font-mono text-[11px]">
-                      {fileList.length === 0 ? "No media files found in ./media directory." : `No media matching "${fileFilterQuery}".`}
-                    </div>
-                  ) : (
-                    filteredFiles.map((f, i) => {
-                      const isSelected = selectedFile?.path === f.path || selectedFile?.name === f.name;
-                      return (
-                        <div
-                          key={i}
-                          onClick={() => handleItemClick(f)}
-                          className={`p-2 flex items-center justify-between hover:bg-[#1E293B] cursor-pointer transition-colors ${
-                            isSelected ? 'bg-indigo-950/70 border-l-2 border-indigo-500' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 truncate">
-                            {f.is_dir ? (
-                              <FolderOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                            ) : (
-                              <FileVideo className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                            )}
-                            <span className={`font-mono truncate ${f.is_dir ? 'text-amber-200 font-semibold' : 'text-sky-200'}`}>
-                              {f.name}
-                            </span>
-                          </div>
-                          {!f.is_dir && (
-                            <span className="text-[10px] text-emerald-400 font-mono shrink-0 ml-2">
-                              {f.duration_seconds ? `${Math.floor(f.duration_seconds / 60)}m` : (f.probed_duration || "02:15:00")}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {selectedFile && (
-                  <div className="text-[11px] text-sky-300 font-mono bg-sky-950/40 border border-sky-800/60 p-2 rounded flex items-center justify-between">
-                    <span className="truncate">Selected File: {selectedFile.name}</span>
-                    <span className="text-emerald-400 font-bold shrink-0 ml-2">
-                      {selectedFile.duration_seconds ? `${Math.floor(selectedFile.duration_seconds / 60)}m` : "Ready"}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* SECTION 2: Program Title */}
-              <div>
-                <label className="block text-[11px] text-gray-400 mb-1 font-medium">Program / Feature Title</label>
-                <input
-                  type="text"
-                  value={title}
-                  placeholder="Enter program or movie title..."
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-medium"
-                />
-              </div>
-
-              {/* SECTION 3: Time Parameters */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[11px] text-gray-400 mb-1">Start Time (IST/UTC)</label>
-                  <input
-                    type="time"
-                    step="1"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-gray-400 mb-1">Duration (HH:MM:SS)</label>
-                  <input
-                    type="text"
-                    value={duration}
-                    onChange={(e) => setDuration(e.target.value)}
-                    className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] text-gray-400 mb-1">Calculated End Time</label>
-                  <input
-                    type="text"
-                    readOnly
-                    value={endTime}
-                    className="w-full bg-[#0B0F17] border border-gray-800 rounded px-2.5 py-1.5 text-xs text-emerald-400 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Ad / CG Template Override */}
-              <div>
-                <label className="block text-[11px] text-gray-400 mb-1 font-medium flex items-center justify-between">
-                  <span>Ad & CG Graphics Template</span>
-                  <span className="text-[10px] text-indigo-400 font-mono">Optional Template Override</span>
-                </label>
-                <select
-                  value={selectedAdTemplateId}
-                  onChange={(e) => setSelectedAdTemplateId(e.target.value)}
-                  className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="">Channel Default Graphics & Overlays</option>
-                  {adTemplates.map((tmpl) => (
-                    <option key={tmpl.id} value={tmpl.id}>
-                      {tmpl.name} ({tmpl.template_type || "composite"})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* SECTION 4: Live Conflict Warning & Resolution Action Panel */}
-              {conflictReport && conflictReport.has_conflict && (
-                <div className="bg-amber-950/40 border border-amber-600/70 p-3.5 rounded-lg space-y-3 animate-in fade-in">
-                  <div className="flex items-start gap-2.5 text-amber-300">
+            <div className="p-6 space-y-5">
+              {/* Conflict Alert Warning Banner */}
+              {conflictReport && (
+                <div className="p-4 bg-amber-950/60 border border-amber-600/80 rounded-xl space-y-3">
+                  <div className="flex items-start gap-2.5">
                     <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                    <div className="text-xs">
-                      <div className="font-bold">Broadcast Schedule Collision Detected</div>
-                      <div className="text-[11px] text-amber-200/80 mt-0.5">
-                        This time slot overlaps with {conflictReport.conflicts?.length || 1} existing program(s) on Channel timeline:
-                        <span className="font-bold text-white ml-1">
-                          "{conflictReport.conflicts?.[0]?.program_title || conflictReport.conflicts?.[0]?.title || 'Scheduled Program'}"
-                        </span>
-                      </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wide">
+                        Schedule Overlap Conflict Detected
+                      </h4>
+                      <p className="text-xs text-amber-200/90 mt-0.5">
+                        Collides with existing scheduled program(s). Select an automated broadcast conflict resolution:
+                      </p>
                     </div>
                   </div>
 
-                  {/* Conflict Resolution Strategy Options */}
-                  <div className="pt-2 border-t border-amber-800/40 space-y-2">
-                    <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
-                      Select Conflict Resolution Strategy:
-                    </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleSnapStartTime}
+                      className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                        selectedConflictAction === "ADJUST_START"
+                          ? "bg-amber-600 text-white border-amber-500 font-bold"
+                          : "bg-gray-900/80 border-gray-700 text-gray-200 hover:bg-gray-800"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold mb-0.5">
+                        <FastForward className="w-3.5 h-3.5 text-amber-400" />
+                        Snap Start Time
+                      </div>
+                      <span className="text-[11px] opacity-80">
+                        Shift start after collision to {conflictReport.suggested_start ? new Date(conflictReport.suggested_start).toLocaleTimeString() : "available slot"}
+                      </span>
+                    </button>
 
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      {/* Option 1: Snap Start Time */}
-                      <button
-                        type="button"
-                        onClick={handleSnapStartTime}
-                        className={`p-2 rounded border text-left flex items-start gap-2 transition-all ${
-                          selectedConflictAction === "ADJUST_START"
-                            ? "bg-indigo-600 border-indigo-400 text-white shadow"
-                            : "bg-[#1E293B] border-gray-700 text-gray-300 hover:text-white hover:border-gray-600"
-                        }`}
-                      >
-                        <FastForward className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
-                        <div>
-                          <div className="font-bold">Snap Start Time</div>
-                          <div className="text-[10px] text-gray-400">
-                            Start immediately after previous program finishes
-                          </div>
-                        </div>
-                      </button>
+                    <button
+                      type="button"
+                      onClick={handleTrimDuration}
+                      className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                        selectedConflictAction === "ADJUST_END"
+                          ? "bg-amber-600 text-white border-amber-500 font-bold"
+                          : "bg-gray-900/80 border-gray-700 text-gray-200 hover:bg-gray-800"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold mb-0.5">
+                        <Scissors className="w-3.5 h-3.5 text-amber-400" />
+                        Trim Duration
+                      </div>
+                      <span className="text-[11px] opacity-80">
+                        Shorten duration to fit right before the next program
+                      </span>
+                    </button>
 
-                      {/* Option 2: Trim Duration */}
-                      <button
-                        type="button"
-                        onClick={handleTrimDuration}
-                        className={`p-2 rounded border text-left flex items-start gap-2 transition-all ${
-                          selectedConflictAction === "ADJUST_END"
-                            ? "bg-indigo-600 border-indigo-400 text-white shadow"
-                            : "bg-[#1E293B] border-gray-700 text-gray-300 hover:text-white hover:border-gray-600"
-                        }`}
-                      >
-                        <Scissors className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                        <div>
-                          <div className="font-bold">Trim Duration</div>
-                          <div className="text-[10px] text-gray-400">
-                            Fit playback exactly before next scheduled item
-                          </div>
-                        </div>
-                      </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAction("RIPPLE")}
+                      className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                        selectedConflictAction === "RIPPLE"
+                          ? "bg-amber-600 text-white border-amber-500 font-bold"
+                          : "bg-gray-900/80 border-gray-700 text-gray-200 hover:bg-gray-800"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold mb-0.5">
+                        <ArrowRight className="w-3.5 h-3.5 text-amber-400" />
+                        Ripple Timeline
+                      </div>
+                      <span className="text-[11px] opacity-80">
+                        Push colliding and all subsequent items downstream
+                      </span>
+                    </button>
 
-                      {/* Option 3: Ripple Next Programs */}
-                      <button
-                        type="button"
-                        onClick={() => handleSelectAction("RIPPLE")}
-                        className={`p-2 rounded border text-left flex items-start gap-2 transition-all ${
-                          selectedConflictAction === "RIPPLE"
-                            ? "bg-indigo-600 border-indigo-400 text-white shadow"
-                            : "bg-[#1E293B] border-gray-700 text-gray-300 hover:text-white hover:border-gray-600"
-                        }`}
-                      >
-                        <ArrowRight className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                        <div>
-                          <div className="font-bold">Ripple Next Plays</div>
-                          <div className="text-[10px] text-gray-400">
-                            Push colliding & future items forward seamlessly
-                          </div>
-                        </div>
-                      </button>
-
-                      {/* Option 4: Force Preempt */}
-                      <button
-                        type="button"
-                        onClick={() => handleSelectAction("FORCE_PREEMPT")}
-                        className={`p-2 rounded border text-left flex items-start gap-2 transition-all ${
-                          selectedConflictAction === "FORCE_PREEMPT"
-                            ? "bg-red-600 border-red-400 text-white shadow"
-                            : "bg-[#1E293B] border-gray-700 text-gray-300 hover:text-white hover:border-gray-600"
-                        }`}
-                      >
-                        <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
-                        <div>
-                          <div className="font-bold">Force Preempt Slot</div>
-                          <div className="text-[10px] text-gray-400">
-                            Cut into / overwrite colliding program slot
-                          </div>
-                        </div>
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleSelectAction("FORCE_PREEMPT")}
+                      className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                        selectedConflictAction === "FORCE_PREEMPT"
+                          ? "bg-red-600 text-white border-red-500 font-bold"
+                          : "bg-gray-900/80 border-gray-700 text-gray-200 hover:bg-gray-800"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 font-bold mb-0.5">
+                        <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+                        Force Preempt Playout
+                      </div>
+                      <span className="text-[11px] opacity-80">
+                        Overwrite and truncate colliding slot unconditionally
+                      </span>
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* SECTION 5: TMDb Metadata Type-Ahead Search with Rich Movie Dropdown */}
-              <div className="space-y-2 pt-2 border-t border-gray-800" ref={tmdbRef}>
-                <label className="block text-[11px] font-bold text-gray-300 uppercase tracking-wider">
-                  TMDb Metadata & EPG Enrichment (Type-Ahead Search)
-                </label>
+              {/* 1. Integrated Media File Picker */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wide">
+                    1. Select Broadcast Media File
+                  </label>
+                  <span className="text-[11px] text-gray-400 font-mono">
+                    Storage: ./media/{currentPath}
+                  </span>
+                </div>
 
                 <div className="relative">
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
-                      <input
-                        type="text"
-                        value={tmdbQuery}
-                        onChange={handleTmdbInputChange}
-                        onFocus={() => {
-                          if (tmdbHits.length > 0) setIsTmdbDropdownOpen(true);
-                        }}
-                        placeholder="Type movie or series title (e.g. Jawan, RRR, Pathaan, KGF)..."
-                        className="w-full bg-[#1F2937] border border-gray-700 rounded pl-8 pr-2.5 py-1.5 text-xs text-white"
-                      />
-                      {isSearchingTmdb && (
-                        <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin absolute right-2.5 top-2.5" />
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => triggerTmdbSearch(tmdbQuery)}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold flex items-center gap-1 shrink-0"
+                  <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-500" />
+                  <input
+                    type="text"
+                    value={fileFilterQuery}
+                    onChange={(e) => setFileFilterQuery(e.target.value)}
+                    placeholder="Search media files in storage folder..."
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="max-h-40 overflow-y-auto bg-[#141b2b] border border-gray-800 rounded-lg divide-y divide-gray-800/60">
+                  {currentPath && (
+                    <div
+                      onClick={() => setCurrentPath("")}
+                      className="p-2 text-xs text-indigo-400 hover:bg-gray-800/60 cursor-pointer flex items-center gap-2"
                     >
-                      <Search className="w-3.5 h-3.5" />
-                      <span>Lookup</span>
-                    </button>
-                  </div>
-
-                  {/* Typeahead Dropdown Menu */}
-                  {isTmdbDropdownOpen && tmdbHits.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1 bg-[#1A2234] border border-[#2D3A54] rounded-lg shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-gray-800">
-                      {tmdbHits.map((hit) => {
-                        const year = hit.release_date ? hit.release_date.substring(0, 4) : (hit.release_year || "2023");
-                        const posterUrl = hit.poster_path || hit.poster_url;
-
-                        return (
-                          <div
-                            key={hit.id}
-                            onClick={() => handleSelectTmdbHit(hit)}
-                            className="p-2.5 flex items-center gap-3 hover:bg-[#25324C] cursor-pointer transition-colors"
-                          >
-                            {posterUrl ? (
-                              <img
-                                src={posterUrl}
-                                alt="Poster"
-                                className="w-9 h-12 object-cover rounded shadow border border-gray-700 shrink-0"
-                              />
-                            ) : (
-                              <div className="w-9 h-12 bg-gray-800 border border-gray-700 rounded flex items-center justify-center shrink-0">
-                                <Film className="w-4 h-4 text-gray-500" />
-                              </div>
-                            )}
-
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-white text-xs truncate">{hit.title}</span>
-                                <span className="text-[10px] text-gray-400 font-mono">({year})</span>
-                                {hit.rating && (
-                                  <span className="text-[9px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
-                                    ★ {Number(hit.rating).toFixed(1)}
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[10px] text-gray-400 truncate mt-0.5">
-                                {hit.overview || "Broadcast feature presentation."}
-                              </p>
-                            </div>
-                            <ChevronRight className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-                          </div>
-                        );
-                      })}
+                      <FolderOpen className="w-4 h-4" />
+                      <span>.. (Back to root)</span>
                     </div>
+                  )}
+                  {filteredFiles.map((file) => (
+                    <div
+                      key={file.name}
+                      onClick={() => handleItemClick(file)}
+                      className={`p-2.5 text-xs flex items-center justify-between cursor-pointer transition-colors ${
+                        selectedFile?.name === file.name
+                          ? "bg-indigo-950/80 text-white font-bold"
+                          : "text-gray-300 hover:bg-gray-800/60"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        {file.is_dir ? (
+                          <FolderOpen className="w-4 h-4 text-amber-400 shrink-0" />
+                        ) : (
+                          <FileVideo className="w-4 h-4 text-blue-400 shrink-0" />
+                        )}
+                        <span className="truncate">{file.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] font-mono text-gray-500 shrink-0">
+                        {file.probed_duration && <span>{file.probed_duration}</span>}
+                        {file.size && <span>{(file.size / 1024 / 1024).toFixed(1)} MB</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. TMDb Search & Metadata Typeahead */}
+              <div className="space-y-2 relative" ref={tmdbRef}>
+                <label className="block text-xs font-bold text-gray-300 uppercase tracking-wide">
+                  2. TMDb Title Lookup & Poster Auto-Enrichment
+                </label>
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-500" />
+                  <input
+                    type="text"
+                    value={tmdbQuery}
+                    onChange={handleTmdbInputChange}
+                    placeholder="Type movie or series title for TMDb lookup..."
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500"
+                  />
+                  {isSearchingTmdb && (
+                    <Loader2 className="w-4 h-4 absolute right-3 top-2.5 text-indigo-400 animate-spin" />
                   )}
                 </div>
 
-                {/* Enriched TMDb Preview Card */}
-                {tmdbResult && (
-                  <div className="bg-[#1A2234] border border-[#2D3A54] p-3 rounded-lg flex gap-3 items-start animate-in fade-in">
-                    {(tmdbResult.poster_path || tmdbResult.poster_url) && (
-                      <img
-                        src={tmdbResult.poster_path || tmdbResult.poster_url}
-                        alt="Poster"
-                        className="w-14 h-20 object-cover rounded shadow border border-gray-700 shrink-0"
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-white text-xs truncate">
-                        {tmdbResult.title} ({tmdbResult.release_date?.substring(0, 4) || tmdbResult.release_year || "2023"})
-                      </div>
-                      <p className="text-[11px] text-gray-300 line-clamp-3 mt-1">
-                        {tmdbResult.overview}
-                      </p>
-                      <div className="text-[10px] text-emerald-400 font-mono mt-1">
-                        TMDb ID: {tmdbResult.id || tmdbResult.tmdb_id} • Enriched EPG Artwork
-                      </div>
+                {/* TMDb Dropdown Hits */}
+                {isTmdbDropdownOpen && tmdbHits.length > 0 && (
+                  <div className="absolute z-20 left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-[#182030] border border-gray-700 rounded-xl shadow-2xl divide-y divide-gray-700/60">
+                    {tmdbHits.map((hit) => {
+                      const yr = hit.release_date?.slice(0, 4) || "";
+                      return (
+                        <div
+                          key={hit.id}
+                          onClick={() => handleSelectTmdbHit(hit)}
+                          className="p-2.5 flex items-center gap-3 hover:bg-indigo-950/70 cursor-pointer transition-colors"
+                        >
+                          <img
+                            src={hit.poster_path || getFallbackPoster(hit.title, yr)}
+                            alt={hit.title}
+                            onError={(e) => {
+                              e.currentTarget.src = getFallbackPoster(hit.title, yr);
+                            }}
+                            className="w-8 h-12 object-cover rounded bg-gray-900 border border-gray-800 shrink-0"
+                          />
+                          <div className="truncate">
+                            <div className="text-xs font-bold text-white flex items-center gap-2">
+                              <span>{hit.title}</span>
+                              {yr && <span className="text-[11px] text-gray-400">({yr})</span>}
+                            </div>
+                            <p className="text-[11px] text-gray-400 truncate mt-0.5">{hit.overview}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Special Promotional Overlays / Bumps (Typeahead) */}
+              <div className="space-y-2 relative" ref={promoRef}>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-300 uppercase tracking-wide">
+                    3. Special Promotional Bump / Overlay (Optional)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowPromoSuggestions(!showPromoSuggestions)}
+                    className="text-[11px] text-purple-400 hover:text-purple-300 underline"
+                  >
+                    {showPromoSuggestions ? "Hide Suggestions" : "Show Broadcast Presets"}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <input
+                      type="text"
+                      value={specialPromoTitle}
+                      onChange={(e) => setSpecialPromoTitle(e.target.value)}
+                      placeholder="Promo Title (e.g. Diwali Premiere Special)"
+                      className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      value={specialPromoSubtext}
+                      onChange={(e) => setSpecialPromoSubtext(e.target.value)}
+                      placeholder="Promo Subtext (e.g. Tonight @ 21:00 IST)"
+                      className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {showPromoSuggestions && (
+                  <div className="bg-[#141b2b] border border-purple-900/60 rounded-xl p-2.5 space-y-1.5">
+                    <span className="text-[10px] uppercase font-bold text-purple-300 tracking-wider">
+                      Quick Promotional Overlay Presets:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {PROMO_PRESETS.map((p, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => {
+                            setSpecialPromoTitle(p.title);
+                            setSpecialPromoSubtext(p.subtext);
+                            setShowPromoSuggestions(false);
+                          }}
+                          className="px-2 py-1 bg-purple-950/80 hover:bg-purple-900 text-purple-200 border border-purple-800 rounded text-[11px] text-left"
+                        >
+                          {p.title}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
               </div>
+
+              {/* 4. Scheduling Parameters (Date, Start Time, Duration) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-gray-800">
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Broadcast Date</label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Start Time (HH:MM:SS)</label>
+                  <input
+                    type="text"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-gray-400 mb-1">Duration (HH:MM:SS)</label>
+                  <input
+                    type="text"
+                    value={duration}
+                    onChange={(e) => setDuration(e.target.value)}
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
             </div>
 
-            {/* Modal Actions */}
-            <div className="px-5 py-3 bg-[#1A2234] border-t border-[#2D3A54] flex items-center justify-between shrink-0">
-              <div className="text-[11px] text-gray-400 font-mono">
-                {conflictReport?.has_conflict ? (
-                  <span className="text-amber-400 font-semibold flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    <span>Action: {selectedConflictAction || "RIPPLE"}</span>
-                  </span>
-                ) : (
-                  <span className="text-emerald-400 flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Timeline slot clean & clear</span>
-                  </span>
-                )}
-              </div>
+            <div className="p-4 border-t border-gray-800 flex justify-end gap-2 bg-[#151c2c]">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCommitSchedule}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-900/30"
+              >
+                Save Schedule Event
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-3.5 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded text-xs font-semibold transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCommitSchedule}
-                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold shadow transition-colors"
-                >
-                  Commit to Timeline
-                </button>
+      {/* Modal: Auto-Fill Gaps */}
+      {isGapModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#111827] border border-gray-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-4 border-b border-gray-800 flex items-center justify-between bg-[#151c2c]">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-400" />
+                <h3 className="font-bold text-white text-base">Timeline Gap Detection & Auto-Fill</h3>
               </div>
+              <button
+                onClick={() => setIsGapModalOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-gray-300">
+                Scanning timeline for unprogrammed intervals on <strong>{selectedDate}</strong>:
+              </p>
+
+              {isDetectingGaps ? (
+                <div className="py-8 text-center text-gray-400 text-xs flex flex-col items-center gap-2">
+                  <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+                  <span>Scanning timeline intervals...</span>
+                </div>
+              ) : detectedGaps.length === 0 ? (
+                <div className="p-4 bg-emerald-950/40 border border-emerald-800 rounded-xl text-xs text-emerald-300 flex items-center gap-2">
+                  <Check className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <span>No unprogrammed gaps found on {selectedDate}. Schedule timeline is 100% contiguous!</span>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="max-h-48 overflow-y-auto bg-[#141b2b] border border-gray-800 rounded-xl divide-y divide-gray-800/60 p-2">
+                    {detectedGaps.map((gap, idx) => {
+                      const sStr = new Date(gap.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      const eStr = new Date(gap.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      const durMins = Math.floor(gap.duration_seconds / 60);
+                      return (
+                        <div key={idx} className="p-2 text-xs flex items-center justify-between text-gray-300">
+                          <span className="font-mono text-amber-300 font-bold">{sStr} ➔ {eStr}</span>
+                          <span className="text-[11px] text-gray-400 font-mono">{durMins} min gap</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="space-y-3 pt-2 border-t border-gray-800">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1">Filler Content Title</label>
+                      <input
+                        type="text"
+                        value={fillerTitle}
+                        onChange={(e) => setFillerTitle(e.target.value)}
+                        className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-400 mb-1">Filler Media Path</label>
+                      <input
+                        type="text"
+                        value={fillerMedia}
+                        onChange={(e) => setFillerMedia(e.target.value)}
+                        className="w-full bg-[#182030] border border-gray-700 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-gray-800 flex justify-end gap-2 bg-[#151c2c]">
+              <button
+                onClick={() => setIsGapModalOpen(false)}
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg text-xs font-semibold"
+              >
+                Close
+              </button>
+              {detectedGaps.length > 0 && (
+                <button
+                  disabled={isFillingGaps}
+                  onClick={handleAutoFillGaps}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-amber-900/30 disabled:opacity-50"
+                >
+                  {isFillingGaps && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Auto-Fill {detectedGaps.length} Gap(s)
+                </button>
+              )}
             </div>
           </div>
         </div>

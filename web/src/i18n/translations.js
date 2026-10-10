@@ -3,7 +3,7 @@ export const translations = {
     "nav.dashboard": "Dashboard",
     "nav.channels": "Channels",
     "nav.scheduling": "Scheduling & EPG",
-    "nav.ad_templates": "Ad Studio",
+    "nav.ad_templates": "Ad & Layout Management",
     "nav.settings": "Settings",
     "common.healthy": "Cluster: 100% Operational",
     "dash.active_channels": "Active Broadcast Channels",

@@ -110,65 +110,112 @@ func (c *Client) GetCachedPoster(posterURL string) ([]byte, bool) {
 	return data, ok
 }
 
+func truncateString(s string, max int) string {
+	if len(s) > max {
+		return s[:max] + "..."
+	}
+	return s
+}
+
+// GeneratePosterSVG creates an inline SVG data URI poster placeholder
+func GeneratePosterSVG(title, year string) string {
+	initials := ""
+	words := strings.Fields(title)
+	for i, w := range words {
+		if i >= 2 {
+			break
+		}
+		if len(w) > 0 {
+			initials += strings.ToUpper(string([]rune(w)[0]))
+		}
+	}
+	if initials == "" {
+		initials = "MCR"
+	}
+	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 450" width="300" height="450"><defs><linearGradient id="g" x1="0%%" y1="0%%" x2="100%%" y2="100%%"><stop offset="0%%" stop-color="#1e293b"/><stop offset="100%%" stop-color="#0f172a"/></linearGradient></defs><rect width="300" height="450" fill="url(#g)" rx="12"/><circle cx="150" cy="180" r="54" fill="#3b82f6" opacity="0.25"/><text x="150" y="195" font-family="system-ui, sans-serif" font-size="40" font-weight="bold" fill="#60a5fa" text-anchor="middle">%s</text><text x="150" y="280" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" fill="#f8fafc" text-anchor="middle">%s</text><text x="150" y="310" font-family="system-ui, sans-serif" font-size="14" fill="#94a3b8" text-anchor="middle">%s</text></svg>`,
+		initials, truncateString(title, 22), year)
+	return "data:image/svg+xml;utf8," + url.PathEscape(svg)
+}
+
 func (c *Client) fetchFromTMDB(query string) ([]MovieResult, error) {
-	endpoint := fmt.Sprintf("https://api.themoviedb.org/3/search/movie?api_key=%s&query=%s&include_adult=false",
-		c.apiKey, url.QueryEscape(query))
+	results := make([]MovieResult, 0)
+	maxPages := 2 // Fetch up to 2 pages (40 results) to prevent truncated/incomplete searches
 
-	resp, err := c.httpClient.Get(endpoint)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	for page := 1; page <= maxPages; page++ {
+		endpoint := fmt.Sprintf("https://api.themoviedb.org/3/search/movie?api_key=%s&query=%s&include_adult=false&page=%d",
+			c.apiKey, url.QueryEscape(query), page)
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("tmdb returned status %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	var raw struct {
-		Results []struct {
-			ID            int     `json:"id"`
-			Title         string  `json:"title"`
-			OriginalTitle string  `json:"original_title"`
-			Overview      string  `json:"overview"`
-			ReleaseDate   string  `json:"release_date"`
-			PosterPath    string  `json:"poster_path"`
-			BackdropPath  string  `json:"backdrop_path"`
-			VoteAverage   float64 `json:"vote_average"`
-		} `json:"results"`
-	}
-
-	if err := json.Unmarshal(body, &raw); err != nil {
-		return nil, err
-	}
-
-	results := make([]MovieResult, 0, len(raw.Results))
-	for _, r := range raw.Results {
-		posterURL := ""
-		if r.PosterPath != "" {
-			posterURL = "https://image.tmdb.org/t/p/w500" + r.PosterPath
-		}
-		backdropURL := ""
-		if r.BackdropPath != "" {
-			backdropURL = "https://image.tmdb.org/t/p/original" + r.BackdropPath
+		resp, err := c.httpClient.Get(endpoint)
+		if err != nil {
+			if len(results) > 0 {
+				break
+			}
+			return nil, err
 		}
 
-		results = append(results, MovieResult{
-			ID:            fmt.Sprintf("%d", r.ID),
-			Title:         r.Title,
-			OriginalTitle: r.OriginalTitle,
-			Overview:      r.Overview,
-			ReleaseDate:   r.ReleaseDate,
-			PosterPath:    posterURL,
-			BackdropPath:  backdropURL,
-			Rating:        r.VoteAverage,
-			Genres:        []string{"Drama", "Action"},
-			Runtime:       140,
-		})
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			break
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			break
+		}
+
+		var raw struct {
+			Page       int `json:"page"`
+			TotalPages int `json:"total_pages"`
+			Results    []struct {
+				ID            int     `json:"id"`
+				Title         string  `json:"title"`
+				OriginalTitle string  `json:"original_title"`
+				Overview      string  `json:"overview"`
+				ReleaseDate   string  `json:"release_date"`
+				PosterPath    string  `json:"poster_path"`
+				BackdropPath  string  `json:"backdrop_path"`
+				VoteAverage   float64 `json:"vote_average"`
+			} `json:"results"`
+		}
+
+		if err := json.Unmarshal(body, &raw); err != nil {
+			break
+		}
+
+		for _, r := range raw.Results {
+			yr := ""
+			if len(r.ReleaseDate) >= 4 {
+				yr = r.ReleaseDate[:4]
+			}
+			posterURL := ""
+			if r.PosterPath != "" {
+				posterURL = "https://image.tmdb.org/t/p/w500" + r.PosterPath
+			} else {
+				posterURL = GeneratePosterSVG(r.Title, yr)
+			}
+			backdropURL := ""
+			if r.BackdropPath != "" {
+				backdropURL = "https://image.tmdb.org/t/p/original" + r.BackdropPath
+			}
+
+			results = append(results, MovieResult{
+				ID:            fmt.Sprintf("%d", r.ID),
+				Title:         r.Title,
+				OriginalTitle: r.OriginalTitle,
+				Overview:      r.Overview,
+				ReleaseDate:   r.ReleaseDate,
+				PosterPath:    posterURL,
+				BackdropPath:  backdropURL,
+				Rating:        r.VoteAverage,
+				Genres:        []string{"Drama", "Action"},
+				Runtime:       140,
+			})
+		}
+
+		if page >= raw.TotalPages {
+			break
+		}
 	}
 
 	return results, nil

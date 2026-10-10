@@ -196,6 +196,8 @@ func (s *Server) setupRoutes() {
 		api.Get("/channels", s.handleListChannels)
 		api.Get("/channels/{id}", s.handleGetChannel)
 		api.Get("/channels/{id}/playout/status", s.handleGetChannelPlayoutStatus)
+		api.Post("/channels/{id}/preview/start", s.handleStartChannelPreview)
+		api.Post("/channels/{id}/preview/stop", s.handleStopChannelPreview)
 
 		api.Group(func(operator chi.Router) {
 			operator.Use(RequireRole(models.RoleAdmin, models.RoleOperator))
@@ -222,6 +224,8 @@ func (s *Server) setupRoutes() {
 		api.Put("/schedules/{id}", s.handleUpdateSchedule)
 		api.Delete("/schedules/{id}", s.handleDeleteSchedule)
 		api.Post("/schedules/check-conflicts", s.handleCheckScheduleConflicts)
+		api.Get("/schedules/gaps", s.handleGetScheduleGaps)
+		api.Post("/schedules/auto-fill-gaps", s.handleAutoFillScheduleGaps)
 
 		// Singular schedule aliases
 		api.Get("/schedule", s.handleListSchedules)
@@ -231,6 +235,8 @@ func (s *Server) setupRoutes() {
 		api.Put("/schedule/{id}", s.handleUpdateSchedule)
 		api.Delete("/schedule/{id}", s.handleDeleteSchedule)
 		api.Post("/schedule/check-conflicts", s.handleCheckScheduleConflicts)
+		api.Get("/schedule/gaps", s.handleGetScheduleGaps)
+		api.Post("/schedule/auto-fill-gaps", s.handleAutoFillScheduleGaps)
 
 		// Resolutions
 		api.Get("/resolutions", s.handleListResolutions)
@@ -605,24 +611,68 @@ func (s *Server) handleStartChannelPlayout(w http.ResponseWriter, r *http.Reques
 		res = &models.ResolutionPreset{Width: 1920, Height: 1080, FrameRate: 25.0}
 	}
 
-	var body struct {
-		MediaPath    string `json:"media_path"`
-		ProgramTitle string `json:"program_title"`
-	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
-	if body.MediaPath == "" {
-		body.MediaPath = filepath.Join(s.cfg.MediaDir, "sample_movie.mp4")
-	}
-	if body.ProgramTitle == "" {
-		body.ProgramTitle = "Master Control Live Output"
+	// Scheduler is Single Source of Truth: derive active media and title strictly from timeline
+	now := time.Now().UTC()
+	mediaPath := filepath.Join(s.cfg.MediaDir, "sample_movie.mp4")
+	programTitle := "Station Broadcast Playout"
+
+	if activeSched, err := s.schedSvc.GetActiveProgram(ch.ID, now); err == nil && activeSched != nil {
+		if activeSched.MediaPath != "" {
+			mediaPath = activeSched.MediaPath
+		}
+		if activeSched.ProgramTitle != "" {
+			programTitle = activeSched.ProgramTitle
+		}
 	}
 
-	status, err := s.playoutEng.StartChannel(*ch, *res, body.MediaPath, body.ProgramTitle)
+	status, err := s.playoutEng.StartChannel(*ch, *res, mediaPath, programTitle)
 	if err != nil {
 		jsonErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	jsonResp(w, http.StatusOK, status)
+}
+
+func (s *Server) handleStartChannelPreview(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	ch, err := s.channelSvc.GetChannelByID(id)
+	if err != nil {
+		jsonErr(w, http.StatusNotFound, "channel not found")
+		return
+	}
+
+	res, err := s.resSvc.GetResolutionByID(ch.ResolutionID)
+	if err != nil {
+		res = &models.ResolutionPreset{Width: 1920, Height: 1080, FrameRate: 25.0}
+	}
+
+	isTemporary, err := s.playoutEng.StartPreview(*ch, *res)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	previewURL := fmt.Sprintf("/hls/%s/master.m3u8", ch.ID)
+	if ch.HlsWebToken != "" {
+		previewURL += "?token=" + ch.HlsWebToken
+	}
+
+	jsonResp(w, http.StatusOK, map[string]interface{}{
+		"channel_id":   ch.ID,
+		"is_temporary": isTemporary,
+		"hls_url":      previewURL,
+		"message":      "Live browser preview started",
+	})
+}
+
+func (s *Server) handleStopChannelPreview(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	stopped := s.playoutEng.StopPreview(id)
+	jsonResp(w, http.StatusOK, map[string]interface{}{
+		"channel_id":      id,
+		"stopped_preview": stopped,
+		"message":         "Live browser preview stopped",
+	})
 }
 
 func (s *Server) handleStopChannelPlayout(w http.ResponseWriter, r *http.Request) {
@@ -929,6 +979,65 @@ func (s *Server) handleCheckScheduleConflicts(w http.ResponseWriter, r *http.Req
 		return
 	}
 	jsonResp(w, http.StatusOK, report)
+}
+
+func (s *Server) handleGetScheduleGaps(w http.ResponseWriter, r *http.Request) {
+	channelID := r.URL.Query().Get("channel_id")
+	if channelID == "" {
+		jsonErr(w, http.StatusBadRequest, "channel_id query param is required")
+		return
+	}
+
+	startStr := r.URL.Query().Get("start")
+	endStr := r.URL.Query().Get("end")
+
+	now := time.Now().UTC()
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	end := start.Add(24 * time.Hour)
+
+	if startStr != "" {
+		if t, err := time.Parse(time.RFC3339, startStr); err == nil {
+			start = t
+		}
+	}
+	if endStr != "" {
+		if t, err := time.Parse(time.RFC3339, endStr); err == nil {
+			end = t
+		}
+	}
+
+	gaps, err := s.schedSvc.DetectGaps(channelID, start, end)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	jsonResp(w, http.StatusOK, gaps)
+}
+
+func (s *Server) handleAutoFillScheduleGaps(w http.ResponseWriter, r *http.Request) {
+	var req schedule.AutoFillRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonErr(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.ChannelID == "" {
+		jsonErr(w, http.StatusBadRequest, "channel_id is required")
+		return
+	}
+
+	created, err := s.schedSvc.AutoFillGaps(req)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	jsonResp(w, http.StatusOK, map[string]interface{}{
+		"success":       true,
+		"filled_count":  len(created),
+		"items_created": created,
+	})
 }
 
 func (s *Server) handleDeleteSchedule(w http.ResponseWriter, r *http.Request) {

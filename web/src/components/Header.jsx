@@ -43,7 +43,7 @@ export function Header({
     { id: 1, label: t('nav.dashboard') || "Dashboard", icon: LayoutDashboard },
     { id: 2, label: t('nav.channels') || "Channels", icon: Tv },
     { id: 3, label: t('nav.scheduling') || "Scheduling & EPG", icon: Calendar },
-    { id: 4, label: t('nav.ad_templates') || "Ad Studio", icon: Sparkles },
+    { id: 4, label: t('nav.ad_templates') || "Ad & Layout Management", icon: Sparkles },
     { id: 5, label: t('nav.settings') || "Settings", icon: Settings },
   ];
 

@@ -75,6 +75,8 @@ export const api = {
   stopPlayout: (id) => request(`/api/v1/channels/${id}/playout/stop`, { method: "POST" }),
   getPlayoutStatus: (id) => request(`/api/v1/channels/${id}/playout/status`),
   getFFmpegCommand: (id) => request(`/api/v1/channels/${id}/ffmpeg-cmd`),
+  startPreview: (id) => request(`/api/v1/channels/${id}/preview/start`, { method: "POST" }),
+  stopPreview: (id) => request(`/api/v1/channels/${id}/preview/stop`, { method: "POST" }),
 
   // Schedule
   getSchedule: (channelId) => request(`/api/v1/schedule?channel_id=${encodeURIComponent(channelId)}`),
@@ -83,6 +85,8 @@ export const api = {
   updateScheduleItem: (id, data) => request(`/api/v1/schedule/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteScheduleItem: (id) => request(`/api/v1/schedule/${id}`, { method: "DELETE" }),
   checkScheduleConflicts: (data) => request("/api/v1/schedule/check-conflicts", { method: "POST", body: JSON.stringify(data) }),
+  getScheduleGaps: (channelId, start = "", end = "") => request(`/api/v1/schedule/gaps?channel_id=${encodeURIComponent(channelId)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
+  autoFillGaps: (data) => request("/api/v1/schedule/auto-fill-gaps", { method: "POST", body: JSON.stringify(data) }),
   toggleChannelSlate: (channelId, enabled) => request(`/api/v1/channels/${channelId}/slate`, { method: "POST", body: JSON.stringify({ enabled }) }),
 
   // Resolutions

@@ -28,7 +28,6 @@ func TestBuildFFmpegArgs(t *testing.T) {
 		NormalizeLoudness: true,
 		Destinations: []models.StreamDestination{
 			{Type: "udp", Enabled: true, URL: "udp://239.255.0.1", Port: 5000},
-			{Type: "srt", Enabled: true, URL: "srt://127.0.0.1", Port: 9000, Mode: "caller", LatencyMs: 120},
 			{Type: "rtmp", Enabled: true, URL: "rtmp://live.twitch.tv/app", StreamKey: "live_secret_key"},
 			{Type: "hls", Enabled: true, URL: "/data/hls/ch-01/playlist.m3u8"},
 		},
@@ -63,9 +62,6 @@ func TestBuildFFmpegArgs(t *testing.T) {
 	}
 	if !strings.Contains(cmdStr, "udp://239.255.0.1:5000?pkt_size=1316") {
 		t.Errorf("missing UDP destination")
-	}
-	if !strings.Contains(cmdStr, "srt://127.0.0.1:9000?mode=caller&latency=120") {
-		t.Errorf("missing SRT destination")
 	}
 	if !strings.Contains(cmdStr, "rtmp://live.twitch.tv/app/live_secret_key") {
 		t.Errorf("missing RTMP destination")

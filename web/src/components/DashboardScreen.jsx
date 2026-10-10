@@ -27,10 +27,10 @@ export function DashboardScreen({
     ? (onlineAgents.reduce((sum, a) => sum + (a.cpu_percent || a.cpu_usage_percent || 0), 0) / onlineAgents.length).toFixed(1)
     : "0.0";
 
-  const totalDestinations = channels.reduce((acc, c) => acc + (c.destinations?.length || 0), 0);
-  const udpCount = channels.reduce((acc, c) => acc + (c.destinations?.filter(d => d.type === 'udp' || d.protocol === 'UDP_MULTICAST')?.length || 0), 0);
-  const srtCount = channels.reduce((acc, c) => acc + (c.destinations?.filter(d => d.type === 'srt' || d.protocol === 'SRT')?.length || 0), 0);
-  const hlsCount = channels.reduce((acc, c) => acc + (c.destinations?.filter(d => d.type === 'hls' || d.protocol === 'HLS')?.length || 0), 0);
+  const totalDestinations = channels.reduce((acc, c) => acc + (c.destinations?.filter(d => d.enabled)?.length || 0), 0);
+  const udpCount = channels.reduce((acc, c) => acc + (c.destinations?.filter(d => (d.type === 'udp' || d.protocol === 'UDP_MULTICAST') && d.enabled)?.length || 0), 0);
+  const rtmpCount = channels.reduce((acc, c) => acc + (c.destinations?.filter(d => (d.type === 'rtmp' || d.protocol === 'RTMP') && d.enabled)?.length || 0), 0);
+  const hlsCount = channels.reduce((acc, c) => acc + (c.destinations?.filter(d => (d.type === 'hls' || d.protocol === 'HLS') && d.enabled)?.length || 0), 0);
 
   const estimatedThroughputMbps = (activeCount * 8.5).toFixed(1);
 
@@ -113,7 +113,7 @@ export function DashboardScreen({
             <span className="text-xs text-amber-400 font-normal">Endpoints</span>
           </div>
           <div className="text-[10px] text-gray-500 mt-1">
-            {udpCount} UDP Mux • {srtCount} SRT • {hlsCount} HLS
+            {udpCount} UDP Mux • {rtmpCount} RTMP • {hlsCount} HLS
           </div>
         </div>
       </div>

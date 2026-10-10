@@ -206,6 +206,24 @@ func (db *DB) Migrate() error {
 	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN logo_fit TEXT NOT NULL DEFAULT 'contain'`)
 	_, _ = db.Exec(`ALTER TABLE channels ADD COLUMN overlays_json TEXT NOT NULL DEFAULT '[]'`)
 	_, _ = db.Exec(`DROP TABLE IF EXISTS storage_mounts`)
+
+	// Schedule migrations: special promo bumps
+	_, _ = db.Exec(`ALTER TABLE schedules ADD COLUMN special_promo_title TEXT NOT NULL DEFAULT ''`)
+	_, _ = db.Exec(`ALTER TABLE schedules ADD COLUMN special_promo_subtext TEXT NOT NULL DEFAULT ''`)
+
+	// Ad & Layout Template migrations: central branding, logo, collision resolution, and layout preferences
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN logo_path TEXT NOT NULL DEFAULT ''`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN logo_position TEXT NOT NULL DEFAULT 'top-right'`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN logo_x INTEGER NOT NULL DEFAULT 1720`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN logo_y INTEGER NOT NULL DEFAULT 40`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN logo_width INTEGER NOT NULL DEFAULT 140`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN logo_height INTEGER NOT NULL DEFAULT 90`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN logo_opacity REAL NOT NULL DEFAULT 0.90`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN logo_fit TEXT NOT NULL DEFAULT 'contain'`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN collision_behavior TEXT NOT NULL DEFAULT 'alternate'`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN alternate_duration_seconds INTEGER NOT NULL DEFAULT 15`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN priority_order_json TEXT NOT NULL DEFAULT '[]'`)
+	_, _ = db.Exec(`ALTER TABLE ad_templates ADD COLUMN general_layout_json TEXT NOT NULL DEFAULT '{}'`)
 	return nil
 }
 
@@ -484,31 +502,22 @@ func (db *DB) Seed() error {
 	// 7. Seed Default Channel ch-01
 	destinations := []models.StreamDestination{
 		{
-			Type:      "udp",
-			Enabled:   true,
-			URL:       "udp://239.255.0.1",
-			Port:      5000,
-			Mode:      "",
-			StreamKey: "",
-			LatencyMs: 0,
+			Type:    "udp",
+			Enabled: true,
+			URL:     "udp://239.255.0.1",
+			Port:    5000,
 		},
 		{
-			Type:      "srt",
-			Enabled:   false, // Disabled by default until an external SRT receiver is listening
-			URL:       "srt://127.0.0.1",
-			Port:      9000,
-			Mode:      "caller",
-			StreamKey: "live/ddnational",
-			LatencyMs: 120,
+			Type:      "rtmp",
+			Enabled:   false,
+			URL:       "rtmp://127.0.0.1:1935/live",
+			StreamKey: "ddnational",
 		},
 		{
-			Type:      "hls",
-			Enabled:   true,
-			URL:       "/hls/ch-01/master.m3u8",
-			Port:      3081,
-			Mode:      "",
-			StreamKey: "",
-			LatencyMs: 0,
+			Type:    "hls",
+			Enabled: true,
+			URL:     "/hls/ch-01/master.m3u8",
+			Port:    3081,
 		},
 	}
 	destBytes, _ := json.Marshal(destinations)

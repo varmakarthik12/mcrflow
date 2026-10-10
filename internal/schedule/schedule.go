@@ -381,3 +381,130 @@ func (s *Service) ListBetween(channelID string, start, end time.Time) ([]models.
 func (s *Service) DeleteItem(id string) error {
 	return s.store.DeleteScheduleItem(id)
 }
+
+// ScheduleGap defines an unprogrammed interval between broadcast schedule items
+type ScheduleGap struct {
+	StartTime       time.Time `json:"start_time"`
+	EndTime         time.Time `json:"end_time"`
+	DurationSeconds int       `json:"duration_seconds"`
+}
+
+// AutoFillRequest configures parameters to automatically bridge detected schedule gaps
+type AutoFillRequest struct {
+	ChannelID   string    `json:"channel_id"`
+	StartTime   time.Time `json:"start_time"`
+	EndTime     time.Time `json:"end_time"`
+	FillerTitle string    `json:"filler_title,omitempty"`
+	FillerMedia string    `json:"filler_media,omitempty"`
+}
+
+// DetectGaps finds unoccupied time slots within the window [start, end)
+func (s *Service) DetectGaps(channelID string, start, end time.Time) ([]ScheduleGap, error) {
+	if channelID == "" {
+		return nil, ErrChannelIDRequired
+	}
+	if end.Before(start) || end.Equal(start) {
+		return []ScheduleGap{}, nil
+	}
+
+	items, err := s.store.ListScheduleBetween(channelID, start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter items actually overlapping [start, end)
+	var active []models.ScheduleItem
+	for _, it := range items {
+		if it.StartTime.Before(end) && it.EndTime.After(start) {
+			active = append(active, it)
+		}
+	}
+
+	sort.Slice(active, func(i, j int) bool {
+		return active[i].StartTime.Before(active[j].StartTime)
+	})
+
+	gaps := make([]ScheduleGap, 0)
+	cursor := start
+
+	for _, it := range active {
+		// If current item starts after cursor, there is a gap
+		if it.StartTime.After(cursor) {
+			dur := int(it.StartTime.Sub(cursor).Seconds())
+			if dur > 0 {
+				gaps = append(gaps, ScheduleGap{
+					StartTime:       cursor,
+					EndTime:         it.StartTime,
+					DurationSeconds: dur,
+				})
+			}
+		}
+		// Move cursor forward if this item extends past current cursor
+		if it.EndTime.After(cursor) {
+			cursor = it.EndTime
+		}
+	}
+
+	// Gap between last item end and window end
+	if end.After(cursor) {
+		dur := int(end.Sub(cursor).Seconds())
+		if dur > 0 {
+			gaps = append(gaps, ScheduleGap{
+				StartTime:       cursor,
+				EndTime:         end,
+				DurationSeconds: dur,
+			})
+		}
+	}
+
+	return gaps, nil
+}
+
+// AutoFillGaps automatically generates and persists filler items into all detected gaps
+func (s *Service) AutoFillGaps(req AutoFillRequest) ([]models.ScheduleItem, error) {
+	req.ChannelID = strings.TrimSpace(req.ChannelID)
+	if req.ChannelID == "" {
+		return nil, ErrChannelIDRequired
+	}
+	if req.StartTime.IsZero() {
+		req.StartTime = time.Now().UTC()
+	}
+	if req.EndTime.IsZero() || req.EndTime.Before(req.StartTime) {
+		req.EndTime = req.StartTime.Add(24 * time.Hour)
+	}
+
+	fillerTitle := strings.TrimSpace(req.FillerTitle)
+	if fillerTitle == "" {
+		fillerTitle = "Station Intermission & Highlights"
+	}
+	fillerMedia := strings.TrimSpace(req.FillerMedia)
+	if fillerMedia == "" {
+		fillerMedia = "sample_movie.mp4"
+	}
+
+	gaps, err := s.DetectGaps(req.ChannelID, req.StartTime, req.EndTime)
+	if err != nil {
+		return nil, err
+	}
+
+	created := make([]models.ScheduleItem, 0, len(gaps))
+	for _, gap := range gaps {
+		item := models.ScheduleItem{
+			ID:              fmt.Sprintf("sched-filler-%d-%d", time.Now().UnixNano(), gap.StartTime.Unix()),
+			ChannelID:       req.ChannelID,
+			ProgramTitle:    fillerTitle,
+			MediaPath:       fillerMedia,
+			StartTime:       gap.StartTime,
+			EndTime:         gap.EndTime,
+			DurationSeconds: gap.DurationSeconds,
+			CreatedAt:       time.Now().UTC(),
+		}
+		if err := s.store.CreateScheduleItem(&item); err != nil {
+			return created, fmt.Errorf("failed to auto-fill gap: %w", err)
+		}
+		created = append(created, item)
+	}
+
+	return created, nil
+}
+

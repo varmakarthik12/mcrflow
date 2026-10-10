@@ -93,6 +93,16 @@ var EnterpriseRBACPolicy = []RouteRule{
 	},
 	{
 		Method:       "POST",
+		PathPattern:  "/api/v1/channels/{id}/preview/start",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
+	},
+	{
+		Method:       "POST",
+		PathPattern:  "/api/v1/channels/{id}/preview/stop",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
+	},
+	{
+		Method:       "POST",
 		PathPattern:  "/api/v1/channels/{id}/slate",
 		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator},
 	},
@@ -150,6 +160,16 @@ var EnterpriseRBACPolicy = []RouteRule{
 		PathPattern:  "/api/v1/schedules/check-conflicts",
 		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
 	},
+	{
+		Method:       "GET",
+		PathPattern:  "/api/v1/schedules/gaps",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
+	},
+	{
+		Method:       "POST",
+		PathPattern:  "/api/v1/schedules/auto-fill-gaps",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
+	},
 
 	// Schedule aliases (singular /api/v1/schedule)
 	{
@@ -185,6 +205,16 @@ var EnterpriseRBACPolicy = []RouteRule{
 	{
 		Method:       "POST",
 		PathPattern:  "/api/v1/schedule/check-conflicts",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
+	},
+	{
+		Method:       "GET",
+		PathPattern:  "/api/v1/schedule/gaps",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
+	},
+	{
+		Method:       "POST",
+		PathPattern:  "/api/v1/schedule/auto-fill-gaps",
 		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
 	},
 

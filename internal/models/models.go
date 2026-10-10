@@ -31,17 +31,15 @@ type UserCredentials struct {
 	Password string `json:"password"`
 }
 
-// StreamDestination configures an egress stream target (UDP, SRT, RTMP, HLS)
+// StreamDestination configures an egress stream target (UDP, RTMP, HLS)
 type StreamDestination struct {
-	Type        string `json:"type"`                   // udp, srt, rtmp, hls
-	Protocol    string `json:"protocol,omitempty"`     // UDP_MULTICAST, SRT, RTMP, HLS alias
+	Type        string `json:"type"`                   // udp, rtmp, hls
+	Protocol    string `json:"protocol,omitempty"`     // UDP_MULTICAST, RTMP, HLS alias
 	Enabled     bool   `json:"enabled"`                // active egress switch
 	URL         string `json:"url"`                    // destination URL / address
 	EndpointURL string `json:"endpoint_url,omitempty"` // alias for url
 	Port        int    `json:"port"`                   // network port
-	Mode        string `json:"mode"`                   // caller, listener (for SRT)
-	StreamKey   string `json:"stream_key"`             // RTMP key or SRT stream ID
-	LatencyMs   int    `json:"latency_ms"`             // SRT buffer latency
+	StreamKey   string `json:"stream_key"`             // RTMP key
 }
 
 // Channel represents a linear broadcast television channel
@@ -94,11 +92,13 @@ type ScheduleItem struct {
 	EndTime            time.Time `json:"end_time"`
 	TmdbID             string    `json:"tmdb_id"`
 	TmdbPoster         string    `json:"tmdb_poster"`
-	TmdbOverview       string    `json:"tmdb_overview"`
-	AdTemplateID       string    `json:"ad_template_id"`
-	AudioTrackIndex    int       `json:"audio_track_index"`
-	SubtitleTrackIndex int       `json:"subtitle_track_index"`
-	CreatedAt          time.Time `json:"created_at"`
+	TmdbOverview        string    `json:"tmdb_overview"`
+	AdTemplateID        string    `json:"ad_template_id"`
+	SpecialPromoTitle   string    `json:"special_promo_title,omitempty"`
+	SpecialPromoSubtext string    `json:"special_promo_subtext,omitempty"`
+	AudioTrackIndex     int       `json:"audio_track_index"`
+	SubtitleTrackIndex  int       `json:"subtitle_track_index"`
+	CreatedAt           time.Time `json:"created_at"`
 }
 
 // ResolutionPreset represents a broadcast raster format standard (e.g. 1080i50, 720p50)
@@ -153,18 +153,32 @@ type CommercialBreak struct {
 	Scte35Cue       bool     `json:"scte35_cue"`
 }
 
-// AdTemplate represents a reusable graphics and commercial layout template
+// AdTemplate represents a reusable graphics, branding, and commercial layout template
 type AdTemplate struct {
-	ID                   string            `json:"id"`
-	Name                 string            `json:"name"`
-	TemplateType         string            `json:"template_type"` // overlay, commercial_break, composite
-	OverlayElementsJSON  string            `json:"-"`
-	OverlayElements      []OverlayElement  `json:"overlay_elements"`
-	CommercialBreaksJSON string            `json:"-"`
-	CommercialBreaks     []CommercialBreak `json:"commercial_breaks"`
-	IsActive             bool              `json:"is_active"`
-	CreatedAt            time.Time         `json:"created_at"`
-	UpdatedAt            time.Time         `json:"updated_at"`
+	ID                       string            `json:"id"`
+	Name                     string            `json:"name"`
+	TemplateType             string            `json:"template_type"` // overlay, commercial_break, composite
+	LogoPath                 string            `json:"logo_path,omitempty"`
+	LogoPosition             string            `json:"logo_position,omitempty"` // top-right, top-left, bottom-right, bottom-left, custom
+	LogoX                    int               `json:"logo_x,omitempty"`
+	LogoY                    int               `json:"logo_y,omitempty"`
+	LogoWidth                int               `json:"logo_width,omitempty"`
+	LogoHeight               int               `json:"logo_height,omitempty"`
+	LogoOpacity              float64           `json:"logo_opacity,omitempty"`
+	LogoFit                  string            `json:"logo_fit,omitempty"` // contain, cover
+	OverlayElementsJSON      string            `json:"-"`
+	OverlayElements          []OverlayElement  `json:"overlay_elements"`
+	CommercialBreaksJSON     string            `json:"-"`
+	CommercialBreaks         []CommercialBreak `json:"commercial_breaks"`
+	CollisionBehavior        string            `json:"collision_behavior,omitempty"` // alternate, priority
+	AlternateDurationSeconds int               `json:"alternate_duration_seconds,omitempty"`
+	PriorityOrderJSON        string            `json:"-"`
+	PriorityOrder            []string          `json:"priority_order,omitempty"`
+	GeneralLayoutJSON        string            `json:"-"`
+	GeneralLayout            map[string]any    `json:"general_layout,omitempty"`
+	IsActive                 bool              `json:"is_active"`
+	CreatedAt                time.Time         `json:"created_at"`
+	UpdatedAt                time.Time         `json:"updated_at"`
 }
 
 // FileEntry represents a file or directory discovered in storage
@@ -318,6 +332,18 @@ func (a *AdTemplate) ParseJSON() {
 	if a.CommercialBreaks == nil {
 		a.CommercialBreaks = []CommercialBreak{}
 	}
+	if a.PriorityOrderJSON != "" {
+		_ = json.Unmarshal([]byte(a.PriorityOrderJSON), &a.PriorityOrder)
+	}
+	if a.PriorityOrder == nil {
+		a.PriorityOrder = []string{}
+	}
+	if a.GeneralLayoutJSON != "" {
+		_ = json.Unmarshal([]byte(a.GeneralLayoutJSON), &a.GeneralLayout)
+	}
+	if a.GeneralLayout == nil {
+		a.GeneralLayout = make(map[string]any)
+	}
 }
 
 func (a *AdTemplate) PackJSON() {
@@ -332,6 +358,18 @@ func (a *AdTemplate) PackJSON() {
 		a.CommercialBreaksJSON = string(bytes)
 	} else {
 		a.CommercialBreaksJSON = "[]"
+	}
+	if a.PriorityOrder != nil {
+		bytes, _ := json.Marshal(a.PriorityOrder)
+		a.PriorityOrderJSON = string(bytes)
+	} else {
+		a.PriorityOrderJSON = "[]"
+	}
+	if a.GeneralLayout != nil {
+		bytes, _ := json.Marshal(a.GeneralLayout)
+		a.GeneralLayoutJSON = string(bytes)
+	} else {
+		a.GeneralLayoutJSON = "{}"
 	}
 }
 

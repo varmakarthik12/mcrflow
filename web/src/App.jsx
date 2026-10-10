@@ -159,7 +159,8 @@ export function App() {
       audio_codec: "aac",
       destinations: [
         { type: "udp", protocol: "UDP_MULTICAST", enabled: true, url: `udp://239.255.10.${chNum}:5000?pkt_size=1316`, endpoint_url: `udp://239.255.10.${chNum}:5000?pkt_size=1316` },
-        { type: "srt", protocol: "SRT", enabled: true, url: `srt://127.0.0.1:${9000 + chNum}?mode=caller`, endpoint_url: `srt://127.0.0.1:${9000 + chNum}?mode=caller` },
+        { type: "rtmp", protocol: "RTMP", enabled: false, url: "rtmp://live.twitch.tv/app", endpoint_url: "rtmp://live.twitch.tv/app", stream_key: "" },
+        { type: "hls", protocol: "HLS", enabled: true, url: `/hls/ch-${chNum}/master.m3u8`, endpoint_url: `/hls/ch-${chNum}/master.m3u8` }
       ]
     };
     try {
@@ -345,6 +346,7 @@ export function App() {
             resolutions={resolutions}
             adTemplates={adTemplates}
             onBackToDashboard={() => setActiveScreen(1)}
+            onNavigateToAdStudio={() => setActiveScreen(4)}
             onShowToast={showToast}
             t={t}
           />
