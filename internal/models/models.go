@@ -144,12 +144,23 @@ type OverlayElement struct {
 	IsActive           bool    `json:"is_active"`
 }
 
+// AdClip represents an individual commercial video asset inside an ad break pod
+type AdClip struct {
+	Title           string `json:"title"`
+	MediaPath       string `json:"media_path"`
+	DurationSeconds int    `json:"duration_seconds"`
+}
+
 // CommercialBreak represents an ad insertion slot
 type CommercialBreak struct {
-	BreakType       string   `json:"break_type"` // pre_roll, mid_roll, post_roll
+	ID              string   `json:"id,omitempty"`
+	Title           string   `json:"title,omitempty"`
+	BreakType       string   `json:"break_type"` // pre_roll, mid_roll, post_roll, interval_roll
 	OffsetSeconds   int      `json:"offset_seconds"`
+	IntervalMinutes int      `json:"interval_minutes,omitempty"` // For recurring ad roll e.g. every X mins
 	DurationSeconds int      `json:"duration_seconds"`
-	Clips           []string `json:"clips"`
+	Clips           []string `json:"clips,omitempty"`    // List of media paths
+	AdClips         []AdClip `json:"ad_clips,omitempty"` // Series of multiple video ads
 	Scte35Cue       bool     `json:"scte35_cue"`
 }
 

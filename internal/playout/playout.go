@@ -141,9 +141,17 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 			if dst.Port > 0 && !strings.Contains(targetURL, fmt.Sprintf(":%d", dst.Port)) {
 				targetURL = fmt.Sprintf("%s:%d", targetURL, dst.Port)
 			}
+			udpURL := targetURL
+			if !strings.Contains(udpURL, "pkt_size=") {
+				sep := "?"
+				if strings.Contains(udpURL, "?") {
+					sep = "&"
+				}
+				udpURL = fmt.Sprintf("%s%spkt_size=1316&overrun_nonfatal=1&fifo_size=286720", udpURL, sep)
+			}
 			targets = append(targets, destTarget{
 				format: "mpegts",
-				url:    fmt.Sprintf("%s?pkt_size=1316", targetURL),
+				url:    udpURL,
 			})
 
 		case "rtmp":
@@ -156,11 +164,22 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 			})
 
 		case "hls":
-			targets = append(targets, destTarget{
-				format: "hls",
-				args:   []string{"-hls_time", "2", "-hls_list_size", "10", "-hls_flags", "delete_segments"},
-				url:    targetURL,
-			})
+			// If targetURL is a remote HTTP endpoint (e.g. CDN push), append directly
+			if strings.HasPrefix(targetURL, "http://") || strings.HasPrefix(targetURL, "https://") {
+				targets = append(targets, destTarget{
+					format: "hls",
+					args:   []string{"-hls_time", "2", "-hls_list_size", "10", "-hls_flags", "delete_segments"},
+					url:    targetURL,
+				})
+			} else if !strings.HasPrefix(targetURL, "/hls/") && targetURL != "" {
+				// Direct filesystem or custom target specified (e.g. /data/hls/ch-01/playlist.m3u8)
+				segmentPattern := filepath.Join(filepath.Dir(targetURL), "segment_%d.ts")
+				targets = append(targets, destTarget{
+					format: "hls",
+					args:   []string{"-hls_time", "2", "-hls_list_size", "10", "-hls_flags", "delete_segments+split_by_time", "-hls_segment_filename", segmentPattern},
+					url:    targetURL,
+				})
+			}
 		}
 	}
 
@@ -175,7 +194,7 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 	if isHLSRequested && cfg.HLSOutputDir != "" {
 		hasLocalHLS := false
 		for _, t := range targets {
-			if t.format == "hls" {
+			if t.format == "hls" && (strings.HasPrefix(t.url, cfg.HLSOutputDir) || t.url == filepath.Join(cfg.HLSOutputDir, "playlist.m3u8")) {
 				hasLocalHLS = true
 				break
 			}
@@ -396,7 +415,7 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='SPECIAL PROMO':fontcolor=gold:fontsize=15:x=%d:y=%d", fontPrefix, cx+15, cy+12))
 			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=%s:fontsize=%d:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.Text), textColor, fontSize, cx+15, cy+38))
 			if ov.SubText != "" {
-				ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=lightgray:fontsize=14:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.SubText), cx+15, cy+68))
+				ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=white@0.85:fontsize=14:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.SubText), cx+15, cy+68))
 			}
 
 		case "lower_third":
@@ -419,7 +438,7 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 			ovFilters = append(ovFilters, fmt.Sprintf("drawbox=x=%d:y=%d:w=%d:h=%d:color=%s:t=fill", cx, cy, cw, ch, bgColor))
 			ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=%s:fontsize=%d:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.Text), textColor, fontSize, cx+25, cy+16))
 			if ov.SubText != "" {
-				ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=lightgray:fontsize=18:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.SubText), cx+25, cy+52))
+				ovFilters = append(ovFilters, fmt.Sprintf("drawtext=%stext='%s':fontcolor=white@0.85:fontsize=18:x=%d:y=%d", fontPrefix, escapeDrawtext(ov.SubText), cx+25, cy+52))
 			}
 
 		default:
@@ -536,6 +555,7 @@ type PlayoutChannelState struct {
 	Cmd                   *exec.Cmd
 	CurrentScheduleItemID string
 	IsSlateActive         bool
+	ExecutedCommand       string
 }
 
 // PreviewSession tracks an active temporary live HLS browser preview
@@ -591,6 +611,9 @@ func (e *Engine) SetAdTemplateProvider(atp AdTemplateProvider) {
 
 // StartChannel begins playout for a channel
 func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, mediaPath string, programTitle string) (*models.PlayoutStatus, error) {
+	// Terminate any temporary preview session running for this channel
+	e.StopPreview(ch.ID)
+
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
@@ -853,9 +876,13 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 	if ffmpegPath, err := exec.LookPath("ffmpeg"); err == nil {
 		args, err := BuildFFmpegArgs(cfg)
 		if err == nil {
+			state.ExecutedCommand = "ffmpeg " + strings.Join(args, " ")
 			_ = os.MkdirAll(filepath.Join(e.dataDir, "logs"), 0755)
 			logPath := filepath.Join(e.dataDir, "logs", fmt.Sprintf("%s_playout.log", ch.ID))
 			logFile, errLog := os.Create(logPath)
+			if errLog == nil {
+				_, _ = fmt.Fprintf(logFile, "=== MCRFlow Master Playout Started at %s ===\nCommand:\n%s\n\n=== FFmpeg Output Stream ===\n", time.Now().UTC().Format(time.RFC3339), state.ExecutedCommand)
+			}
 			cmd := exec.CommandContext(ctx, ffmpegPath, args...)
 			if errLog == nil {
 				cmd.Stdout = logFile
@@ -874,6 +901,7 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 				_ = logFile.Close()
 			}
 		} else {
+			state.ExecutedCommand = fmt.Sprintf("# Failed to build ffmpeg args: %v", err)
 			_ = os.MkdirAll(filepath.Join(e.dataDir, "logs"), 0755)
 			logPath := filepath.Join(e.dataDir, "logs", fmt.Sprintf("%s_playout.log", ch.ID))
 			_ = os.WriteFile(logPath, []byte(fmt.Sprintf("Failed to build ffmpeg args: %v\n", err)), 0644)
@@ -1016,25 +1044,69 @@ func (e *Engine) GetStatus(channelID string) models.PlayoutStatus {
 	}
 }
 
-// StartPreview starts a temporary live HLS preview for a channel if HLS is not already a permanent destination
+// GetPlayoutLogs returns the triggered FFmpeg command and recent logs for a channel
+func (e *Engine) GetPlayoutLogs(channelID string, maxLines int) (string, string, error) {
+	e.mu.RLock()
+	st, ok := e.channels[channelID]
+	cmdStr := ""
+	if ok && st != nil && st.ExecutedCommand != "" {
+		cmdStr = st.ExecutedCommand
+	}
+	e.mu.RUnlock()
+
+	logPath := filepath.Join(e.dataDir, "logs", fmt.Sprintf("%s_playout.log", channelID))
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		prevPath := filepath.Join(e.dataDir, "logs", fmt.Sprintf("%s_preview.log", channelID))
+		if prevData, prevErr := os.ReadFile(prevPath); prevErr == nil {
+			data = prevData
+		} else {
+			if cmdStr == "" {
+				cmdStr = fmt.Sprintf("# No active playout session running for channel %s", channelID)
+			}
+			return cmdStr, fmt.Sprintf("No logs recorded yet for channel %s. Start channel playout or launch preview to generate output trace.", channelID), nil
+		}
+	}
+
+	lines := strings.Split(string(data), "\n")
+	if maxLines > 0 && len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+
+	if cmdStr == "" {
+		// Attempt to parse Command: from log header
+		for _, l := range lines {
+			if strings.HasPrefix(l, "Command:") {
+				cmdStr = strings.TrimSpace(strings.TrimPrefix(l, "Command:"))
+				break
+			}
+		}
+	}
+
+	return cmdStr, strings.Join(lines, "\n"), nil
+}
+
+// StartPreview starts a live HLS preview for a channel (reusing master if on-air, or spinning up preview)
 func (e *Engine) StartPreview(ch models.Channel, res models.ResolutionPreset) (bool, error) {
 	e.previewMu.Lock()
 	defer e.previewMu.Unlock()
 
-	// Check if HLS is already a permanently enabled destination
-	for _, dst := range ch.Destinations {
-		if dst.Enabled && strings.ToLower(dst.Type) == "hls" {
-			// Permanent HLS destination is already active or handled by main playout
-			return false, nil // isTemporary = false
-		}
+	// 1. If main channel playout is currently running and ON-AIR, reuse active master stream
+	e.mu.RLock()
+	mainSt, isMainActive := e.channels[ch.ID]
+	isOnAir := isMainActive && mainSt != nil && mainSt.Status.State == "ON-AIR"
+	e.mu.RUnlock()
+
+	if isOnAir {
+		return false, nil // isTemporary = false, using live on-air stream
 	}
 
-	// Check if a temporary preview is already active
+	// 2. Check if a temporary preview is already active
 	if existing, ok := e.previews[ch.ID]; ok && existing != nil {
 		return true, nil // isTemporary = true, already running
 	}
 
-	// Start a temporary preview stream
+	// 3. Start a preview stream writing to local HLS directory
 	hlsDir := filepath.Join(e.dataDir, "hls", ch.ID)
 	_ = os.MkdirAll(hlsDir, 0755)
 
@@ -1052,7 +1124,7 @@ func (e *Engine) StartPreview(ch models.Channel, res models.ResolutionPreset) (b
 	previewCfg := PlayoutConfig{
 		InputMedia:       inputMedia,
 		Resolution:       res,
-		EnablePreviewHLS:  true,
+		EnablePreviewHLS: true,
 		HLSOutputDir:     hlsDir,
 		Loop:             true,
 		ChannelID:        ch.ID,
@@ -1069,11 +1141,24 @@ func (e *Engine) StartPreview(ch models.Channel, res models.ResolutionPreset) (b
 	if ffmpegPath, err := exec.LookPath("ffmpeg"); err == nil {
 		args, err := BuildFFmpegArgs(previewCfg)
 		if err == nil {
+			_ = os.MkdirAll(filepath.Join(e.dataDir, "logs"), 0755)
+			prevLogPath := filepath.Join(e.dataDir, "logs", fmt.Sprintf("%s_preview.log", ch.ID))
+			prevLogFile, _ := os.Create(prevLogPath)
+			if prevLogFile != nil {
+				_, _ = fmt.Fprintf(prevLogFile, "=== Live Browser Preview Started at %s ===\nCommand:\nffmpeg %s\n\n=== Output ===\n", time.Now().UTC().Format(time.RFC3339), strings.Join(args, " "))
+			}
 			cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+			if prevLogFile != nil {
+				cmd.Stdout = prevLogFile
+				cmd.Stderr = prevLogFile
+			}
 			if err := cmd.Start(); err == nil {
 				sess.Cmd = cmd
 				go func() {
 					_ = cmd.Wait()
+					if prevLogFile != nil {
+						_ = prevLogFile.Close()
+					}
 				}()
 			}
 		}

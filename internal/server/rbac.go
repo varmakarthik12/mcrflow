@@ -109,7 +109,17 @@ var EnterpriseRBACPolicy = []RouteRule{
 	{
 		Method:       "GET",
 		PathPattern:  "/api/v1/channels/{id}/ffmpeg-cmd",
-		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator},
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
+	},
+	{
+		Method:       "GET",
+		PathPattern:  "/api/v1/channels/{id}/ffmpeg-logs",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
+	},
+	{
+		Method:       "GET",
+		PathPattern:  "/api/v1/channels/{id}/playout/logs",
+		AllowedRoles: []string{models.RoleAdmin, models.RoleOperator, models.RoleContentScheduler},
 	},
 	{
 		Method:       "POST",

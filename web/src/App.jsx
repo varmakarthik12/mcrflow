@@ -364,6 +364,7 @@ export function App() {
             onDeleteChannel={handleDeleteChannel}
             resolutions={resolutions}
             adTemplates={adTemplates}
+            agents={agents}
             onBackToDashboard={() => setActiveScreen(1)}
             onNavigateToAdStudio={() => setActiveScreen(4)}
             onShowToast={showToast}

@@ -455,11 +455,18 @@ export function AdStudioScreen({
   // Commercial Break Handlers
   const handleAddCommercialBreak = (type = "mid_roll") => {
     const newBreak = {
+      id: `brk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      title: type === "pre_roll" ? "Pre-Roll Ad Pod"
+           : type === "post_roll" ? "Post-Roll Ad Pod"
+           : type === "interval_roll" ? "Recurring Interval Ad Break"
+           : "Mid-Roll Ad Pod",
       break_type: type,
       offset_seconds: type === "pre_roll" ? 0 : 900,
+      interval_minutes: type === "interval_roll" ? 15 : 0,
       duration_seconds: 30,
       scte35_cue: true,
-      clips: []
+      clips: [],
+      ad_clips: []
     };
     setCommercialBreaks((prev) => [...prev, newBreak]);
     onShowToast(`Added ${type.replace(/_/g, ' ')} break slot`, "info");
@@ -467,6 +474,59 @@ export function AdStudioScreen({
 
   const handleRemoveCommercialBreak = (index) => {
     setCommercialBreaks((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const handleAddAdClipToBreak = (breakIdx) => {
+    setCommercialBreaks((prev) =>
+      prev.map((brk, idx) => {
+        if (idx !== breakIdx) return brk;
+        const currentClips = Array.isArray(brk.ad_clips) ? [...brk.ad_clips] : [];
+        const clipNum = currentClips.length + 1;
+        const newClip = {
+          title: `Commercial Spot #${clipNum}`,
+          media_path: `ads/commercial_${clipNum}.mp4`,
+          duration_seconds: 15
+        };
+        const updatedClips = [...currentClips, newClip];
+        const newDuration = updatedClips.reduce((sum, c) => sum + (Number(c.duration_seconds) || 0), 0);
+        return {
+          ...brk,
+          ad_clips: updatedClips,
+          duration_seconds: newDuration > 0 ? newDuration : brk.duration_seconds
+        };
+      })
+    );
+  };
+
+  const handleUpdateAdClip = (breakIdx, clipIdx, fields) => {
+    setCommercialBreaks((prev) =>
+      prev.map((brk, bIdx) => {
+        if (bIdx !== breakIdx) return brk;
+        const clips = Array.isArray(brk.ad_clips) ? [...brk.ad_clips] : [];
+        clips[clipIdx] = { ...clips[clipIdx], ...fields };
+        const newDuration = clips.reduce((sum, c) => sum + (Number(c.duration_seconds) || 0), 0);
+        return {
+          ...brk,
+          ad_clips: clips,
+          duration_seconds: newDuration > 0 ? newDuration : brk.duration_seconds
+        };
+      })
+    );
+  };
+
+  const handleRemoveAdClip = (breakIdx, clipIdx) => {
+    setCommercialBreaks((prev) =>
+      prev.map((brk, bIdx) => {
+        if (bIdx !== breakIdx) return brk;
+        const clips = (brk.ad_clips || []).filter((_, cIdx) => cIdx !== clipIdx);
+        const newDuration = clips.reduce((sum, c) => sum + (Number(c.duration_seconds) || 0), 0);
+        return {
+          ...brk,
+          ad_clips: clips,
+          duration_seconds: newDuration > 0 ? newDuration : (brk.duration_seconds || 30)
+        };
+      })
+    );
   };
 
   // Robust Drag and Resize Handlers using Global Window Listeners
@@ -1693,133 +1753,331 @@ export function AdStudioScreen({
         </div>
       )}
 
-      {/* TAB 4: Commercial Breaks & Pre-Roll / Mid-Roll Insertion */}
+      {/* TAB 4: Commercial Breaks & Multi-Video Ad Pod Insertion */}
       {activeTab === "commercials" && (
         <div className="bg-[#111622] border border-gray-800 rounded-xl p-5 shadow-lg space-y-5 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between pb-3 border-b border-gray-800">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-800 gap-3">
             <div>
               <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <Film className="w-4 h-4 text-emerald-400" />
-                Commercial Breaks & SCTE-35 Digital Ad Insertion (DAI)
+                Commercial Ad Pods & Digital Ad Insertion (DAI)
               </h3>
               <p className="text-xs text-gray-400 mt-0.5">
-                Configure pre-roll bumpers, mid-roll ad pods, and SCTE-35 splice cues applied to scheduled programs
+                Configure Pre-Roll, Mid-Roll, Post-Roll, and Interval Ad Breaks with multi-clip commercial video sequences and SCTE-35 cues
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
                 onClick={() => handleAddCommercialBreak("pre_roll")}
-                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center gap-1"
+                className="px-3 py-1.5 bg-sky-700 hover:bg-sky-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" /> + Pre-Roll Pod
               </button>
               <button
                 type="button"
                 onClick={() => handleAddCommercialBreak("mid_roll")}
-                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold flex items-center gap-1"
+                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" /> + Mid-Roll Pod
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddCommercialBreak("post_roll")}
+                className="px-3 py-1.5 bg-purple-700 hover:bg-purple-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" /> + Post-Roll Pod
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddCommercialBreak("interval_roll")}
+                className="px-3 py-1.5 bg-amber-700 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
+              >
+                <Clock className="w-3.5 h-3.5" /> + Interval Ad Roll
               </button>
             </div>
           </div>
 
           {commercialBreaks.length === 0 ? (
-            <div className="p-8 text-center text-gray-500 border border-dashed border-gray-800 rounded-xl">
-              <Film className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-gray-400">No commercial breaks configured in this template</p>
-              <p className="text-xs text-gray-500 mt-1">Add pre-roll or mid-roll slots to trigger automated ad insertions and SCTE-35 cues</p>
+            <div className="p-10 text-center text-gray-500 border border-dashed border-gray-800 rounded-xl space-y-2">
+              <Film className="w-10 h-10 text-gray-600 mx-auto" />
+              <p className="text-sm font-semibold text-gray-300">No commercial breaks configured in this layout template</p>
+              <p className="text-xs text-gray-500 max-w-md mx-auto">
+                Add Pre-Roll, Mid-Roll, Post-Roll, or periodic Interval Ad Breaks to sequence series of commercial video clips and inject SCTE-35 splice cues.
+              </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {commercialBreaks.map((brk, idx) => (
-                <div
-                  key={idx}
-                  className="p-4 bg-[#141b2b] border border-gray-800 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="px-2.5 py-1 rounded text-xs font-mono font-bold bg-emerald-950/80 border border-emerald-700 text-emerald-300 uppercase">
-                      {brk.break_type}
-                    </span>
-                    <div>
-                      <div className="text-xs font-bold text-white">
-                        Break #{idx + 1} • Duration: {brk.duration_seconds}s
-                        {brk.break_type === "mid_roll" && ` • Offset: ${Math.floor(brk.offset_seconds / 60)}m ${brk.offset_seconds % 60}s`}
-                      </div>
-                      <div className="text-[11px] text-gray-400 flex items-center gap-2 mt-0.5">
-                        <span className={brk.scte35_cue ? "text-emerald-400 font-semibold" : "text-gray-500"}>
-                          {brk.scte35_cue ? "✓ SCTE-35 Cue Enabled" : "No SCTE-35"}
+            <div className="space-y-4">
+              {commercialBreaks.map((brk, idx) => {
+                const typeColor =
+                  brk.break_type === "pre_roll" ? "bg-sky-950/80 border-sky-700 text-sky-300"
+                  : brk.break_type === "post_roll" ? "bg-purple-950/80 border-purple-700 text-purple-300"
+                  : brk.break_type === "interval_roll" ? "bg-amber-950/80 border-amber-700 text-amber-300"
+                  : "bg-emerald-950/80 border-emerald-700 text-emerald-300";
+
+                const clips = Array.isArray(brk.ad_clips) ? brk.ad_clips : [];
+                const totalClipDuration = clips.reduce((sum, c) => sum + (Number(c.duration_seconds) || 0), 0);
+
+                return (
+                  <div
+                    key={brk.id || idx}
+                    className="p-5 bg-[#141b2b] border border-gray-800 hover:border-gray-700 rounded-xl space-y-4 transition-colors"
+                  >
+                    {/* Top Row: Break Type, Title, and Actions */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-800/80">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <span className={`px-2.5 py-1 rounded text-[11px] font-mono font-bold uppercase border ${typeColor}`}>
+                          {brk.break_type.replace(/_/g, ' ')}
                         </span>
-                        <span>•</span>
-                        <span>{brk.clips?.length || 0} designated clips</span>
+                        <input
+                          type="text"
+                          value={brk.title || `Break #${idx + 1}`}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCommercialBreaks((prev) =>
+                              prev.map((b, i) => (i === idx ? { ...b, title: val } : b))
+                            );
+                          }}
+                          className="bg-[#182030] border border-gray-700 rounded-lg px-2.5 py-1 text-xs text-white font-semibold focus:outline-none focus:border-emerald-500 min-w-[200px]"
+                          placeholder="Ad Pod Name"
+                        />
+                        <select
+                          value={brk.break_type}
+                          onChange={(e) => {
+                            const nextType = e.target.value;
+                            setCommercialBreaks((prev) =>
+                              prev.map((b, i) =>
+                                i === idx
+                                  ? {
+                                      ...b,
+                                      break_type: nextType,
+                                      offset_seconds: nextType === "pre_roll" ? 0 : b.offset_seconds || 900,
+                                      interval_minutes: nextType === "interval_roll" ? (b.interval_minutes || 15) : 0
+                                    }
+                                  : b
+                              )
+                            );
+                          }}
+                          className="bg-[#182030] border border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-emerald-500"
+                        >
+                          <option value="pre_roll">Pre-Roll (Start of Content)</option>
+                          <option value="mid_roll">Mid-Roll (Offset Seconds)</option>
+                          <option value="post_roll">Post-Roll (End of Content)</option>
+                          <option value="interval_roll">Interval-Roll (Every X Mins)</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-400 font-mono">
+                          Total Pod: <strong className="text-white font-bold">{clips.length > 0 ? totalClipDuration : brk.duration_seconds}s</strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCommercialBreak(idx)}
+                          className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-950/30 rounded-lg transition-colors border border-transparent hover:border-red-900/40"
+                          title="Delete Commercial Break"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <label className="block text-[10px] text-gray-400 mb-0.5">Duration (sec)</label>
-                      <input
-                        type="number"
-                        min="5"
-                        max="300"
-                        value={brk.duration_seconds}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value) || 15;
-                          setCommercialBreaks((prev) =>
-                            prev.map((b, i) => i === idx ? { ...b, duration_seconds: val } : b)
-                          );
-                        }}
-                        className="w-20 bg-[#182030] border border-gray-700 rounded px-2 py-1 text-xs text-white font-mono"
-                      />
-                    </div>
+                    {/* Middle Row: Timing & SCTE-35 Controls */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs bg-[#111622] p-3 rounded-lg border border-gray-800">
+                      {/* Mid-roll Offset */}
+                      {brk.break_type === "mid_roll" && (
+                        <div>
+                          <label className="block text-[11px] text-gray-400 mb-1">
+                            Mid-Roll Offset: {Math.floor((brk.offset_seconds || 0) / 60)}m {(brk.offset_seconds || 0) % 60}s
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="15"
+                            value={brk.offset_seconds || 0}
+                            onChange={(e) => {
+                              const val = Math.max(0, parseInt(e.target.value) || 0);
+                              setCommercialBreaks((prev) =>
+                                prev.map((b, i) => (i === idx ? { ...b, offset_seconds: val } : b))
+                              );
+                            }}
+                            className="w-full bg-[#182030] border border-gray-700 rounded px-2.5 py-1 text-white font-mono"
+                          />
+                        </div>
+                      )}
 
-                    {brk.break_type === "mid_roll" && (
+                      {/* Interval Minutes */}
+                      {brk.break_type === "interval_roll" && (
+                        <div>
+                          <label className="block text-[11px] text-amber-300 font-semibold mb-1">
+                            Repeat Every (Minutes)
+                          </label>
+                          <input
+                            type="number"
+                            min="5"
+                            max="180"
+                            step="5"
+                            value={brk.interval_minutes || 15}
+                            onChange={(e) => {
+                              const val = Math.max(1, parseInt(e.target.value) || 15);
+                              setCommercialBreaks((prev) =>
+                                prev.map((b, i) => (i === idx ? { ...b, interval_minutes: val } : b))
+                              );
+                            }}
+                            className="w-full bg-[#182030] border border-amber-600/50 rounded px-2.5 py-1 text-white font-mono"
+                          />
+                        </div>
+                      )}
+
+                      {/* Pre-roll note */}
+                      {brk.break_type === "pre_roll" && (
+                        <div>
+                          <label className="block text-[11px] text-gray-400 mb-1">Trigger Position</label>
+                          <span className="text-sky-300 font-mono text-[11px] block py-1">
+                            00:00:00 (Prior to Program Start)
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Post-roll note */}
+                      {brk.break_type === "post_roll" && (
+                        <div>
+                          <label className="block text-[11px] text-gray-400 mb-1">Trigger Position</label>
+                          <span className="text-purple-300 font-mono text-[11px] block py-1">
+                            Program Outro (Post-Credits)
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Fallback Pod Duration if no clips */}
                       <div>
-                        <label className="block text-[10px] text-gray-400 mb-0.5">Offset (sec)</label>
+                        <label className="block text-[11px] text-gray-400 mb-1">
+                          Duration (Seconds) {clips.length > 0 && <span className="text-gray-500 font-normal">(Auto-Sum)</span>}
+                        </label>
                         <input
                           type="number"
-                          min="0"
-                          value={brk.offset_seconds}
+                          min="5"
+                          max="600"
+                          disabled={clips.length > 0}
+                          value={clips.length > 0 ? totalClipDuration : brk.duration_seconds}
                           onChange={(e) => {
-                            const val = parseInt(e.target.value) || 0;
+                            const val = parseInt(e.target.value) || 15;
                             setCommercialBreaks((prev) =>
-                              prev.map((b, i) => i === idx ? { ...b, offset_seconds: val } : b)
+                              prev.map((b, i) => (i === idx ? { ...b, duration_seconds: val } : b))
                             );
                           }}
-                          className="w-24 bg-[#182030] border border-gray-700 rounded px-2 py-1 text-xs text-white font-mono"
+                          className="w-full bg-[#182030] border border-gray-700 rounded px-2.5 py-1 text-white font-mono disabled:opacity-60"
                         />
                       </div>
-                    )}
 
-                    <div className="flex items-center gap-2 pt-3">
-                      <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={brk.scte35_cue}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setCommercialBreaks((prev) =>
-                              prev.map((b, i) => i === idx ? { ...b, scte35_cue: checked } : b)
-                            );
-                          }}
-                          className="rounded accent-emerald-500"
-                        />
-                        <span className="text-[11px]">SCTE-35</span>
-                      </label>
+                      {/* SCTE-35 Digital Splice Cue */}
+                      <div className="flex flex-col justify-center">
+                        <label className="flex items-center gap-2 text-xs text-gray-200 cursor-pointer pt-3">
+                          <input
+                            type="checkbox"
+                            checked={brk.scte35_cue}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setCommercialBreaks((prev) =>
+                                prev.map((b, i) => (i === idx ? { ...b, scte35_cue: checked } : b))
+                              );
+                            }}
+                            className="rounded accent-emerald-500 w-4 h-4 cursor-pointer"
+                          />
+                          <span className="font-semibold text-emerald-400">SCTE-35 Splice Cue</span>
+                        </label>
+                        <span className="text-[10px] text-gray-500 mt-0.5">Injects digital cue for downstream ad servers</span>
+                      </div>
+                    </div>
 
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveCommercialBreak(idx)}
-                        className="p-1.5 text-gray-500 hover:text-red-400 ml-2"
-                        title="Delete Break"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    {/* Commercial Video Ad Series (ad_clips) */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                          <Film className="w-3.5 h-3.5 text-blue-400" />
+                          Commercial Video Ad Clips ({clips.length} {clips.length === 1 ? "Spot" : "Spots"})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleAddAdClipToBreak(idx)}
+                          className="px-2.5 py-1 bg-blue-900/50 hover:bg-blue-800 text-blue-200 border border-blue-700/60 rounded text-xs font-semibold flex items-center gap-1 transition-colors"
+                        >
+                          <Plus className="w-3 h-3" /> + Add Video Spot
+                        </button>
+                      </div>
+
+                      {clips.length === 0 ? (
+                        <div className="p-3 bg-[#111622] border border-dashed border-gray-800 rounded-lg text-xs text-gray-500 flex items-center justify-between">
+                          <span>No local ad files assigned. Playout will execute SCTE-35 cue signaling without switching to local media.</span>
+                          <button
+                            type="button"
+                            onClick={() => handleAddAdClipToBreak(idx)}
+                            className="text-blue-400 hover:text-blue-300 underline font-medium"
+                          >
+                            Add first commercial spot
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {clips.map((clip, clipIdx) => (
+                            <div
+                              key={clipIdx}
+                              className="p-3 bg-[#111622] border border-gray-800 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="w-5 h-5 rounded-full bg-blue-950 border border-blue-800 text-blue-300 font-mono text-[10px] flex items-center justify-center font-bold shrink-0">
+                                  {clipIdx + 1}
+                                </span>
+                                <input
+                                  type="text"
+                                  value={clip.title || ""}
+                                  onChange={(e) => handleUpdateAdClip(idx, clipIdx, { title: e.target.value })}
+                                  placeholder="Ad Spot Title (e.g. Brand 15s TVC)"
+                                  className="bg-[#182030] border border-gray-700 rounded px-2.5 py-1 text-white font-medium min-w-[180px] focus:outline-none focus:border-blue-500"
+                                />
+                              </div>
+
+                              <div className="flex-1 min-w-[200px]">
+                                <input
+                                  type="text"
+                                  value={clip.media_path || ""}
+                                  onChange={(e) => handleUpdateAdClip(idx, clipIdx, { media_path: e.target.value })}
+                                  placeholder="Video Media Path (e.g. ads/spot_01.mp4)"
+                                  className="w-full bg-[#182030] border border-gray-700 rounded px-2.5 py-1 text-white font-mono placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-3 shrink-0">
+                                <div className="flex items-center gap-1.5">
+                                  <label className="text-[10px] text-gray-400">Duration:</label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max="300"
+                                    value={clip.duration_seconds || 15}
+                                    onChange={(e) => handleUpdateAdClip(idx, clipIdx, { duration_seconds: parseInt(e.target.value) || 15 })}
+                                    className="w-16 bg-[#182030] border border-gray-700 rounded px-2 py-1 text-white font-mono text-center"
+                                  />
+                                  <span className="text-[10px] text-gray-400">sec</span>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveAdClip(idx, clipIdx)}
+                                  className="p-1 text-gray-500 hover:text-red-400 transition-colors"
+                                  title="Remove Spot"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

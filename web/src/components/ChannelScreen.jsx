@@ -27,7 +27,9 @@ import {
   ChevronUp,
   ChevronRight,
   RefreshCw,
-  Activity
+  Activity,
+  Terminal,
+  FileText
 } from 'lucide-react';
 import { VideoPlayer } from './VideoPlayer';
 import { api } from '../api';
@@ -41,6 +43,7 @@ export function ChannelScreen({
   onDeleteChannel,
   resolutions = [],
   adTemplates = [],
+  agents = [],
   onBackToDashboard,
   onNavigateToAdStudio,
   onShowToast,
@@ -58,6 +61,16 @@ export function ChannelScreen({
   const [playoutStatus, setPlayoutStatus] = useState(null);
   const [isCallSignManual, setIsCallSignManual] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+
+  // Playout & FFmpeg Diagnostics Modal State
+  const [isPlayoutBusy, setIsPlayoutBusy] = useState(false);
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [logChannelId, setLogChannelId] = useState("");
+  const [ffmpegCommand, setFfmpegCommand] = useState("");
+  const [ffmpegLogs, setFfmpegLogs] = useState("");
+  const [isLogLoading, setIsLogLoading] = useState(false);
+  const [copiedCmd, setCopiedCmd] = useState(false);
+  const [autoRefreshLogs, setAutoRefreshLogs] = useState(true);
 
   // Live Browser Preview Modal State
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
@@ -263,28 +276,144 @@ export function ChannelScreen({
     }
   };
 
+  // Dynamic Host & Stream Resolution (Control Plane vs Edge Agent)
+  const resolveAgentHost = (channel = activeChannel) => {
+    if (channel?.primary_agent_id && Array.isArray(agents)) {
+      const ag = agents.find((a) => a.id === channel.primary_agent_id);
+      if (ag) {
+        return {
+          host: ag.ip_address || ag.hostname || window.location.hostname,
+          port: ag.port || 3082,
+          isEdge: true,
+          agentName: ag.name || ag.id
+        };
+      }
+    }
+    return {
+      host: window.location.hostname || "localhost",
+      port: window.location.port || (window.location.protocol === "https:" ? "443" : "80"),
+      isEdge: false,
+      agentName: "Control Plane Host"
+    };
+  };
+
+  const getResolvedHlsUrl = (channel = activeChannel, token = formData.hls_web_token) => {
+    if (!channel?.id) return "";
+    const { host, port } = resolveAgentHost(channel);
+    const portPart = port && port !== "80" && port !== "443" ? `:${port}` : "";
+    const proto = window.location.protocol || "http:";
+    let url = `${proto}//${host}${portPart}/hls/${channel.id}/master.m3u8`;
+    const tok = token || channel.hls_web_token;
+    if (tok) {
+      url += `?token=${encodeURIComponent(tok)}`;
+    }
+    return url;
+  };
+
+  const getResolvedRtmpUrl = (channel = activeChannel) => {
+    if (!channel?.id) return "";
+    const rtmpDest = channel.destinations?.find((d) => (d.protocol === "RTMP" || d.type === "rtmp") && d.enabled);
+    if (rtmpDest?.url && !rtmpDest.url.startsWith("rtmp://localhost") && !rtmpDest.url.startsWith("rtmp://127.0.0.1")) {
+      return rtmpDest.url;
+    }
+    const { host } = resolveAgentHost(channel);
+    return `rtmp://${host}:1935/live/${channel.call_sign || channel.id}`;
+  };
+
+  const getResolvedEpgUrl = (channel = activeChannel, token = formData.epg_web_token) => {
+    if (!channel?.id) return "";
+    const { host, port } = resolveAgentHost(channel);
+    const portPart = port && port !== "80" && port !== "443" ? `:${port}` : "";
+    const proto = window.location.protocol || "http:";
+    let url = `${proto}//${host}${portPart}/api/v1/epg/${channel.id}.xml`;
+    const tok = token || channel.epg_web_token;
+    if (tok) {
+      url += `?token=${encodeURIComponent(tok)}`;
+    }
+    return url;
+  };
+
+  // Start / Stop Playout Handlers
+  const handleStartPlayout = async (chId = activeChannel.id) => {
+    if (!chId) return;
+    setIsPlayoutBusy(true);
+    try {
+      await api.startPlayout(chId);
+      onShowToast("Playout broadcast pipeline launched on-air!", "success");
+      const st = await api.getPlayoutStatus(chId);
+      if (st) setPlayoutStatus(st);
+    } catch (err) {
+      onShowToast("Failed to start playout: " + err.message, "error");
+    } finally {
+      setIsPlayoutBusy(false);
+    }
+  };
+
+  const handleStopPlayout = async (chId = activeChannel.id) => {
+    if (!chId) return;
+    setIsPlayoutBusy(true);
+    try {
+      await api.stopPlayout(chId);
+      onShowToast("Playout pipeline stopped", "info");
+      const st = await api.getPlayoutStatus(chId);
+      if (st) setPlayoutStatus(st);
+    } catch (err) {
+      onShowToast("Failed to stop playout: " + err.message, "error");
+    } finally {
+      setIsPlayoutBusy(false);
+    }
+  };
+
+  // FFmpeg Diagnostics Log Loader
+  const loadPlayoutLogs = async (chId = activeChannel.id) => {
+    if (!chId) return;
+    setIsLogLoading(true);
+    try {
+      const data = await api.getFFmpegLogs(chId, 300);
+      setFfmpegCommand(data.command || "ffmpeg (idle / standby - not active)");
+      setFfmpegLogs(data.logs || "No active log trace available for this channel.");
+    } catch (err) {
+      setFfmpegLogs("Error fetching logs: " + err.message);
+    } finally {
+      setIsLogLoading(false);
+    }
+  };
+
+  const handleOpenLogModal = (chId = activeChannel.id) => {
+    setLogChannelId(chId);
+    setIsLogModalOpen(true);
+    loadPlayoutLogs(chId);
+  };
+
+  // Periodic Auto-refresh for FFmpeg Logs Modal
+  useEffect(() => {
+    if (!isLogModalOpen || !autoRefreshLogs) return;
+    const targetId = logChannelId || activeChannel.id;
+    if (!targetId) return;
+    const interval = setInterval(() => {
+      loadPlayoutLogs(targetId);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isLogModalOpen, autoRefreshLogs, logChannelId, activeChannel?.id]);
+
   // Live Browser Preview Handling
   const handleOpenPreview = async (chId = activeChannel.id) => {
     if (!chId) return;
     setPreviewChannelId(chId);
     setIsPreviewLoading(true);
     setIsPreviewModalOpen(true);
+    const targetCh = channels.find((c) => c.id === chId) || activeChannel;
     try {
       const res = await api.startPreview(chId);
-      let streamUrl = res.hls_url || `/hls/${chId}/master.m3u8`;
-      const targetCh = channels.find((c) => c.id === chId) || activeChannel;
-      const tok = targetCh?.hls_web_token || formData.hls_web_token;
-      if (tok && !streamUrl.includes("token=")) {
-        streamUrl += (streamUrl.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(tok);
+      let streamUrl = res?.hls_url;
+      if (!streamUrl || streamUrl.startsWith("/")) {
+        streamUrl = getResolvedHlsUrl(targetCh);
       }
       setPreviewHlsUrl(streamUrl);
     } catch (err) {
-      onShowToast("Failed to initiate live preview: " + err.message, "error");
-      let fallback = `/hls/${chId}/master.m3u8`;
-      const targetCh = channels.find((c) => c.id === chId) || activeChannel;
-      const tok = targetCh?.hls_web_token || formData.hls_web_token;
-      if (tok) fallback += "?token=" + encodeURIComponent(tok);
-      setPreviewHlsUrl(fallback);
+      onShowToast("Preview stream connecting: " + err.message, "info");
+      const streamUrl = getResolvedHlsUrl(targetCh);
+      setPreviewHlsUrl(streamUrl);
     } finally {
       setIsPreviewLoading(false);
     }
@@ -306,15 +435,19 @@ export function ChannelScreen({
     if (type === "hls") {
       setCopiedHls(true);
       setTimeout(() => setCopiedHls(false), 2000);
-    } else {
+    } else if (type === "epg") {
       setCopiedEpg(true);
       setTimeout(() => setCopiedEpg(false), 2000);
+    } else if (type === "cmd") {
+      setCopiedCmd(true);
+      setTimeout(() => setCopiedCmd(false), 2000);
     }
-    onShowToast(`Copied ${type.toUpperCase()} endpoint URL to clipboard`, "info");
+    onShowToast(`Copied ${type.toUpperCase()} endpoint to clipboard`, "info");
   };
 
-  const fullHlsUrl = `${window.location.origin}/hls/${activeChannel.id}/master.m3u8${formData.hls_web_token ? `?token=${encodeURIComponent(formData.hls_web_token)}` : ''}`;
-  const fullEpgUrl = `${window.location.origin}/api/v1/epg/${activeChannel.id}.xml${formData.epg_web_token ? `?token=${encodeURIComponent(formData.epg_web_token)}` : ''}`;
+  const fullHlsUrl = getResolvedHlsUrl(activeChannel, formData.hls_web_token);
+  const fullEpgUrl = getResolvedEpgUrl(activeChannel, formData.epg_web_token);
+  const fullRtmpUrl = getResolvedRtmpUrl(activeChannel);
 
   // Filter channels for List view
   const filteredChannels = channels.filter((ch) => {
@@ -326,6 +459,131 @@ export function ChannelScreen({
       String(ch.lcn).includes(q)
     );
   });
+
+  // FFmpeg Playout Diagnostics Modal
+  const renderFFmpegLogModal = () => {
+    if (!isLogModalOpen) return null;
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="bg-[#111622] border border-gray-800 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 bg-[#0d121c]">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-950/60 border border-blue-800/50 rounded-lg text-blue-400">
+                <Terminal className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-white">
+                    FFmpeg Playout Diagnostics & Log Trace
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-blue-950 border border-blue-700 text-blue-300">
+                    {logChannelId || activeChannel.id}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Real-time broadcast process execution commands, parameters, filter graphs, and stderr telemetry
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsLogModalOpen(false)}
+              className="p-1.5 text-gray-400 hover:text-white rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Modal Body */}
+          <div className="p-6 space-y-5 overflow-y-auto max-h-[calc(90vh-140px)] bg-[#0B0F17]">
+            {/* Section 1: Active Executed FFmpeg Command */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-blue-400" />
+                  Triggered Command Line
+                </span>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(ffmpegCommand, "cmd")}
+                  className="px-2.5 py-1 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded text-xs font-medium flex items-center gap-1 transition-colors"
+                >
+                  {copiedCmd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedCmd ? "Copied Command!" : "Copy Command"}
+                </button>
+              </div>
+              <div className="bg-[#070A0F] border border-gray-800 rounded-lg p-3 text-xs font-mono text-blue-300 break-all select-all max-h-36 overflow-y-auto leading-relaxed">
+                {ffmpegCommand || "ffmpeg (idle / standby - not active)"}
+              </div>
+            </div>
+
+            {/* Section 2: Real-time Process Log Trace */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Terminal className="w-3.5 h-3.5 text-emerald-400" />
+                    Process stdout / stderr Trace
+                  </span>
+                  <span className="text-[11px] text-gray-500 font-mono">
+                    (Target Channel: {logChannelId || activeChannel.id})
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={autoRefreshLogs}
+                      onChange={(e) => setAutoRefreshLogs(e.target.checked)}
+                      className="rounded accent-blue-600"
+                    />
+                    <span>Auto-refresh (3s)</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => loadPlayoutLogs(logChannelId || activeChannel.id)}
+                    disabled={isLogLoading}
+                    className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium flex items-center gap-1 transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLogLoading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-[#05080E] border border-gray-800 rounded-lg p-4 font-mono text-xs text-gray-300 h-80 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
+                {isLogLoading && !ffmpegLogs ? (
+                  <div className="h-full flex items-center justify-center text-gray-500">
+                    <RefreshCw className="w-5 h-5 animate-spin mr-2 text-blue-400" />
+                    Loading process log trace...
+                  </div>
+                ) : ffmpegLogs ? (
+                  ffmpegLogs
+                ) : (
+                  <div className="text-gray-500 italic">No output logs recorded yet for this channel session.</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="px-6 py-3 border-t border-gray-800 bg-[#0d121c] flex items-center justify-between">
+            <span className="text-xs text-gray-500">
+              Playout Status: <strong className="text-white">{playoutStatus?.state || "ON-AIR"}</strong>
+            </span>
+            <button
+              onClick={() => setIsLogModalOpen(false)}
+              className="px-4 py-1.5 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-xs font-semibold"
+            >
+              Close Diagnostics
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // ==========================================
   // VIEW MODE 1: CHANNELS DIRECTORY (LIST FIRST)
@@ -447,9 +705,13 @@ export function ChannelScreen({
                     </div>
 
                     {/* Status Pill */}
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-red-950/80 border border-red-700/80 text-red-300 flex items-center gap-1.5 shrink-0">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                      ON-AIR
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0 ${
+                      ch.status === "STOPPED"
+                        ? "bg-gray-800 text-gray-400 border border-gray-700"
+                        : "bg-red-950/80 border border-red-700/80 text-red-300"
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${ch.status === "STOPPED" ? "bg-gray-500" : "bg-red-500 animate-pulse"}`} />
+                      {ch.status || "ON-AIR"}
                     </span>
                   </div>
 
@@ -495,13 +757,42 @@ export function ChannelScreen({
                 {/* Card Actions */}
                 <div className="pt-3 border-t border-gray-800 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5">
+                    {/* Playout Start / Stop Quick Toggle */}
+                    <button
+                      onClick={() => (ch.status === "STOPPED" ? handleStartPlayout(ch.id) : handleStopPlayout(ch.id))}
+                      disabled={isPlayoutBusy}
+                      className={`p-1.5 rounded-lg border transition-colors ${
+                        ch.status === "STOPPED"
+                          ? "bg-emerald-950/60 hover:bg-emerald-900 border-emerald-800/60 text-emerald-400"
+                          : "bg-red-950/50 hover:bg-red-900 border-red-800/60 text-red-400"
+                      }`}
+                      title={ch.status === "STOPPED" ? "Start Playout Pipeline" : "Stop Playout Pipeline"}
+                    >
+                      {ch.status === "STOPPED" ? (
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5 fill-current" />
+                      )}
+                    </button>
+
+                    {/* FFmpeg Process Logs */}
+                    <button
+                      onClick={() => handleOpenLogModal(ch.id)}
+                      className="p-1.5 bg-gray-800 hover:bg-gray-700 text-blue-400 hover:text-blue-300 rounded-lg transition-colors border border-gray-700"
+                      title="Inspect FFmpeg Command & Process Logs"
+                    >
+                      <Terminal className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Live Preview */}
                     <button
                       onClick={() => handleOpenPreview(ch.id)}
-                      className="p-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-colors"
+                      className="p-1.5 bg-gray-800 hover:bg-gray-700 text-indigo-400 hover:text-indigo-300 rounded-lg transition-colors border border-gray-700"
                       title="Live Preview"
                     >
-                      <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                      <Eye className="w-3.5 h-3.5" />
                     </button>
+
                     {channels.length > 1 && (
                       <button
                         onClick={() => onDeleteChannel(ch.id)}
@@ -555,7 +846,7 @@ export function ChannelScreen({
                     <span className="text-xs font-mono">Initializing HLS Playout Stream...</span>
                   </div>
                 ) : previewHlsUrl ? (
-                  <VideoPlayer src={previewHlsUrl} autoPlay={true} />
+                  <VideoPlayer streamUrl={previewHlsUrl} src={previewHlsUrl} autoPlay={true} />
                 ) : (
                   <div className="w-full aspect-video flex items-center justify-center text-gray-500 text-xs">
                     Stream unavailable
@@ -575,6 +866,9 @@ export function ChannelScreen({
             </div>
           </div>
         )}
+
+        {/* FFmpeg Process Diagnostics Modal */}
+        {renderFFmpegLogModal()}
       </div>
     );
   }
@@ -643,6 +937,39 @@ export function ChannelScreen({
               </span>
             )}
           </div>
+
+          {/* Playout Start / Stop Control */}
+          {playoutStatus?.state === "ON-AIR" || playoutStatus?.state === "EMERGENCY_SLATE" ? (
+            <button
+              onClick={() => handleStopPlayout(activeChannel.id)}
+              disabled={isPlayoutBusy}
+              className="px-3 py-1.5 bg-red-950/80 hover:bg-red-900 border border-red-700/80 text-red-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
+              title="Stop master playout pipeline"
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+              Stop Playout
+            </button>
+          ) : (
+            <button
+              onClick={() => handleStartPlayout(activeChannel.id)}
+              disabled={isPlayoutBusy}
+              className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm shadow-emerald-900/40 disabled:opacity-50"
+              title="Start master broadcast playout pipeline"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              Start Playout
+            </button>
+          )}
+
+          {/* Inspect FFmpeg Command & Process Logs */}
+          <button
+            onClick={() => handleOpenLogModal(activeChannel.id)}
+            className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            title="Inspect active FFmpeg command and live process trace logs"
+          >
+            <Terminal className="w-3.5 h-3.5 text-blue-400" />
+            FFmpeg Logs
+          </button>
 
           {/* Emergency Slate Toggle */}
           <button
@@ -945,6 +1272,9 @@ export function ChannelScreen({
                     className="w-full bg-[#182030] border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono placeholder-gray-500 focus:outline-none focus:border-red-500 disabled:opacity-50"
                   />
                 </div>
+                <div className="pt-1 text-[10px] text-gray-400">
+                  Host Egress Target: <span className="text-emerald-300 font-mono select-all">{fullRtmpUrl}</span>
+                </div>
               </div>
             </div>
 
@@ -970,8 +1300,8 @@ export function ChannelScreen({
                   <input
                     type="text"
                     readOnly
-                    value={`/hls/${activeChannel.id}/master.m3u8`}
-                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 font-mono truncate"
+                    value={fullHlsUrl}
+                    className="w-full bg-[#182030] border border-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-300 font-mono truncate select-all"
                   />
                   <button
                     type="button"
@@ -982,7 +1312,7 @@ export function ChannelScreen({
                     {copiedHls ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
-                <span className="text-[10px] text-gray-500 block">Sliding window master manifest with low-latency chunks</span>
+                <span className="text-[10px] text-gray-500 block">Fully qualified master manifest URL with low-latency chunks</span>
               </div>
             </div>
           </div>
@@ -1085,7 +1415,7 @@ export function ChannelScreen({
                   <span className="text-xs font-mono">Initializing HLS Playout Stream...</span>
                 </div>
               ) : previewHlsUrl ? (
-                <VideoPlayer src={previewHlsUrl} autoPlay={true} />
+                <VideoPlayer streamUrl={previewHlsUrl} src={previewHlsUrl} autoPlay={true} />
               ) : (
                 <div className="w-full aspect-video flex items-center justify-center text-gray-500 text-xs">
                   Stream unavailable
@@ -1105,6 +1435,9 @@ export function ChannelScreen({
           </div>
         </div>
       )}
+
+      {/* FFmpeg Process Diagnostics Modal */}
+      {renderFFmpegLogModal()}
     </div>
   );
 }

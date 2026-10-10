@@ -4,11 +4,14 @@ import { Play, Volume2, VolumeX, AlertCircle } from 'lucide-react';
 
 export function VideoPlayer({
   streamUrl,
+  src,
+  autoPlay = true,
   isSlate = false,
   channelName = "Live Channel",
   logoPath = "",
   logoPosition = "top-right"
 }) {
+  const activeUrl = streamUrl || src;
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -30,9 +33,11 @@ export function VideoPlayer({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !streamUrl) return;
+    if (!video || !activeUrl) return;
 
     let hls = null;
+    let retryCount = 0;
+    const maxRetries = 6;
     setError(null);
 
     if (Hls.isSupported()) {
@@ -40,22 +45,34 @@ export function VideoPlayer({
         enableWorker: true,
         lowLatencyMode: true,
         backBufferLength: 30,
+        manifestLoadingMaxRetry: 5,
+        manifestLoadingRetryDelay: 1000,
       });
 
-      hls.loadSource(streamUrl);
+      hls.loadSource(activeUrl);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().then(() => setIsPlaying(true)).catch(() => {
-          setIsPlaying(false);
-        });
+        setError(null);
+        if (autoPlay) {
+          video.play().then(() => setIsPlaying(true)).catch(() => {
+            setIsPlaying(false);
+          });
+        }
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
+              if (retryCount < maxRetries) {
+                retryCount++;
+                setTimeout(() => {
+                  if (hls) hls.startLoad();
+                }, 1000);
+              } else {
+                setError("Stream connecting or offline");
+              }
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
               hls.recoverMediaError();
@@ -68,9 +85,11 @@ export function VideoPlayer({
         }
       });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = streamUrl;
+      video.src = activeUrl;
       video.addEventListener('loadedmetadata', () => {
-        video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+        if (autoPlay) {
+          video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+        }
       });
     }
 
@@ -79,7 +98,7 @@ export function VideoPlayer({
         hls.destroy();
       }
     };
-  }, [streamUrl]);
+  }, [activeUrl, autoPlay]);
 
   const toggleMute = () => {
     if (videoRef.current) {

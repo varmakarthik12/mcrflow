@@ -75,6 +75,7 @@ export const api = {
   stopPlayout: (id) => request(`/api/v1/channels/${id}/playout/stop`, { method: "POST" }),
   getPlayoutStatus: (id) => request(`/api/v1/channels/${id}/playout/status`),
   getFFmpegCommand: (id) => request(`/api/v1/channels/${id}/ffmpeg-cmd`),
+  getFFmpegLogs: (id, lines = 250) => request(`/api/v1/channels/${id}/ffmpeg-logs?lines=${lines}`),
   startPreview: (id) => request(`/api/v1/channels/${id}/preview/start`, { method: "POST" }),
   stopPreview: (id) => request(`/api/v1/channels/${id}/preview/stop`, { method: "POST" }),
 

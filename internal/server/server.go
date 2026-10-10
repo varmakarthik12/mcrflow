@@ -206,6 +206,8 @@ func (s *Server) setupRoutes() {
 			operator.Post("/channels/{id}/playout/stop", s.handleStopChannelPlayout)
 			operator.Post("/channels/{id}/slate", s.handleToggleChannelSlate)
 			operator.Get("/channels/{id}/ffmpeg-cmd", s.handleGetFFmpegCommand)
+			operator.Get("/channels/{id}/ffmpeg-logs", s.handleGetFFmpegLogs)
+			operator.Get("/channels/{id}/playout/logs", s.handleGetFFmpegLogs)
 			operator.Put("/channels/{id}", s.handleUpdateChannel)
 			operator.Post("/channels/{id}/logo", s.handleUploadChannelLogo)
 			operator.Post("/media/upload-logo", s.handleUploadLogo)
@@ -767,6 +769,31 @@ func (s *Server) handleGetFFmpegCommand(w http.ResponseWriter, r *http.Request) 
 	jsonResp(w, http.StatusOK, map[string]string{
 		"channel_id": ch.ID,
 		"command":    cmdStr,
+	})
+}
+
+func (s *Server) handleGetFFmpegLogs(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	maxLines := 250
+	if l := r.URL.Query().Get("lines"); l != "" {
+		if val, err := strconv.Atoi(l); err == nil && val > 0 {
+			maxLines = val
+		}
+	}
+
+	cmdStr, logs, err := s.playoutEng.GetPlayoutLogs(id, maxLines)
+	if err != nil {
+		jsonErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	status := s.playoutEng.GetStatus(id)
+	jsonResp(w, http.StatusOK, map[string]interface{}{
+		"channel_id": id,
+		"state":      status.State,
+		"command":    cmdStr,
+		"logs":       logs,
+		"updated_at": status.UpdatedAt,
 	})
 }
 
