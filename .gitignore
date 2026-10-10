@@ -10,6 +10,8 @@ data/
 tmp/
 .DS_Store
 node_modules/
-.gemini/
+.gemini/*
+!.gemini/skills
+!.gemini/skills/**
 qa_api_results.json
 media/

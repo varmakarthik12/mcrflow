@@ -480,7 +480,7 @@ func (db *DB) Seed() error {
 		},
 		{
 			Type:      "srt",
-			Enabled:   true,
+			Enabled:   false, // Disabled by default until an external SRT receiver is listening
 			URL:       "srt://127.0.0.1",
 			Port:      9000,
 			Mode:      "caller",
@@ -503,7 +503,7 @@ func (db *DB) Seed() error {
 		INSERT OR IGNORE INTO channels 
 		(id, name, call_sign, resolution_id, logo_path, logo_position, ad_template_id, primary_agent_id, fallback_agent_id, hls_web_token, epg_web_token, destinations_json, is_active, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
-		"ch-01", "DD National HD", "MCR-DD1", "res-in-1080i50", "media/logos/channel_logo.png", "top-right", "tmpl-news-standard",
+		"ch-01", "DD National HD", "MCR-DD1", "res-in-1080i50", "data/logos/channel_logo.png", "top-right", "tmpl-news-standard",
 		"agent-local-01", "agent-standby-01", "live_sec_dd1_tok_2026", "epg_sec_dd1_xml_2026", string(destBytes), now, now,
 	)
 	if err != nil {

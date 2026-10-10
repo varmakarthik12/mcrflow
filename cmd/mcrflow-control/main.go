@@ -56,14 +56,19 @@ func main() {
 		return
 	}
 
-	// Ensure data and media directories exist
+	// Ensure data directory and writable runtime artifact subdirectories exist
 	if err := os.MkdirAll(*dataDir, 0755); err != nil {
 		log.Fatalf("Fatal: failed to create data directory '%s': %v", *dataDir, err)
 	}
+	_ = os.MkdirAll(filepath.Join(*dataDir, "logos"), 0755)
+	_ = os.MkdirAll(filepath.Join(*dataDir, "logs"), 0755)
+	_ = os.MkdirAll(filepath.Join(*dataDir, "hls"), 0755)
+	_ = os.MkdirAll(filepath.Join(*dataDir, "epg"), 0755)
+
+	// Ensure read-only source media directory exists
 	if err := os.MkdirAll(*mediaDir, 0755); err != nil {
 		log.Fatalf("Fatal: failed to create media directory '%s': %v", *mediaDir, err)
 	}
-	_ = os.MkdirAll(filepath.Join(*mediaDir, "logos"), 0755)
 
 	dbPath := filepath.Join(*dataDir, "mcrflow.db")
 	log.Printf("[MCRFlow] Initializing SQLite database at %s...", dbPath)

@@ -220,9 +220,9 @@ MCRFlow images are published to the GitHub Container Registry:
 ### Volume Mounts Explained
 
 1. **`-v <host-path>:/data` (Read-Write)**:
-   Persistent state directory containing SQLite database, user credentials, channels, resolution presets, ad templates, and pairing keys.
+   Persistent state directory containing SQLite database, uploaded station logos (`/data/logos`), channel playout logs (`/data/logs`), dynamic HLS caches (`/data/hls`), EPG exports (`/data/epg`), user credentials, channels, resolution presets, ad templates, and pairing keys.
 2. **`-v <host-path>:/media:ro` (Read-Only)**:
-   Your local media library (movies, commercials, bumpers, logos). Defaults to `./media` when running directly on the host, or `/media` inside container environments. Mounted `:ro` so playout processes can never accidentally modify or delete master broadcast files.
+   Your local media library (movies, commercials, bumpers). Defaults to `./media` when running directly on the host, or `/media` inside container environments. Mounted `:ro` so playout processes can never modify or delete master broadcast files.
 
 ### Standalone Docker Run
 ```bash

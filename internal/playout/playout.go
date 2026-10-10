@@ -3,7 +3,9 @@ package playout
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +27,10 @@ type PlayoutConfig struct {
 	Destinations      []models.StreamDestination
 	Loop              bool
 	ExtraArgs         []string
+	HLSOutputDir      string
+	ChannelID         string
+	DataDir           string
+	MediaDir          string
 }
 
 // BuildFFmpegArgs constructs command line arguments for FFmpeg broadcast pipeline
@@ -43,9 +49,23 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 
 	args = append(args, "-i", cfg.InputMedia)
 
-	hasLogo := cfg.LogoPath != ""
-	if hasLogo {
-		args = append(args, "-i", cfg.LogoPath)
+	// Resolve logo file path
+	resolvedLogo := cfg.LogoPath
+	hasLogo := false
+	if resolvedLogo != "" {
+		hasLogo = true
+		if _, err := os.Stat(resolvedLogo); err != nil && cfg.DataDir != "" {
+			cand := filepath.Join(cfg.DataDir, "logos", filepath.Base(resolvedLogo))
+			if _, errCand := os.Stat(cand); errCand == nil {
+				resolvedLogo = cand
+			} else {
+				candDef := filepath.Join(cfg.DataDir, "logos", "channel_logo.png")
+				if _, errDef := os.Stat(candDef); errDef == nil {
+					resolvedLogo = candDef
+				}
+			}
+		}
+		args = append(args, "-i", resolvedLogo)
 	}
 
 	// Determine width/height
@@ -69,13 +89,119 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 		lastV = "[deint]"
 	}
 
+	// Count effective output destinations
+	type destTarget struct {
+		format   string
+		args     []string
+		url      string
+	}
+	targets := make([]destTarget, 0)
+
+	for _, dst := range cfg.Destinations {
+		if !dst.Enabled {
+			continue
+		}
+		dstType := strings.ToLower(dst.Type)
+		if dstType == "" && dst.Protocol != "" {
+			dstType = strings.ToLower(strings.TrimPrefix(dst.Protocol, "UDP_"))
+		}
+		targetURL := dst.URL
+		if targetURL == "" && dst.EndpointURL != "" {
+			targetURL = dst.EndpointURL
+		}
+		if targetURL == "" {
+			continue
+		}
+
+		switch dstType {
+		case "udp", "multicast":
+			if dst.Port > 0 && !strings.Contains(targetURL, fmt.Sprintf(":%d", dst.Port)) {
+				targetURL = fmt.Sprintf("%s:%d", targetURL, dst.Port)
+			}
+			targets = append(targets, destTarget{
+				format: "mpegts",
+				url:    fmt.Sprintf("%s?pkt_size=1316", targetURL),
+			})
+
+		case "srt":
+			if dst.Port > 0 && !strings.Contains(targetURL, fmt.Sprintf(":%d", dst.Port)) {
+				targetURL = fmt.Sprintf("%s:%d", targetURL, dst.Port)
+			}
+			mode := dst.Mode
+			if mode == "" {
+				mode = "caller"
+			}
+			latency := dst.LatencyMs
+			if latency <= 0 {
+				latency = 120
+			}
+			targets = append(targets, destTarget{
+				format: "mpegts",
+				url:    fmt.Sprintf("%s?mode=%s&latency=%d", targetURL, mode, latency),
+			})
+
+		case "rtmp":
+			if dst.StreamKey != "" {
+				targetURL = fmt.Sprintf("%s/%s", strings.TrimSuffix(targetURL, "/"), dst.StreamKey)
+			}
+			targets = append(targets, destTarget{
+				format: "flv",
+				url:    targetURL,
+			})
+
+		case "hls":
+			targets = append(targets, destTarget{
+				format: "hls",
+				args:   []string{"-hls_time", "2", "-hls_list_size", "10", "-hls_flags", "delete_segments"},
+				url:    targetURL,
+			})
+		}
+	}
+
+	// Local HLS packaging if HLSOutputDir is specified
+	if cfg.HLSOutputDir != "" {
+		hasLocalHLS := false
+		for _, t := range targets {
+			if t.format == "hls" {
+				hasLocalHLS = true
+				break
+			}
+		}
+		if !hasLocalHLS {
+			_ = os.MkdirAll(cfg.HLSOutputDir, 0755)
+			playlistPath := filepath.Join(cfg.HLSOutputDir, "playlist.m3u8")
+			segmentPattern := filepath.Join(cfg.HLSOutputDir, "segment_%d.ts")
+			targets = append(targets, destTarget{
+				format: "hls",
+				args:   []string{"-hls_time", "2", "-hls_list_size", "10", "-hls_flags", "delete_segments+split_by_time", "-hls_segment_filename", segmentPattern},
+				url:    playlistPath,
+			})
+		}
+	}
+
+	numOutputs := len(targets)
+	if numOutputs == 0 {
+		targets = append(targets, destTarget{format: "null", url: "-"})
+		numOutputs = 1
+	}
+
 	if hasLogo {
 		opacity := cfg.LogoOpacity
 		if opacity <= 0 || opacity > 1.0 {
 			opacity = 0.90
 		}
 
-		filters = append(filters, fmt.Sprintf("[1:v]format=rgba,colorchannelmixer=aa=%.2f[logo]", opacity))
+		// Calculate reasonable station bug dimensions relative to output canvas (max 10% width, 10% height)
+		maxBugW := int(float64(w) * 0.10)
+		if maxBugW < 80 {
+			maxBugW = 80
+		}
+		maxBugH := int(float64(h) * 0.10)
+		if maxBugH < 60 {
+			maxBugH = 60
+		}
+
+		filters = append(filters, fmt.Sprintf("[1:v]scale=w=%d:h=%d:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=aa=%.2f[logo]", maxBugW, maxBugH, opacity))
 
 		// Determine overlay coordinates
 		var overlayPos string
@@ -96,22 +222,30 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 			}
 		}
 
-		filters = append(filters, fmt.Sprintf("%s[logo]overlay=%s[v_out]", lastV, overlayPos))
-		lastV = "[v_out]"
+		if numOutputs > 1 {
+			splitLabels := ""
+			for i := 0; i < numOutputs; i++ {
+				splitLabels += fmt.Sprintf("[v_out_%d]", i)
+			}
+			filters = append(filters, fmt.Sprintf("%s[logo]overlay=%s[v_comp];[v_comp]split=%d%s", lastV, overlayPos, numOutputs, splitLabels))
+		} else {
+			filters = append(filters, fmt.Sprintf("%s[logo]overlay=%s[v_out]", lastV, overlayPos))
+		}
 	} else {
-		// Just alias to [v_out]
-		filters = append(filters, fmt.Sprintf("%snull[v_out]", lastV))
-		lastV = "[v_out]"
+		if numOutputs > 1 {
+			splitLabels := ""
+			for i := 0; i < numOutputs; i++ {
+				splitLabels += fmt.Sprintf("[v_out_%d]", i)
+			}
+			filters = append(filters, fmt.Sprintf("%snull[v_comp];[v_comp]split=%d%s", lastV, numOutputs, splitLabels))
+		} else {
+			filters = append(filters, fmt.Sprintf("%snull[v_out]", lastV))
+		}
 	}
 
 	args = append(args, "-filter_complex", strings.Join(filters, ";"))
-	args = append(args, "-map", lastV)
 
-	// Audio Track Mapping
-	audioMap := fmt.Sprintf("0:a:%d", cfg.AudioTrackIndex)
-	args = append(args, "-map", audioMap)
-
-	// Audio Normalization (EBU R128 standard)
+	// Global / per-stream Audio Normalization (EBU R128 standard)
 	if cfg.NormalizeLoudness {
 		args = append(args, "-af", "loudnorm=I=-23:LRA=7:TP=-1.0")
 	}
@@ -121,85 +255,38 @@ func BuildFFmpegArgs(cfg PlayoutConfig) ([]string, error) {
 	if vCodec == "" {
 		vCodec = "libx264"
 	}
-	args = append(args, "-c:v", vCodec, "-preset", "veryfast")
-
-	if cfg.Resolution.FrameRate > 0 {
-		args = append(args, "-r", fmt.Sprintf("%.2f", cfg.Resolution.FrameRate))
-	}
-
-	// Audio Codec
 	aCodec := cfg.Resolution.AudioCodec
 	if aCodec == "" {
 		aCodec = "aac"
 	}
-	args = append(args, "-c:a", aCodec, "-b:a", "192k", "-ar", "48000")
 
-	// Extra preset arguments
-	if cfg.Resolution.ExtraFFmpegArgs != "" {
-		parts := strings.Fields(cfg.Resolution.ExtraFFmpegArgs)
-		args = append(args, parts...)
-	}
+	// Audio Track Index
+	audioMap := fmt.Sprintf("0:a:%d", cfg.AudioTrackIndex)
 
-	// Custom user extra args
-	if len(cfg.ExtraArgs) > 0 {
-		args = append(args, cfg.ExtraArgs...)
-	}
-
-	// Destinations Egress
-	activeDests := 0
-	for _, dst := range cfg.Destinations {
-		if !dst.Enabled {
-			continue
+	for i, target := range targets {
+		vLabel := "[v_out]"
+		if numOutputs > 1 {
+			vLabel = fmt.Sprintf("[v_out_%d]", i)
 		}
-		activeDests++
+		args = append(args, "-map", vLabel, "-map", audioMap)
+		args = append(args, "-c:v", vCodec, "-preset", "ultrafast")
+		if cfg.Resolution.FrameRate > 0 {
+			args = append(args, "-r", fmt.Sprintf("%.2f", cfg.Resolution.FrameRate))
+		}
+		args = append(args, "-c:a", aCodec, "-b:a", "192k", "-ar", "48000")
 
-		dstType := strings.ToLower(dst.Type)
-		if dstType == "" && dst.Protocol != "" {
-			dstType = strings.ToLower(strings.TrimPrefix(dst.Protocol, "UDP_"))
+		if cfg.Resolution.ExtraFFmpegArgs != "" {
+			parts := strings.Fields(cfg.Resolution.ExtraFFmpegArgs)
+			args = append(args, parts...)
 		}
-		targetURL := dst.URL
-		if targetURL == "" && dst.EndpointURL != "" {
-			targetURL = dst.EndpointURL
-		}
-		if targetURL == "" {
-			continue
+		if len(cfg.ExtraArgs) > 0 {
+			args = append(args, cfg.ExtraArgs...)
 		}
 
-		switch dstType {
-		case "udp", "multicast":
-			if dst.Port > 0 && !strings.Contains(targetURL, fmt.Sprintf(":%d", dst.Port)) {
-				targetURL = fmt.Sprintf("%s:%d", targetURL, dst.Port)
-			}
-			args = append(args, "-f", "mpegts", fmt.Sprintf("%s?pkt_size=1316", targetURL))
-
-		case "srt":
-			if dst.Port > 0 && !strings.Contains(targetURL, fmt.Sprintf(":%d", dst.Port)) {
-				targetURL = fmt.Sprintf("%s:%d", targetURL, dst.Port)
-			}
-			mode := dst.Mode
-			if mode == "" {
-				mode = "caller"
-			}
-			latency := dst.LatencyMs
-			if latency <= 0 {
-				latency = 120
-			}
-			args = append(args, "-f", "mpegts", fmt.Sprintf("%s?mode=%s&latency=%d", targetURL, mode, latency))
-
-		case "rtmp":
-			if dst.StreamKey != "" {
-				targetURL = fmt.Sprintf("%s/%s", strings.TrimSuffix(targetURL, "/"), dst.StreamKey)
-			}
-			args = append(args, "-f", "flv", targetURL)
-
-		case "hls":
-			args = append(args, "-f", "hls", "-hls_time", "2", "-hls_list_size", "10", "-hls_flags", "delete_segments", targetURL)
+		if len(target.args) > 0 {
+			args = append(args, target.args...)
 		}
-	}
-
-	// If no destinations specified, output to null format
-	if activeDests == 0 {
-		args = append(args, "-f", "null", "-")
+		args = append(args, "-f", target.format, target.url)
 	}
 
 	return args, nil
@@ -236,12 +323,24 @@ type Engine struct {
 	mu               sync.RWMutex
 	channels         map[string]*PlayoutChannelState
 	scheduleProvider ScheduleProvider
+	mediaDir         string
+	dataDir          string
 }
 
 // NewEngine creates a new playout engine
-func NewEngine() *Engine {
+func NewEngine(dirs ...string) *Engine {
+	mediaDir := "./media"
+	dataDir := "./data"
+	if len(dirs) > 0 && dirs[0] != "" {
+		mediaDir = dirs[0]
+	}
+	if len(dirs) > 1 && dirs[1] != "" {
+		dataDir = dirs[1]
+	}
 	return &Engine{
 		channels: make(map[string]*PlayoutChannelState),
+		mediaDir: mediaDir,
+		dataDir:  dataDir,
 	}
 }
 
@@ -260,6 +359,9 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 	// Stop existing if running
 	if existing, ok := e.channels[ch.ID]; ok && existing.Cancel != nil {
 		existing.Cancel()
+		if existing.Cmd != nil && existing.Cmd.Process != nil {
+			_ = existing.Cmd.Process.Kill()
+		}
 	}
 
 	logoPos := ch.LogoPosition
@@ -267,16 +369,25 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 		logoPos = "top-right"
 	}
 
-	cfg := PlayoutConfig{
-		InputMedia:        mediaPath,
-		Resolution:        res,
-		LogoPath:          ch.LogoPath,
-		LogoPosition:      logoPos,
-		LogoOpacity:       0.90,
-		AudioTrackIndex:   0,
-		NormalizeLoudness: true,
-		Destinations:      ch.Destinations,
-		Loop:              true,
+	// 1. Resolve logo file
+	resolvedLogo := ch.LogoPath
+	if resolvedLogo != "" {
+		if _, err := os.Stat(resolvedLogo); err != nil {
+			cand := filepath.Join(e.dataDir, "logos", filepath.Base(resolvedLogo))
+			if _, errCand := os.Stat(cand); errCand == nil {
+				resolvedLogo = cand
+			} else {
+				candDef := filepath.Join(e.dataDir, "logos", "channel_logo.png")
+				if _, errDef := os.Stat(candDef); errDef == nil {
+					resolvedLogo = candDef
+				}
+			}
+		}
+	} else {
+		candDef := filepath.Join(e.dataDir, "logos", "channel_logo.png")
+		if _, errDef := os.Stat(candDef); errDef == nil {
+			resolvedLogo = candDef
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -293,7 +404,6 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 			initialProg = sched.ProgramTitle
 			initialMedia = sched.MediaPath
 			initialItemID = sched.ID
-			cfg.InputMedia = sched.MediaPath
 			initialElapsed = int(now.Sub(sched.StartTime).Seconds())
 			if initialElapsed < 0 {
 				initialElapsed = 0
@@ -305,16 +415,52 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 		}
 	}
 
+	// 2. Resolve input media path
+	resolvedMedia := initialMedia
+	if resolvedMedia == "" {
+		resolvedMedia = "sample_movie.mp4"
+	}
+	if _, err := os.Stat(resolvedMedia); err != nil {
+		cand := filepath.Join(e.mediaDir, resolvedMedia)
+		if _, errCand := os.Stat(cand); errCand == nil {
+			resolvedMedia = cand
+		} else {
+			candSample := filepath.Join(e.mediaDir, "sample_movie.mp4")
+			if _, errSample := os.Stat(candSample); errSample == nil {
+				resolvedMedia = candSample
+			}
+		}
+	}
+
+	hlsDir := filepath.Join(e.dataDir, "hls", ch.ID)
+	_ = os.MkdirAll(hlsDir, 0755)
+
+	cfg := PlayoutConfig{
+		InputMedia:        resolvedMedia,
+		Resolution:        res,
+		LogoPath:          resolvedLogo,
+		LogoPosition:      logoPos,
+		LogoOpacity:       0.90,
+		AudioTrackIndex:   0,
+		NormalizeLoudness: true,
+		Destinations:      ch.Destinations,
+		Loop:              true,
+		ChannelID:         ch.ID,
+		HLSOutputDir:      hlsDir,
+		DataDir:           e.dataDir,
+		MediaDir:          e.mediaDir,
+	}
+
 	status := models.PlayoutStatus{
 		ChannelID:        ch.ID,
 		State:            "ON-AIR",
 		CurrentProgram:   initialProg,
-		MediaPath:        initialMedia,
+		MediaPath:        resolvedMedia,
 		ElapsedSeconds:   initialElapsed,
 		RemainingSeconds: initialRemaining,
 		SMPTETimecode:    "00:00:00:00",
 		FPS:              res.FrameRate,
-		CPUUsage:         12.4,
+		CPUUsage:         14.2,
 		AudioLUFS:        -23.0,
 		UpdatedAt:        now,
 	}
@@ -325,6 +471,37 @@ func (e *Engine) StartChannel(ch models.Channel, res models.ResolutionPreset, me
 		Status:                status,
 		Cancel:                cancel,
 		CurrentScheduleItemID: initialItemID,
+	}
+
+	// 3. Launch FFmpeg broadcast encoding pipeline if ffmpeg binary exists
+	if ffmpegPath, err := exec.LookPath("ffmpeg"); err == nil {
+		args, err := BuildFFmpegArgs(cfg)
+		if err == nil {
+			_ = os.MkdirAll(filepath.Join(e.dataDir, "logs"), 0755)
+			logPath := filepath.Join(e.dataDir, "logs", fmt.Sprintf("%s_playout.log", ch.ID))
+			logFile, errLog := os.Create(logPath)
+			cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+			if errLog == nil {
+				cmd.Stdout = logFile
+				cmd.Stderr = logFile
+			}
+			if err := cmd.Start(); err == nil {
+				state.Cmd = cmd
+				go func() {
+					_ = cmd.Wait()
+					if logFile != nil {
+						_ = logFile.Close()
+					}
+				}()
+			} else if logFile != nil {
+				_, _ = fmt.Fprintf(logFile, "Failed to start ffmpeg: %v\n", err)
+				_ = logFile.Close()
+			}
+		} else {
+			_ = os.MkdirAll(filepath.Join(e.dataDir, "logs"), 0755)
+			logPath := filepath.Join(e.dataDir, "logs", fmt.Sprintf("%s_playout.log", ch.ID))
+			_ = os.WriteFile(logPath, []byte(fmt.Sprintf("Failed to build ffmpeg args: %v\n", err)), 0644)
+		}
 	}
 
 	// Playout supervisor goroutine respecting timeline schedule
@@ -438,6 +615,9 @@ func (e *Engine) StopChannel(channelID string) error {
 
 	if state.Cancel != nil {
 		state.Cancel()
+	}
+	if state.Cmd != nil && state.Cmd.Process != nil {
+		_ = state.Cmd.Process.Kill()
 	}
 	state.Status.State = "STANDBY"
 	state.Status.UpdatedAt = time.Now().UTC()

@@ -49,7 +49,7 @@ export function ChannelScreen({
     resolution_id: "res-in-1080i50",
     video_codec: "libx264",
     audio_codec: "aac",
-    logo_path: "media/logos/channel_logo.png",
+    logo_path: "data/logos/channel_logo.png",
     logo_position: "top-right",
     hls_web_token: "",
     epg_web_token: "",
@@ -69,7 +69,7 @@ export function ChannelScreen({
         || "udp://239.255.10.1:5000?pkt_size=1316";
       const srt = activeChannel.destinations?.find((d) => d.protocol === "SRT" || d.protocol === "srt" || d.type === "srt")?.endpoint_url
         || activeChannel.destinations?.find((d) => d.protocol === "SRT" || d.protocol === "srt" || d.type === "srt")?.url
-        || "srt://127.0.0.1:9000?mode=caller";
+        || "";
       const rtmp = activeChannel.destinations?.find((d) => d.protocol === "RTMP" || d.protocol === "rtmp" || d.type === "rtmp")?.endpoint_url
         || activeChannel.destinations?.find((d) => d.protocol === "RTMP" || d.protocol === "rtmp" || d.type === "rtmp")?.url
         || "";
@@ -82,7 +82,7 @@ export function ChannelScreen({
         resolution_id: activeChannel.resolution_id || "res-in-1080i50",
         video_codec: activeChannel.video_codec || "libx264",
         audio_codec: activeChannel.audio_codec || "aac",
-        logo_path: activeChannel.logo_path || "media/logos/channel_logo.png",
+        logo_path: activeChannel.logo_path || "data/logos/channel_logo.png",
         logo_position: activeChannel.logo_position || "top-right",
         hls_web_token: activeChannel.hls_web_token || "",
         epg_web_token: activeChannel.epg_web_token || "",
@@ -128,7 +128,7 @@ export function ChannelScreen({
     setIsUploadingLogo(true);
     try {
       const res = await api.uploadChannelLogo(activeChannel.id || "ch-01", file);
-      const newLogoPath = res.logo_path || `media/logos/${activeChannel.id}_logo.png`;
+      const newLogoPath = res.logo_path || `data/logos/${activeChannel.id}_logo.png`;
       handleInputChange("logo_path", newLogoPath);
       onShowToast("Station logo uploaded successfully!", "success");
       onSaveChannel(activeChannel.id, {
@@ -161,7 +161,7 @@ export function ChannelScreen({
       epg_web_token: formData.epg_web_token,
       destinations: [
         { type: "udp", protocol: "UDP_MULTICAST", enabled: true, url: formData.udp_url, endpoint_url: formData.udp_url },
-        { type: "srt", protocol: "SRT", enabled: true, url: formData.srt_url, endpoint_url: formData.srt_url },
+        { type: "srt", protocol: "SRT", enabled: !!formData.srt_url && formData.srt_url.trim() !== "" && !formData.srt_url.includes("127.0.0.1:9000"), url: formData.srt_url, endpoint_url: formData.srt_url },
         ...(formData.rtmp_url ? [{ type: "rtmp", protocol: "RTMP", enabled: true, url: formData.rtmp_url, endpoint_url: formData.rtmp_url }] : []),
         { type: "hls", protocol: "HLS", enabled: true, url: `/hls/${activeChannel.id}/master.m3u8`, endpoint_url: `/hls/${activeChannel.id}/master.m3u8` }
       ]
@@ -341,7 +341,7 @@ export function ChannelScreen({
                     type="text"
                     value={formData.logo_path}
                     onChange={(e) => handleInputChange("logo_path", e.target.value)}
-                    placeholder="media/logos/channel_logo.png"
+                    placeholder="data/logos/channel_logo.png"
                     className="w-full bg-[#1F2937] border border-gray-700 rounded px-2.5 py-1.5 text-xs text-white font-mono break-all focus:outline-none focus:border-indigo-500"
                   />
                   <input

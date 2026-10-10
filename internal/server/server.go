@@ -77,13 +77,16 @@ func NewServer(cfg Config, db *database.DB) (*Server, error) {
 	if cfg.MediaDir == "" {
 		cfg.MediaDir = "./media"
 	}
+	if cfg.DataDir == "" {
+		cfg.DataDir = "./data"
+	}
 	storageMgr := storage.NewManager(cfg.MediaDir)
 	tmdbClient := tmdb.NewClient(cfg.TMDBKey)
 	epgGen := epg.NewGenerator()
 	botSvc := bot.NewService(schedSvc, channelSvc, tmdbClient)
-	playoutEng := playout.NewEngine()
+	playoutEng := playout.NewEngine(cfg.MediaDir, cfg.DataDir)
 	playoutEng.SetScheduleProvider(schedSvc)
-	hlsMgr := hls.NewManager(repo)
+	hlsMgr := hls.NewManager(repo, cfg.DataDir)
 
 	s := &Server{
 		cfg:        cfg,
@@ -147,6 +150,8 @@ func (s *Server) setupRoutes() {
 	r.Get("/hls/{channel_id}/playlist.m3u8", s.handleHLSPlaylist)
 	r.Get("/hls/{channel_id}/{segment_file}", s.handleHLSSegment)
 	r.Handle("/media/*", http.StripPrefix("/media", http.FileServer(http.Dir(s.cfg.MediaDir))))
+	r.Handle("/data/logos/*", http.StripPrefix("/data/logos", http.FileServer(http.Dir(filepath.Join(s.cfg.DataDir, "logos")))))
+	r.Handle("/media/logos/*", http.StripPrefix("/media/logos", http.FileServer(http.Dir(filepath.Join(s.cfg.DataDir, "logos")))))
 
 	// 2. Central API v1 Router (/api/v1/*) with Enterprise AuthN & AuthZ RBAC Middleware
 	r.Route("/api/v1", func(v1 chi.Router) {
@@ -1075,7 +1080,7 @@ func (s *Server) handleUploadChannelLogo(w http.ResponseWriter, r *http.Request)
 	}
 	defer file.Close()
 
-	logosDir := filepath.Join(s.cfg.MediaDir, "logos")
+	logosDir := filepath.Join(s.cfg.DataDir, "logos")
 	_ = os.MkdirAll(logosDir, 0755)
 
 	allowedLogoExts := map[string]bool{
@@ -1106,7 +1111,7 @@ func (s *Server) handleUploadChannelLogo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	relPath := fmt.Sprintf("media/logos/%s", safeName)
+	relPath := fmt.Sprintf("data/logos/%s", safeName)
 	ch.LogoPath = relPath
 	if pos := r.FormValue("logo_position"); pos != "" {
 		ch.LogoPosition = pos
@@ -1141,7 +1146,7 @@ func (s *Server) handleUploadLogo(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	logosDir := filepath.Join(s.cfg.MediaDir, "logos")
+	logosDir := filepath.Join(s.cfg.DataDir, "logos")
 	_ = os.MkdirAll(logosDir, 0755)
 
 	allowedLogoExts := map[string]bool{
@@ -1172,7 +1177,7 @@ func (s *Server) handleUploadLogo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	relPath := fmt.Sprintf("media/logos/%s", safeName)
+	relPath := fmt.Sprintf("data/logos/%s", safeName)
 	jsonResp(w, http.StatusOK, map[string]interface{}{
 		"logo_path": relPath,
 		"url":       "/" + relPath,
@@ -1856,7 +1861,7 @@ func (s *Server) handleHLSSegment(w http.ResponseWriter, r *http.Request) {
 		seq, _ = strconv.Atoi(parts[len(parts)-1])
 	}
 
-	data, err := s.hlsMgr.GetSegmentData(channelID, seq, token)
+	data, err := s.hlsMgr.GetSegmentData(channelID, seq, token, segmentFile)
 	if err != nil {
 		if err == hls.ErrUnauthorized {
 			http.Error(w, "Unauthorized: invalid or missing hls web token", http.StatusUnauthorized)

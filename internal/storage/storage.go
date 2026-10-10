@@ -31,7 +31,6 @@ func NewManager(mediaDir string) *Manager {
 		mediaDir = "./media"
 	}
 	_ = os.MkdirAll(mediaDir, 0755)
-	_ = os.MkdirAll(filepath.Join(mediaDir, "logos"), 0755)
 	return &Manager{
 		mediaDir: mediaDir,
 	}
@@ -50,7 +49,6 @@ func (m *Manager) SetMediaDir(dir string) {
 	defer m.mu.Unlock()
 	m.mediaDir = dir
 	_ = os.MkdirAll(dir, 0755)
-	_ = os.MkdirAll(filepath.Join(dir, "logos"), 0755)
 }
 
 // SafePath resolves and guarantees a user-provided subpath or filepath resides strictly within baseDir
